@@ -1,0 +1,82 @@
+﻿<Window x:Class="WPF_WMS01.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:WPF_WMS01"
+        xmlns:vm="clr-namespace:WPF_WMS01.ViewModels"
+        xmlns:cnv="clr-namespace:WPF_WMS01.Converters"
+        mc:Ignorable="d"
+        Title="랙 관리 시스템" Height="768" Width="1024"
+        WindowState="Maximized">
+
+    <Window.DataContext>
+        <vm:MainViewModel/>
+    </Window.DataContext>
+    
+    <Window.Resources>
+        <cnv:BackgroundColorConverter x:Key="BackgroundColorConverter" />
+        <cnv:ImageIndexToImagePathConverter x:Key="ImageIndexToImagePathConverter"/>
+        <cnv:BooleanToVisibilityConverterForHidden x:Key="BooleanToVisibilityConverterForHidden"/>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="#34495e" Padding="10">
+            <TextBlock Text="스포츠 탄 재고 관리 시스템"
+                       FontSize="24" FontWeight="Bold" Foreground="White"
+                       HorizontalAlignment="Center"/>
+        </Border>
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="10">
+            <TextBlock Text="랙 상태 업데이트:" VerticalAlignment="Center" Margin="0,0,10,0"/>
+            <Button Content="랙 데이터 새로고침" Command="{Binding LoadRacksCommand}" Margin="0,0,10,0"/>
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="2"  Margin="20,100,20,100" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+            <!-- ItemsControl 자체에는 고정된 Width/Height를 주지 않습니다.
+                 부모 Grid.Row="2"와 UniformGrid가 크기를 조절하도록 둡니다. -->
+            <ItemsControl ItemsSource="{Binding RackList}" Background="LightBlue" Padding="20">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <UniformGrid Columns="24" Rows="6"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type vm:RackViewModel}">
+                        <!-- Viewbox를 사용하여 Border 내부의 콘텐츠(이미지, 텍스트)를
+                             UniformGrid 셀 크기에 맞게 자동으로 확대/축소합니다. -->
+                        <!--Viewbox Stretch="Uniform"-->
+                            <!-- Viewbox 내부의 Border는 콘텐츠의 '기준' 크기를 설정합니다.
+                                 이 값을 기준으로 확대/축소되므로, 적절한 비율을 유지하는 것이 중요합니다.
+                                 이전 600x400 ItemsControl 내의 64x64 이미지를 고려하여
+                                 Viewbox 내의 기준 크기를 60x90 정도로 설정했습니다.
+                                 이 값은 실제 화면에서 랙 카드 하나의 기본 크기 비율을 결정합니다. -->
+                            <Border BorderBrush="DarkGray" BorderThickness="1" Margin="5"
+                                    Visibility="{Binding IsVisible, Converter={StaticResource BooleanToVisibilityConverterForHidden}}">
+                                <StackPanel Orientation="Vertical"
+                                           Background="{Binding IsLocked, Converter={StaticResource BackgroundColorConverter}}">
+                                    <Image Width="64" Height="64"  HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Source="{Binding ImageIndex, Converter={StaticResource ImageIndexToImagePathConverter}}" />
+
+                                    <TextBlock Text="{Binding Title}" FontWeight="Bold" HorizontalAlignment="Center"
+                                               Margin="0,4,0,0" FontSize="16"/>
+                                </StackPanel>
+                            </Border>
+                        <!--/Viewbox-->
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <Grid Grid.Row="3" Background="#ecf0f1" Height="50">
+        </Grid>
+    </Grid>
+</Window>

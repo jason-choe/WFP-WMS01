@@ -1,0 +1,55 @@
+# Visual Studio 관련 파일
+.vs/
+*.suo
+*.user
+*.aps
+*.pdb
+*.obj
+*.o
+*.ilk
+*.resharper
+*.dotSettings
+*.cache
+
+# 빌드 결과물 (bin, obj 폴더)
+[Dd]ebug/
+[Rr]elease/
+bin/
+obj/
+
+# NuGet 패키지 관련
+*.nupkg
+*.snupkg
+packages/
+
+# 기타 불필요한 파일
+*.log
+*.tmp
+*.bak
+[Bb]in/
+[Oo]bj/
+
+# VSTO Office Add-ins
+*.vsto
+
+# SQL Server Database Project
+*.dbmdl
+
+# Local DataBase
+*.mdf
+*.ldf
+
+# Coded UI Test
+*.uitest
+
+# Test Results
+TestResults/
+
+# StyleCop
+StyleCop.Cache
+
+# VS Code (if used)
+.vscode/
+
+# Rider (JetBrains IDE)
+.idea/
