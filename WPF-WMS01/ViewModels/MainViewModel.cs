@@ -1,11 +1,15 @@
 ﻿// ViewModels/MainViewModel.cs
 using System.Collections.ObjectModel;
 using System.Windows.Input;
+using System.Threading.Tasks; // 비동기 작업용
+using System.Windows.Threading; // DispatcherTimer 사용을 위해 추가
+using System;
 using WPF_WMS01.Commands; // ICommand 구현 클래스를 필요로 합니다.
 using WPF_WMS01.Services;
 using WPF_WMS01.Models;
-using System.Threading.Tasks; // 비동기 작업용
-using System;
+using System.Windows;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace WPF_WMS01.ViewModels
 {
@@ -13,6 +17,7 @@ namespace WPF_WMS01.ViewModels
     {
         private readonly DatabaseService _databaseService;
         private ObservableCollection<RackViewModel> _rackList;
+        private DispatcherTimer _refreshTimer; // 타이머 선언
 
         public MainViewModel()
         {
@@ -22,7 +27,13 @@ namespace WPF_WMS01.ViewModels
 
             // 애플리케이션 시작 시 자동으로 랙 데이터를 로드합니다.
             // Dispatcher를 사용하거나, Task.Run을 사용하여 UI 스레드를 블록하지 않도록 주의합니다.
-            Task.Run(async () => await LoadRacks());
+            //Task.Run(async () => await LoadRacks());
+
+            // 애플리케이션 시작 시 데이터 로드
+            _ = LoadRacks(); // 비동기 메서드를 호출하지만, 결과를 기다리지 않음
+
+            // 타이머 설정 및 시작
+            SetupRefreshTimer();
         }
 
         public ObservableCollection<RackViewModel> RackList
@@ -39,11 +50,12 @@ namespace WPF_WMS01.ViewModels
             {
                 // 실제 데이터 로딩 로직
                 var racks = await _databaseService.GetRackStatesAsync();
-                RackList.Clear();
-                foreach (var rack in racks)
-                {
-                    RackList.Add(new RackViewModel(rack));
-                }
+
+                //RackList.Clear();
+                //foreach (var rack in racks)
+                //{
+                //    RackList.Add(new RackViewModel(rack));
+                //}
 
                 // 또는 더 간단하게:
                 // RackList = new ObservableCollection<RackViewModel>(loadedRacks.Select(r => new RackViewModel(r)));
@@ -55,13 +67,22 @@ namespace WPF_WMS01.ViewModels
                 // public ObservableCollection<RackViewModel> RackList { get; set; }
                 // 또는 INotifyPropertyChanged를 구현해야 합니다.
                 // 현재는 LoadRacks()에서 RackList.Clear() 후 RackList.Add() 루프를 사용하는 것이 적절합니다.
-            }
+                 // UI 스레드에서 ObservableCollection 업데이트 (DispatcherTimer 사용 시 불필요하지만,
+                // 다른 스레드 타이머 사용 시 필요함)
+
+                App.Current.Dispatcher.Invoke(() =>
+                {
+                    // 기존 데이터와 새 데이터를 비교하여 변경된 부분만 업데이트
+                    // 불필요한 UI 깜빡임을 줄일 수 있습니다.
+                    UpdateRackList(racks);
+                });
+           }
             catch (Exception ex)
             {
                 // 오류 로깅 또는 메시지 박스 표시
                 System.Diagnostics.Debug.WriteLine($"Error loading racks: {ex.Message}");
                 // 사용자에게도 알림
-                // MessageBox.Show($"데이터 로드 중 오류 발생: {ex.Message}");
+                MessageBox.Show($"데이터 로드 중 오류 발생: {ex.Message}");
             }
         }
 
@@ -79,5 +100,75 @@ namespace WPF_WMS01.ViewModels
                 // await _databaseService.UpdateRackStateAsync(rackViewModel.Id, newImageIndex);
             }
         });
+
+        // RackList 업데이트 로직
+        private void UpdateRackList(List<Rack> newRacks)
+        {
+            // 간단한 방법: 모두 지우고 다시 추가 (UI가 깜빡일 수 있음)
+            // RackList.Clear();
+            // foreach (var rack in newRacks)
+            // {
+            //     RackList.Add(new RackViewModel(rack));
+            // }
+
+            // 더 효율적인 방법: 변경된 항목만 업데이트
+            // 1. 기존 RackList에 없는 새 랙 추가
+            foreach (var newRack in newRacks)
+            {
+                var existingRackVm = RackList.FirstOrDefault(r => r.Id == newRack.Id);
+                if (existingRackVm == null)
+                {
+                    RackList.Add(new RackViewModel(newRack));
+                }
+                else
+                {
+                    // 이미지 인덱스나 가시성 등 속성이 변경되었는지 확인하고 업데이트
+                    if (existingRackVm.ImageIndex != newRack.ImageIndex)
+                    {
+                        existingRackVm.ImageIndex = newRack.ImageIndex;
+                    }
+                    if (existingRackVm.IsVisible != newRack.IsVisible)
+                    {
+                        existingRackVm.IsVisible = newRack.IsVisible;
+                    }
+                    if (existingRackVm.IsLocked != newRack.IsLocked)
+                    {
+                        existingRackVm.IsLocked = newRack.IsLocked;
+                    }
+                    // Title 등 다른 속성도 필요하면 업데이트
+                }
+            }
+
+            // 2. 새 랙 목록에 없는 기존 랙 제거 (데이터베이스에서 삭제된 경우)
+            for (int i = RackList.Count - 1; i >= 0; i--)
+            {
+                var rackVm = RackList[i];
+                if (!newRacks.Any(r => r.Id == rackVm.Id))
+                {
+                    RackList.RemoveAt(i);
+                }
+            }
+        }
+
+        private void SetupRefreshTimer()
+        {
+            _refreshTimer = new DispatcherTimer();
+            _refreshTimer.Interval = TimeSpan.FromSeconds(1); // 5초마다 업데이트 (원하는 간격으로 설정)
+            _refreshTimer.Tick += RefreshTimer_Tick;
+            _refreshTimer.Start();
+        }
+
+        private async void RefreshTimer_Tick(object sender, EventArgs e)
+        {
+            await LoadRacks(); // 타이머 틱마다 데이터를 다시 로드
+        }
+
+        // ViewModel이 소멸될 때 타이머를 멈추는 것이 좋습니다. (Window.Closed 이벤트 등에서 호출)
+        public void Dispose()
+        {
+            _refreshTimer?.Stop();
+            _refreshTimer.Tick -= RefreshTimer_Tick;
+        }
+
     }
 }
