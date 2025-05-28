@@ -18,6 +18,38 @@
         <cnv:BackgroundColorConverter x:Key="BackgroundColorConverter" />
         <cnv:ImageIndexToImagePathConverter x:Key="ImageIndexToImagePathConverter"/>
         <cnv:BooleanToVisibilityConverterForHidden x:Key="BooleanToVisibilityConverterForHidden"/>
+        <Style x:Key="NoChromeButton" TargetType="Button">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <ContentPresenter Content="{TemplateBinding Content}" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0"/>
+            <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Opacity" Value="0.9"/>
+                    <Setter Property="RenderTransform">
+                        <Setter.Value>
+                            <ScaleTransform ScaleX="1.03" ScaleY="1.03"/>
+                        </Setter.Value>
+                    </Setter>
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="RenderTransform">
+                        <Setter.Value>
+                            <ScaleTransform ScaleX="0.95" ScaleY="0.95"/>
+                        </Setter.Value>
+                    </Setter>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
     </Window.Resources>
 
     <Grid>
@@ -51,26 +83,22 @@
 
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="{x:Type vm:RackViewModel}">
-                        <!-- Viewbox를 사용하여 Border 내부의 콘텐츠(이미지, 텍스트)를
-                             UniformGrid 셀 크기에 맞게 자동으로 확대/축소합니다. -->
-                        <!--Viewbox Stretch="Uniform"-->
-                            <!-- Viewbox 내부의 Border는 콘텐츠의 '기준' 크기를 설정합니다.
-                                 이 값을 기준으로 확대/축소되므로, 적절한 비율을 유지하는 것이 중요합니다.
-                                 이전 600x400 ItemsControl 내의 64x64 이미지를 고려하여
-                                 Viewbox 내의 기준 크기를 60x90 정도로 설정했습니다.
-                                 이 값은 실제 화면에서 랙 카드 하나의 기본 크기 비율을 결정합니다. -->
+                        <Button Command="{Binding RackClickCommand}"
+                                CommandParameter="{Binding}"
+                                Style="{StaticResource NoChromeButton}"
+                                HorizontalContentAlignment="Stretch"
+                                VerticalContentAlignment="Stretch">
                             <Border BorderBrush="DarkGray" BorderThickness="1" Margin="5"
                                     Visibility="{Binding IsVisible, Converter={StaticResource BooleanToVisibilityConverterForHidden}}">
                                 <StackPanel Orientation="Vertical"
-                                           Background="{Binding IsLocked, Converter={StaticResource BackgroundColorConverter}}">
+                                            Background="{Binding IsLocked, Converter={StaticResource BackgroundColorConverter}}">
                                     <Image Width="64" Height="64"  HorizontalAlignment="Center" VerticalAlignment="Center"
-                                           Source="{Binding ImageIndex, Converter={StaticResource ImageIndexToImagePathConverter}}" />
-
+                                                Source="{Binding ImageIndex, Converter={StaticResource ImageIndexToImagePathConverter}}" />
                                     <TextBlock Text="{Binding Title}" FontWeight="Bold" HorizontalAlignment="Center"
-                                               Foreground="White" FontFamily="Romantic" Margin="0,4,0,0" FontSize="20"/>
+                                                Foreground="White" FontFamily="Romantic" Margin="0,4,0,0" FontSize="20"/>
                                 </StackPanel>
                             </Border>
-                        <!--/Viewbox-->
+                        </Button>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
