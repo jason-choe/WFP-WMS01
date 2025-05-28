@@ -15,7 +15,7 @@ namespace WPF_WMS01.Converters // 실제 프로젝트의 네임스페이스로 �
             if (value is bool booleanValue)
             {
                 // booleanValue가 true이면 Red Color, false이면 White Color 반환
-                return new SolidColorBrush(booleanValue ? Colors.Red : Colors.White);
+                return new SolidColorBrush(booleanValue ? Colors.Red : Color.FromRgb(88, 88, 88));
             }
             return new SolidColorBrush(Colors.LightBlue); // 기본 배경색
         }

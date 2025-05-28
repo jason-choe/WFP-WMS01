@@ -42,7 +42,7 @@
         <ScrollViewer Grid.Row="2"  Margin="20,100,20,100" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
             <!-- ItemsControl 자체에는 고정된 Width/Height를 주지 않습니다.
                  부모 Grid.Row="2"와 UniformGrid가 크기를 조절하도록 둡니다. -->
-            <ItemsControl ItemsSource="{Binding RackList}" Background="DarkOliveGreen" Padding="20">
+            <ItemsControl ItemsSource="{Binding RackList}" Background="#585858" Padding="20">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                         <UniformGrid Columns="24" Rows="6"/>
@@ -67,7 +67,7 @@
                                            Source="{Binding ImageIndex, Converter={StaticResource ImageIndexToImagePathConverter}}" />
 
                                     <TextBlock Text="{Binding Title}" FontWeight="Bold" HorizontalAlignment="Center"
-                                               Margin="0,4,0,0" FontSize="16"/>
+                                               Foreground="White" FontFamily="Romantic" Margin="0,4,0,0" FontSize="20"/>
                                 </StackPanel>
                             </Border>
                         <!--/Viewbox-->

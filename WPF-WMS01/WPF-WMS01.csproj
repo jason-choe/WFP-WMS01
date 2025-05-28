@@ -11,17 +11,10 @@
   <ItemGroup>
     <None Remove="images\rack_state_0.png" />
     <None Remove="images\rack_state_1.png" />
-    <None Remove="images\rack_state_1_128.png" />
     <None Remove="images\rack_state_2.png" />
-    <None Remove="images\rack_state_2_128.png" />
     <None Remove="images\rack_state_3.png" />
     <None Remove="images\rack_state_4.png" />
     <None Remove="images\rack_state_5.png" />
-    <None Remove="images\sample.png" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Resource Include="images\sample.png" />
   </ItemGroup>
 
   <ItemGroup>
@@ -35,9 +28,7 @@
   <ItemGroup>
     <Resource Include="images\rack_state_0.png" />
     <Resource Include="images\rack_state_1.png" />
-    <Resource Include="images\rack_state_1_128.png" />
     <Resource Include="images\rack_state_2.png" />
-    <Resource Include="images\rack_state_2_128.png" />
     <Resource Include="images\rack_state_3.png" />
     <Resource Include="images\rack_state_4.png" />
     <Resource Include="images\rack_state_5.png" />
