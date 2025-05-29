@@ -25,7 +25,7 @@ namespace WPF_WMS01.Services
         public async Task<List<Rack>> GetRackStatesAsync()
         {
             List<Rack> racks = new List<Rack>();
-            string query = "SELECT id as 'Id', rack_name as 'Title', rack_type*3 + bullet_type AS 'ImageIndex', visible AS 'IsVisible', locked AS 'IsLocked' FROM RackState";
+            string query = "SELECT id as 'Id', rack_name as 'Title', rack_type AS 'RackType', bullet_type as 'BulletType', visible AS 'IsVisible', locked AS 'IsLocked' FROM RackState";
 
             using (SqlConnection connection = new SqlConnection(_connectionString))
             {
@@ -37,15 +37,22 @@ namespace WPF_WMS01.Services
                         while (await reader.ReadAsync())
                         {
                             // ID는 PRIMARY KEY이므로 NULL이 될 수 없다고 가정합니다.
-                            string id = reader.GetInt64(reader.GetOrdinal("Id")).ToString();
+                            int id = Convert.ToInt32(reader.GetInt64(reader.GetOrdinal("Id")));
 
                             // Title (string) 처리: NULL이면 빈 문자열 ''로 간주
                             string title = reader.IsDBNull(reader.GetOrdinal("Title")) ?
                                            string.Empty : reader["Title"].ToString();
 
-                            // ImageIndex (int) 처리: NULL이면 0으로 간주
-                            int imageIndex = reader.IsDBNull(reader.GetOrdinal("ImageIndex")) ?
-                                             0 : Convert.ToInt32(reader["ImageIndex"]);
+                            // RackType (int) 처리: NULL이면 0으로 간주
+                            int rackType = reader.IsDBNull(reader.GetOrdinal("RackType")) ?
+                                             0 : Convert.ToInt32(reader["RackType"]);
+
+                            // BulletType (int) 처리: NULL이면 0으로 간주
+                            int bulletType = reader.IsDBNull(reader.GetOrdinal("BulletType")) ?
+                                             0 : Convert.ToInt32(reader["BulletType"]);
+
+                            // ImageIndex (int) 처리
+                            int imageIndex = rackType * 3 + bulletType;
 
                             // IsVisible (bool) 처리: NULL이면 false로 간주
                             bool isVisible = reader.IsDBNull(reader.GetOrdinal("IsVisible")) ?
@@ -59,6 +66,8 @@ namespace WPF_WMS01.Services
                             {
                                 Id = id,
                                 Title = title,
+                                RackType = rackType,
+                                BulletType = bulletType,
                                 ImageIndex = imageIndex,
                                 IsVisible = isVisible,
                                 IsLocked = isLocked

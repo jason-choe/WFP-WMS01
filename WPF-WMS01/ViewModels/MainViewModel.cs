@@ -91,13 +91,21 @@ namespace WPF_WMS01.ViewModels
         {
             if (rackViewModel != null)
             {
-                // 예시: 이미지 인덱스를 1씩 증가시키는 로직
-                // 실제로는 사용자 입력이나 다른 비즈니스 로직에 따라 변경됩니다.
-                int newImageIndex = (rackViewModel.ImageIndex + 1) % 6; // 0-5 사이 순환
-                rackViewModel.ImageIndex = newImageIndex;
+                // RackViewModel의 ImageIndex는 읽기 전용이므로,
+                // 내부 RackModel의 RackType과 BulletType을 변경해야 합니다.
+                // 여기서는 예시로 ImageIndex를 통해 RackType과 BulletType을 역산하여 업데이트합니다.
+                // 실제로는 새로운 RackType과 BulletType 값을 직접 설정해야 합니다.
 
-                // 데이터베이스에 변경 사항을 저장 (필요시)
-                // await _databaseService.UpdateRackStateAsync(rackViewModel.Id, newImageIndex);
+                // 예시: 이미지 인덱스를 1씩 증가시키는 로직 (ImageIndex를 기준으로 RackType, BulletType 변경)
+                int newImageIndex = (rackViewModel.ImageIndex + 1) % 6; // 0-5 사이 순환
+
+                // 새 ImageIndex로부터 RackType과 BulletType을 역산하여 Model에 업데이트합니다.
+                // 예를 들어, BulletType을 (newImageIndex % 3)으로, RackType을 (newImageIndex / 3)으로 가정
+                rackViewModel.RackModel.BulletType = newImageIndex % 3; // BulletType은 0, 1, 2
+                rackViewModel.RackModel.RackType = newImageIndex / 3;   // RackType은 0, 1
+
+                // 데이터베이스에 변경 사항을 저장 (필요시, RackType과 BulletType 저장)
+                // await _databaseService.UpdateRackStateAsync(rackViewModel.Id, rackViewModel.RackModel.RackType, rackViewModel.RackModel.BulletType);
             }
         });
 
@@ -115,7 +123,7 @@ namespace WPF_WMS01.ViewModels
             // 1. 기존 RackList에 없는 새 랙 추가
             foreach (var newRack in newRacks)
             {
-                var existingRackVm = RackList.FirstOrDefault(r => r.Id == newRack.Id);
+                var existingRackVm = RackList.FirstOrDefault(r => r.Id.Equals(newRack.Id));
                 if (existingRackVm == null)
                 {
                     RackList.Add(new RackViewModel(newRack));
@@ -123,17 +131,30 @@ namespace WPF_WMS01.ViewModels
                 else
                 {
                     // 이미지 인덱스나 가시성 등 속성이 변경되었는지 확인하고 업데이트
-                    if (existingRackVm.ImageIndex != newRack.ImageIndex)
+
+                    // 여기에서 RackViewModel의 속성을 직접 할당하는 대신,
+                    // RackViewModel 내부의 RackModel 속성을 업데이트해야 합니다.
+                    if (existingRackVm.RackModel.RackType != newRack.RackType)
                     {
-                        existingRackVm.ImageIndex = newRack.ImageIndex;
+                        existingRackVm.RackModel.RackType = newRack.RackType;
                     }
-                    if (existingRackVm.IsVisible != newRack.IsVisible)
+                    if (existingRackVm.RackModel.BulletType != newRack.BulletType)
                     {
-                        existingRackVm.IsVisible = newRack.IsVisible;
+                        existingRackVm.RackModel.BulletType = newRack.BulletType;
                     }
-                    if (existingRackVm.IsLocked != newRack.IsLocked)
+                    // ImageIndex는 RackModel의 RackType/BulletType 변경 시 자동으로 업데이트됩니다.
+
+                    if (existingRackVm.RackModel.IsVisible != newRack.IsVisible)
                     {
-                        existingRackVm.IsLocked = newRack.IsLocked;
+                        existingRackVm.RackModel.IsVisible = newRack.IsVisible;
+                    }
+                    if (existingRackVm.RackModel.IsLocked != newRack.IsLocked)
+                    {
+                        existingRackVm.RackModel.IsLocked = newRack.IsLocked;
+                    }
+                    if (existingRackVm.RackModel.Title != newRack.Title)
+                    {
+                        existingRackVm.RackModel.Title = newRack.Title;
                     }
                     // Title 등 다른 속성도 필요하면 업데이트
                 }
@@ -143,7 +164,7 @@ namespace WPF_WMS01.ViewModels
             for (int i = RackList.Count - 1; i >= 0; i--)
             {
                 var rackVm = RackList[i];
-                if (!newRacks.Any(r => r.Id == rackVm.Id))
+                if (!newRacks.Any(r => r.Id.Equals(rackVm.Id)))
                 {
                     RackList.RemoveAt(i);
                 }
@@ -153,7 +174,7 @@ namespace WPF_WMS01.ViewModels
         private void SetupRefreshTimer()
         {
             _refreshTimer = new DispatcherTimer();
-            _refreshTimer.Interval = TimeSpan.FromSeconds(1); // 5초마다 업데이트 (원하는 간격으로 설정)
+            _refreshTimer.Interval = TimeSpan.FromSeconds(1); // 1초마다 업데이트 (원하는 간격으로 설정)
             _refreshTimer.Tick += RefreshTimer_Tick;
             _refreshTimer.Start();
         }

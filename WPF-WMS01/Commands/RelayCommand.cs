@@ -21,9 +21,15 @@ namespace WPF_WMS01.Commands
             remove { CommandManager.RequerySuggested -= value; }
         }
 
-        public bool CanExecute(object parameter) => _canExecute?.Invoke() ?? true;
+        public bool CanExecute(object parameter)
+        {
+            return _canExecute == null || _canExecute();
+        }
 
-        public void Execute(object parameter) => _execute();
+        public void Execute(object parameter)
+        {
+            _execute();
+        }
     }
 
     // 제네릭 버전 (파라미터가 있는 경우)
@@ -44,8 +50,14 @@ namespace WPF_WMS01.Commands
             remove { CommandManager.RequerySuggested -= value; }
         }
 
-        public bool CanExecute(object parameter) => _canExecute?.Invoke((T)parameter) ?? true;
+        public bool CanExecute(object parameter)
+        {
+            return _canExecute == null || _canExecute((T)parameter);
+        }
 
-        public void Execute(object parameter) => _execute((T)parameter);
+        public void Execute(object parameter)
+        {
+            _execute((T)parameter);
+        }
     }
 }
