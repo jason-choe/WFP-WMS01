@@ -284,7 +284,7 @@ namespace WPF_WMS01.ViewModels
                 .ToList();
             if (!targetRacks.Any())
             {
-                MessageBox.Show("이동할 랙(ImageIndex 3)이 없습니다.", "알림", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show("이동할 (비어있는 보관)랙이 없습니다.", "알림", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 

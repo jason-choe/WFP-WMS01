@@ -16,31 +16,32 @@ namespace WPF_WMS01.Views.Popups
 
         private void RackTypeChangePopupView_DataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
-            if (e.OldValue is RackTypeChangePopupViewModel oldViewModel)
+            // 이전 DataContext가 INotifyPropertyChanged를 구현했으면 구독 해지
+            if (e.OldValue is INotifyPropertyChanged oldViewModel)
             {
                 oldViewModel.PropertyChanged -= ViewModel_PropertyChanged;
             }
-
+            // 새로운 DataContext가 RackTypeChangePopupViewModel이면 구독
             if (e.NewValue is RackTypeChangePopupViewModel newViewModel)
             {
                 newViewModel.PropertyChanged += ViewModel_PropertyChanged;
-                // ViewModel의 DialogResult가 이미 설정되어 있을 경우 처리 (예: 디자인 타임)
-                if (newViewModel.DialogResult.HasValue)
-                {
-                    this.DialogResult = newViewModel.DialogResult;
-                    this.Close();
-                }
             }
         }
 
+        // using System.ComponentModel; 이 상단에 있어야 합니다.
+        // using WPF_WMS01.ViewModels.Popups; 이 상단에 있어야 합니다.
         private void ViewModel_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
+            // DialogResult 속성이 변경되었는지 확인
             if (e.PropertyName == nameof(RackTypeChangePopupViewModel.DialogResult))
             {
-                if (sender is RackTypeChangePopupViewModel viewModel && viewModel.DialogResult.HasValue)
+                // 현재 DataContext가 RackTypeChangePopupViewModel이고, DialogResult에 값이 있는지 확인
+                if (DataContext is RackTypeChangePopupViewModel viewModel && viewModel.DialogResult.HasValue)
                 {
-                    this.DialogResult = viewModel.DialogResult;
-                    this.Close(); // ViewModel에서 DialogResult가 설정되면 윈도우를 닫습니다.
+                    // 여기에서 System.InvalidOperationException이 발생한다고 하셨습니다.
+                    // 이 라인이 실행될 때 Window의 상태가 DialogResult를 설정할 수 있는 상태인지가 중요합니다.
+                    this.DialogResult = viewModel.DialogResult.Value; // 뷰의 DialogResult 설정
+                    this.Close(); // 뷰 닫기
                 }
             }
         }

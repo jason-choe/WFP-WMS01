@@ -44,36 +44,28 @@ namespace WPF_WMS01.ViewModels.Popups
             }
         }
 
-        public ICommand OkCommand { get; private set; }
+        public ICommand ConfirmCommand { get; private set; }
         public ICommand CancelCommand { get; private set; }
 
         public RackTypeChangePopupViewModel(int currentRackType, int newRackType)
         {
-            string currentTypeDesc = currentRackType == 0 ? "wrapping 되지 않은 팔레트" : "wrapping 된 팔레트";
-            string newTypeDesc = newRackType == 0 ? "wrapping 되지 않은 팔레트" : "wrapping 된 팔레트";
+            string currentTypeDesc = currentRackType == 0 ? "포장 전 팔레트" : "포장 후 팔레트";
+            string newTypeDesc = newRackType == 0 ? "포장 전 팔레트" : "포장 후 팔레트";
 
-            Message = $"현재 랙의 용도는 '{currentTypeDesc}' 용입니다. 랙 용도를 '{newTypeDesc}' 용으로 변경하시겠습니까?";
+            Message = $"'{newTypeDesc}' 보관용 랙으로 변경하시겠습니까?";
 
-            OkCommand = new RelayCommand(ExecuteConfirm); // <Window> 제거
+            ConfirmCommand = new RelayCommand(ExecuteConfirm); // <Window> 제거
             CancelCommand = new RelayCommand(ExecuteCancel); // <Window> 제거
         }
 
         private void ExecuteConfirm(object parameter) // 매개변수 object로 변경
         {
-            if (parameter is Window window)
-            {
-                window.DialogResult = true;
-                window.Close();
-            }
+                DialogResult = true;
         }
 
         private void ExecuteCancel(object parameter) // 매개변수 object로 변경
         {
-            if (parameter is Window window)
-            {
-                window.DialogResult = false;
-                window.Close();
-            }
+                DialogResult = false;
         }
     }
 }
