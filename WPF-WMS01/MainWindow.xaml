@@ -61,17 +61,49 @@
         </Grid.RowDefinitions>
 
         <Border Grid.Row="0" Background="#34495e" Padding="10">
-            <TextBlock Text="스포츠 탄 재고 관리 시스템"
-                       FontSize="24" FontWeight="Bold" Foreground="White"
+            <TextBlock Text="풍산 스포츠 탄 랙 관리 시스템"
+                       FontSize="28" FontWeight="Bold" Foreground="White"
                        HorizontalAlignment="Center"/>
         </Border>
 
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="10">
-            <TextBlock Text="랙 상태 업데이트:" VerticalAlignment="Center" Margin="0,0,10,0"/>
-            <Button Content="랙 데이터 새로고침" Command="{Binding LoadRacksCommand}" Margin="0,0,10,0"/>
-        </StackPanel>
+        <Grid Grid.Row="1" Margin="40,50,40,25">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
 
-        <ScrollViewer Grid.Row="2"  Margin="20,100,20,100" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+            <TextBox Grid.Column="0"
+                       Text="{Binding InputStringForButton, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                       Width="300" Height="80" Background="LightSeaGreen"
+                       VerticalAlignment="Center" HorizontalAlignment="Left"
+                       Margin="0,0,20,0"
+                       BorderThickness="3" 
+                       BorderBrush="Black"
+                       FontSize="28" Foreground="White"
+                       VerticalContentAlignment="Center"
+                       TextAlignment="Center" />
+
+            <Button Grid.Column="1" Content="입고"
+                    Command="{Binding CheckInputStringCommand}"
+                    Width="150" Height="64" FontSize="20" FontWeight="Bold"
+                    VerticalAlignment="Center" HorizontalAlignment="Left"/>
+
+            <Button Grid.Column="3" Content="223 제품 출고"
+                    Command="{Binding Checkout223ProductCommand}"
+                    Width="200" Height="64" FontSize="20" FontWeight="Bold"
+                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                    Margin="0,0,20,0"/>
+
+            <Button Grid.Column="4" Content="308 제품 출고"
+                    Command="{Binding Checkout308ProductCommand}"
+                    Width="200" Height="64" FontSize="20" FontWeight="Bold"
+                    VerticalAlignment="Center" HorizontalAlignment="Right"/>
+        </Grid>
+
+        <ScrollViewer Grid.Row="2"  Margin="20,25,20,10" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
             <!-- ItemsControl 자체에는 고정된 Width/Height를 주지 않습니다.
                  부모 Grid.Row="2"와 UniformGrid가 크기를 조절하도록 둡니다. -->
             <ItemsControl ItemsSource="{Binding RackList}" Background="#585858" Padding="20">
@@ -104,7 +136,24 @@
             </ItemsControl>
         </ScrollViewer>
 
-        <Grid Grid.Row="3" Background="#ecf0f1" Height="50">
+        <Grid Grid.Row="3" Margin="40,10,40,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <Image Grid.Column="0" Source="images/poongsan.png" Height="32" Margin="10"/> 
+            <TextBlock Grid.Column="1" Text="부산 사업소"
+                       FontSize="20" FontWeight="Bold"
+                       VerticalAlignment="Center" HorizontalAlignment="Left"/>
+            <Image Grid.Column="3" Source="images/arobotics.png" Height="32" Margin="10"/>
+            <TextBlock Grid.Column="4" Text="A-ROBOTICS"
+                       FontSize="20" FontWeight="Bold"
+                       VerticalAlignment="Center" HorizontalAlignment="Right" Margin="5, 0, 20, 0"/>
         </Grid>
     </Grid>
+
 </Window>

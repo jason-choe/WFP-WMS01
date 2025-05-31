@@ -28,6 +28,11 @@ namespace WPF_WMS01.ViewModels
             // 애플리케이션 시작 시 데이터 로드
             _ = LoadRacks(); // 비동기 메서드를 호출하지만, 결과를 기다리지 않음
 
+            // --- Grid>Row="1"에 새로 추가된 명령 초기화 ---
+            CheckInputStringCommand = new RelayCommand(ExecuteCheckInputString, CanExecuteCheckInputString);
+            Checkout223ProductCommand = new RelayCommand(ExecuteCheckout223Product, CanExecuteCheckout223Product);
+            Checkout308ProductCommand = new RelayCommand(ExecuteCheckout308Product, CanExecuteCheckout308Product);
+
             // 타이머 설정 및 시작
             SetupRefreshTimer();
         }
@@ -171,6 +176,103 @@ namespace WPF_WMS01.ViewModels
         {
             _refreshTimer?.Stop();
             _refreshTimer.Tick -= RefreshTimer_Tick;
+        }
+
+        // Grid>Row="1"에 새로 추가된 속성 및 명령 ---
+
+        private string _inputStringForButton;
+        public string InputStringForButton
+        {
+            get => _inputStringForButton;
+            set
+            {
+                _inputStringForButton = value;
+                OnPropertyChanged();
+                // TextBlock 내용이 변경될 때마다 버튼의 활성화 여부를 다시 평가
+                ((RelayCommand)CheckInputStringCommand).RaiseCanExecuteChanged();
+            }
+        }
+
+        public ICommand CheckInputStringCommand { get; private set; }
+        public ICommand Checkout223ProductCommand { get; private set; }
+        public ICommand Checkout308ProductCommand { get; private set; }
+
+        // Grid>Row="1"에 새로 추가된 명령 구현 ---
+
+        // '입고' 버튼
+        private void ExecuteCheckInputString(object parameter)
+        {
+            MessageBox.Show($"입력된 문자열: {_inputStringForButton}", "입력 확인", MessageBoxButton.OK, MessageBoxImage.Information);
+            // 여기에서 실제 문자열을 사용하여 다른 작업을 수행할 수 있습니다.
+        }
+
+        private bool CanExecuteCheckInputString(object parameter)
+        {
+            // InputStringForButton이 null이거나 비어있지 않을 때만 true 반환
+            return !string.IsNullOrWhiteSpace(_inputStringForButton);
+        }
+
+        // '223 제품 출고' 버튼
+        private void ExecuteCheckout223Product(object parameter)
+        {
+            // RackList를 사용하여 랙 찾기
+            var targetRack = RackList?.FirstOrDefault(r => r.RackType == 1 && r.BulletType == 1 && !r.IsLocked);
+
+            if (targetRack != null)
+            {
+                MessageBox.Show($"223 제품이 있는 랙 {targetRack.Title} 에서 출고를 시작합니다.", "223 출고", MessageBoxButton.OK, MessageBoxImage.Information);
+                // 여기에 실제 223 제품 출고 로직 (예: RackViewModel.HandleRackCheckout 호출 등)을 추가
+                // 현재 MainViewModel에서는 RackViewModel의 내부 메서드를 직접 호출할 수 없으므로,
+                // MainViewModel에서 RackViewModel의 상태를 변경하는 메서드를 호출하거나,
+                // 공통 출고 로직을 MainViewModel에 구현해야 합니다.
+                // 여기서는 간단히 MessageBox로 대체합니다.
+
+                // 실제 구현 시, 해당 랙의 OnRackClicked 로직을 재사용하는 것이 좋습니다.
+                // 예를 들어, RackViewModel의 '출고' 기능을 트리거하는 새로운 Public 메서드를 RackViewModel에 추가하고 MainViewModel에서 호출
+                // 또는 RackViewModel의 HandleRackCheckout이 직접 실행될 수 있도록 구조 변경.
+                // 편의상 현재는 단순히 메시지 박스만 띄우겠습니다.
+                // 예: targetRack.PerformCheckout(); // RackViewModel에 새로운 메서드 필요
+            }
+            else
+            {
+                MessageBox.Show("출고할 223 제품이 있는 랙이 없습니다.", "223 출고 불가", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        private bool CanExecuteCheckout223Product(object parameter)
+        {
+            // RackList를 사용하여 랙 확인
+            return RackList?.Any(r => r.RackType == 1 && r.BulletType == 1 && !r.IsLocked) == true;
+        }
+
+        // '308 제품 출고' 버튼
+        private void ExecuteCheckout308Product(object parameter)
+        {
+            // RackList를 사용하여 랙 찾기
+            var targetRack = RackList?.FirstOrDefault(r => r.RackType == 1 && r.BulletType == 2 && !r.IsLocked);
+
+            if (targetRack != null)
+            {
+                MessageBox.Show($"308 제품이 있는 랙 {targetRack.Title} 에서 출고를 시작합니다.", "308 출고", MessageBoxButton.OK, MessageBoxImage.Information);
+                // 여기에 실제 308 제품 출고 로직 추가
+            }
+            else
+            {
+                MessageBox.Show("출고할 308 제품이 있는 랙이 없습니다.", "308 출고 불가", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        private bool CanExecuteCheckout308Product(object parameter)
+        {
+            // RackList를 사용하여 랙 확인
+            return RackList?.Any(r => r.RackType == 1 && r.BulletType == 2 && !r.IsLocked) == true;
+        }
+
+        // 모든 출고 관련 버튼의 CanExecute 상태를 갱신
+        private void RaiseAllCheckoutCanExecuteChanged()
+        {
+            ((RelayCommand)Checkout223ProductCommand).RaiseCanExecuteChanged();
+            ((RelayCommand)Checkout308ProductCommand).RaiseCanExecuteChanged();
         }
 
     }
