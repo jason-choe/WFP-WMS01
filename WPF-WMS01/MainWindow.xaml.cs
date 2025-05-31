@@ -1,6 +1,6 @@
 ﻿// MainWindow.xaml.cs
 using System.Windows;
-using WPF_WMS01.ViewModels; // YourAppName을 실제 프로젝트 이름으로 변경하세요.
+using WPF_WMS01.ViewModels;
 
 namespace WPF_WMS01
 {

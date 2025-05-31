@@ -25,10 +25,6 @@ namespace WPF_WMS01.ViewModels
             RackList = new ObservableCollection<RackViewModel>();
             LoadRacksCommand = new AsyncCommand(LoadRacks); // AsyncCommand는 비동기 ICommand 구현체입니다.
 
-            // 애플리케이션 시작 시 자동으로 랙 데이터를 로드합니다.
-            // Dispatcher를 사용하거나, Task.Run을 사용하여 UI 스레드를 블록하지 않도록 주의합니다.
-            //Task.Run(async () => await LoadRacks());
-
             // 애플리케이션 시작 시 데이터 로드
             _ = LoadRacks(); // 비동기 메서드를 호출하지만, 결과를 기다리지 않음
 
@@ -67,7 +63,7 @@ namespace WPF_WMS01.ViewModels
                 // public ObservableCollection<RackViewModel> RackList { get; set; }
                 // 또는 INotifyPropertyChanged를 구현해야 합니다.
                 // 현재는 LoadRacks()에서 RackList.Clear() 후 RackList.Add() 루프를 사용하는 것이 적절합니다.
-                 // UI 스레드에서 ObservableCollection 업데이트 (DispatcherTimer 사용 시 불필요하지만,
+                // UI 스레드에서 ObservableCollection 업데이트 (DispatcherTimer 사용 시 불필요하지만,
                 // 다른 스레드 타이머 사용 시 필요함)
 
                 App.Current.Dispatcher.Invoke(() =>
@@ -76,12 +72,9 @@ namespace WPF_WMS01.ViewModels
                     // 불필요한 UI 깜빡임을 줄일 수 있습니다.
                     UpdateRackList(racks);
                 });
-           }
+            }
             catch (Exception ex)
             {
-                // 오류 로깅 또는 메시지 박스 표시
-                System.Diagnostics.Debug.WriteLine($"Error loading racks: {ex.Message}");
-                // 사용자에게도 알림
                 MessageBox.Show($"데이터 로드 중 오류 발생: {ex.Message}");
             }
         }
@@ -99,8 +92,10 @@ namespace WPF_WMS01.ViewModels
                 // 예시: 이미지 인덱스를 1씩 증가시키는 로직 (ImageIndex를 기준으로 RackType, BulletType 변경)
                 int newImageIndex = (rackViewModel.ImageIndex + 1) % 6; // 0-5 사이 순환
 
-                // 새 ImageIndex로부터 RackType과 BulletType을 역산하여 Model에 업데이트합니다.
-                // 예를 들어, BulletType을 (newImageIndex % 3)으로, RackType을 (newImageIndex / 3)으로 가정
+                // RackViewModel의 RackModel에 직접 접근하여 RackType과 BulletType을 변경
+                // ImageIndex = RackType * 3 + BulletType;
+                // BulletType = ImageIndex % 3;
+                // RackType = ImageIndex / 3;
                 rackViewModel.RackModel.BulletType = newImageIndex % 3; // BulletType은 0, 1, 2
                 rackViewModel.RackModel.RackType = newImageIndex / 3;   // RackType은 0, 1
 
@@ -112,65 +107,43 @@ namespace WPF_WMS01.ViewModels
         // RackList 업데이트 로직
         private void UpdateRackList(List<Rack> newRacks)
         {
-            // 간단한 방법: 모두 지우고 다시 추가 (UI가 깜빡일 수 있음)
-            // RackList.Clear();
-            // foreach (var rack in newRacks)
-            // {
-            //     RackList.Add(new RackViewModel(rack));
-            // }
+            // 최적화된 ObservableCollection 업데이트 (제거 -> 추가 대신 갱신)
+            // 기존 RackList에 있는 항목 중 newRacks에 없는 항목을 제거하고,
+            // newRacks에 있는 항목 중 RackList에 없는 항목을 추가하며,
+            // 둘 다 있는 항목은 UpdateProperties를 호출합니다.
 
-            // 더 효율적인 방법: 변경된 항목만 업데이트
-            // 1. 기존 RackList에 없는 새 랙 추가
-            foreach (var newRack in newRacks)
+            // 제거할 항목을 먼저 찾습니다.
+            var rvmIdsToRemove = RackList.Select(rvm => rvm.Id)
+                                         .Except(newRacks.Select(nr => nr.Id))
+                                         .ToList();
+
+            foreach (var rvmId in rvmIdsToRemove)
             {
-                var existingRackVm = RackList.FirstOrDefault(r => r.Id.Equals(newRack.Id));
+                var rvmToRemove = RackList.FirstOrDefault(rvm => rvm.Id == rvmId);
+                if (rvmToRemove != null)
+                {
+                    RackList.Remove(rvmToRemove);
+                }
+            }
+
+            // 추가 또는 업데이트할 항목 처리
+            foreach (var newRackData in newRacks)
+            {
+                var existingRackVm = RackList.FirstOrDefault(rvm => rvm.Id == newRackData.Id);
+
                 if (existingRackVm == null)
                 {
-                    RackList.Add(new RackViewModel(newRack));
+                    // 새 랙을 추가
+                    RackList.Add(new RackViewModel(newRackData, _databaseService));
                 }
                 else
                 {
-                    // 이미지 인덱스나 가시성 등 속성이 변경되었는지 확인하고 업데이트
-
-                    // 여기에서 RackViewModel의 속성을 직접 할당하는 대신,
-                    // RackViewModel 내부의 RackModel 속성을 업데이트해야 합니다.
-                    if (existingRackVm.RackModel.RackType != newRack.RackType)
-                    {
-                        existingRackVm.RackModel.RackType = newRack.RackType;
-                    }
-                    if (existingRackVm.RackModel.BulletType != newRack.BulletType)
-                    {
-                        existingRackVm.RackModel.BulletType = newRack.BulletType;
-                    }
-                    // ImageIndex는 RackModel의 RackType/BulletType 변경 시 자동으로 업데이트됩니다.
-
-                    if (existingRackVm.RackModel.IsVisible != newRack.IsVisible)
-                    {
-                        existingRackVm.RackModel.IsVisible = newRack.IsVisible;
-                    }
-                    if (existingRackVm.RackModel.IsLocked != newRack.IsLocked)
-                    {
-                        existingRackVm.RackModel.IsLocked = newRack.IsLocked;
-                    }
-                    if (existingRackVm.RackModel.Title != newRack.Title)
-                    {
-                        existingRackVm.RackModel.Title = newRack.Title;
-                    }
-                    // Title 등 다른 속성도 필요하면 업데이트
-                }
-            }
-
-            // 2. 새 랙 목록에 없는 기존 랙 제거 (데이터베이스에서 삭제된 경우)
-            for (int i = RackList.Count - 1; i >= 0; i--)
-            {
-                var rackVm = RackList[i];
-                if (!newRacks.Any(r => r.Id.Equals(rackVm.Id)))
-                {
-                    RackList.RemoveAt(i);
+                    // 기존 RackViewModel을 찾았으면, SetRackModel 메서드를 호출하여 RackModel 객체를 교체합니다.
+                    // 이 메서드는 RackViewModel 내부에서 이전 구독 해제 및 새 구독을 처리합니다.
+                    existingRackVm.SetRackModel(newRackData); // <-- 이 부분이 핵심 변경!
                 }
             }
         }
-
         private void SetupRefreshTimer()
         {
             _refreshTimer = new DispatcherTimer();

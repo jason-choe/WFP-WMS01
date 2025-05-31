@@ -1,62 +1,204 @@
 ﻿// ViewModels/RackViewModel.cs
-using WPF_WMS01.Models; // YourAppName을 실제 프로젝트 이름으로 변경하세요.
+using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
 using System.Windows;
+using WPF_WMS01.Models;
 using WPF_WMS01.Commands;
-// 필요에 따라 팝업 View/ViewModel 네임스페이스 추가:
-// using WPF_WMS01.Views.Popups; 
-// using WPF_WMS01.ViewModels.Popups;
+using WPF_WMS01.Services; // DatabaseService 사용을 위해 추가
+using WPF_WMS01.Views.Popups;
+using WPF_WMS01.ViewModels.Popups;
 
 namespace WPF_WMS01.ViewModels
 {
     public class RackViewModel : INotifyPropertyChanged
     {
-        private readonly Rack _rack;
+        //private readonly Rack _rack;
         public ICommand RackClickCommand { get; private set; }
 
-        public Rack RackModel { get; private set; } // 모델 인스턴스
-
-        public RackViewModel(Rack rack)
+        private Rack _rackModel; // Rack 모델의 백킹 필드
+        public Rack RackModel // RackModel 속성 (private set 유지)
         {
-            RackModel = rack;
-            // 모델의 PropertyChanged 이벤트를 구독하여 ViewModel 속성 업데이트
-            RackModel.PropertyChanged += (sender, e) =>
+            get => _rackModel;
+            private set // private set 유지
             {
-                // ImageIndex가 모델에서 계산되므로, ViewModel에서 별도로 계산할 필요 없음
-                // ImageIndex 변경 시 UI가 업데이트되도록 다시 OnPropertyChanged 호출
-                if (e.PropertyName == nameof(RackModel.ImageIndex))
+                if (_rackModel != value)
                 {
-                    OnPropertyChanged(nameof(ImageIndex)); // ViewModel의 ImageIndex 속성 업데이트
-                }
-                // 다른 속성도 필요하면 추가
-                if (e.PropertyName == nameof(RackModel.IsLocked))
-                {
-                    OnPropertyChanged(nameof(IsLocked));
-                }
-                if (e.PropertyName == nameof(RackModel.IsVisible))
-                {
-                    OnPropertyChanged(nameof(IsVisible));
-                }
-                if (e.PropertyName == nameof(RackModel.Title))
-                {
-                    OnPropertyChanged(nameof(Title));
-                }
-            };
+                    // 이전 모델의 PropertyChanged 이벤트 구독 해제
+                    if (_rackModel != null)
+                    {
+                        _rackModel.PropertyChanged -= OnRackModelPropertyChanged;
+                    }
 
-            // RackClickCommand 초기화
-            // CommandParameter로 RackViewModel 자신을 넘기기 때문에 RelayCommand<object> 사용
+                    _rackModel = value; // 새 모델 인스턴스 할당
+
+                    // 새 모델의 PropertyChanged 이벤트 구독
+                    if (_rackModel != null)
+                    {
+                        _rackModel.PropertyChanged += OnRackModelPropertyChanged;
+                    }
+
+                    // RackModel 객체 자체가 바뀌었으므로, 모든 래퍼 속성에 대해 PropertyChanged 알림
+                    OnPropertyChanged(nameof(Id));
+                    OnPropertyChanged(nameof(Title));
+                    OnPropertyChanged(nameof(IsLocked));
+                    OnPropertyChanged(nameof(IsVisible));
+                    OnPropertyChanged(nameof(RackType));
+                    OnPropertyChanged(nameof(BulletType));
+                    OnPropertyChanged(nameof(ImageIndex));
+                }
+            }
+        }
+
+        private readonly DatabaseService _databaseService; // DatabaseService 추가
+
+        // 생성자: 최초 RackViewModel 생성 시 호출
+        public RackViewModel(Rack rack, DatabaseService databaseService)
+        {
+            // 생성자에서는 SetRackModel을 호출하여 _rackModel에 할당하고 구독 로직을 실행
+            SetRackModel(rack); // RackModel의 set 접근자 로직이 여기서 실행됨
+
+            _databaseService = databaseService ?? throw new ArgumentNullException(nameof(databaseService));
             RackClickCommand = new RelayCommand<object>(OnRackClicked, CanClickRack);
         }
 
+        // RackModel의 PropertyChanged 이벤트를 처리하는 핸들러 (이전과 동일하게 유지)
+        private void OnRackModelPropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            // RackModel 내부의 속성 변경 시, ViewModel의 해당 래퍼 속성에 대한 알림
+            if (e.PropertyName == nameof(Models.Rack.ImageIndex))
+            {
+                OnPropertyChanged(nameof(ImageIndex));
+            }
+            else if (e.PropertyName == nameof(Models.Rack.IsLocked))
+            {
+                OnPropertyChanged(nameof(IsLocked));
+            }
+            else if (e.PropertyName == nameof(Models.Rack.IsVisible))
+            {
+                OnPropertyChanged(nameof(IsVisible));
+            }
+            else if (e.PropertyName == nameof(Models.Rack.Title))
+            {
+                OnPropertyChanged(nameof(Title));
+            }
+            else if (e.PropertyName == nameof(Models.Rack.RackType))
+            {
+                OnPropertyChanged(nameof(RackType));
+            }
+            else if (e.PropertyName == nameof(Models.Rack.BulletType))
+            {
+                OnPropertyChanged(nameof(BulletType));
+            }
+        }
+
+        // MainViewModel에서 호출할 공용 메서드: RackModel 참조를 교체
+        public void SetRackModel(Rack newRack)
+        {
+            RackModel = newRack; // 이 호출이 위에서 정의한 RackModel의 set 접근자를 호출
+        }   
+
+        // 새롭게 추가할 메서드: 기존 RackModel의 속성을 업데이트
+        public void UpdateProperties(Rack newRackData)
+        {
+            // 각 속성을 개별적으로 비교하고 업데이트합니다.
+            // 이렇게 하면 RackModel 인스턴스 자체는 변경되지 않습니다.
+            if (RackModel.Title != newRackData.Title)
+            {
+                RackModel.Title = newRackData.Title;
+            }
+            if (RackModel.RackType != newRackData.RackType)
+            {
+                RackModel.RackType = newRackData.RackType;
+            }
+            if (RackModel.BulletType != newRackData.BulletType)
+            {
+                RackModel.BulletType = newRackData.BulletType;  
+            }
+            if (RackModel.IsVisible != newRackData.IsVisible)
+            {
+                RackModel.IsVisible = newRackData.IsVisible;
+            }
+            if (RackModel.IsLocked != newRackData.IsLocked)
+            {
+                RackModel.IsLocked = newRackData.IsLocked;
+            }
+            // Id는 Primary Key이므로 변경하지 않습니다.
+            // ImageIndex는 RackModel 내부에서 계산되므로 여기서 설정할 필요 없음.
+        }
+
+        // 기존 래퍼 속성들 (Id, Title, ImageIndex, RackType, BulletType, IsVisible, IsLocked)
+        // 이 속성들은 이제 모두 백킹 필드인 _rackModel을 참조하도록 수정해야 합니다.
+        // 그리고 setter가 있는 경우, _rackModel의 해당 속성 setter를 호출해야 합니다.
         // 모델 속성들을 ViewModel에서 노출
-        public int Id => RackModel.Id;
-        public string Title => RackModel.Title;
-        public bool IsLocked => RackModel.IsLocked;
-        public bool IsVisible => RackModel.IsVisible;
+        //public int Id => RackModel.Id;
+        public int Id => _rackModel.Id; // _rackModel 필드 직접 참조
+        public string Title
+        {
+            get => _rackModel.Title;
+            set
+            {
+                if (_rackModel.Title != value)
+                {
+                    _rackModel.Title = value;
+                    // OnPropertyChanged()는 RackModel에서 이미 알림을 보내므로 여기서는 필요 없음.
+                    // 단, OnRackModelPropertyChanged가 Title 변경을 처리하도록 되어 있어야 함.
+                }
+            }
+        }
+        public bool IsLocked
+        {
+            get => _rackModel.IsLocked;
+            set
+            {
+                if (_rackModel.IsLocked != value)
+                {
+                    _rackModel.IsLocked = value;
+                    // OnPropertyChanged()는 RackModel에서 이미 알림을 보내므로 여기서는 필요 없음.
+                }
+            }
+        }   
+        public bool IsVisible
+        {
+            get => _rackModel.IsVisible;
+            set
+            {
+                if (_rackModel.IsVisible != value)
+                {
+                    _rackModel.IsVisible = value;
+                    // OnPropertyChanged()는 RackModel에서 이미 알림을 보내므로 여기서는 필요 없음.
+                }
+            }
+        }
+
         // ImageIndex는 모델에서 계산된 값을 직접 가져옴
-        public int ImageIndex => RackModel.ImageIndex;
+        public int ImageIndex => _rackModel.ImageIndex; // _rackModel 필드 직접 참조 (계산된 속성이므로 setter 없음)
+
+        public int RackType
+        {
+            get => _rackModel.RackType;     
+            set
+            {
+                if (_rackModel.RackType != value)
+                {
+                    _rackModel.RackType = value;
+                    // OnPropertyChanged()는 RackModel에서 이미 알림을 보내므로 여기서는 필요 없음.
+                }
+            }
+        }
+        public int BulletType
+        {
+            get => _rackModel.BulletType;
+            set
+            {
+                if (_rackModel.BulletType != value)
+                {
+                    _rackModel.BulletType = value;
+                    // OnPropertyChanged()는 RackModel에서 이미 알림을 보내므로 여기서는 필요 없음.
+                }
+            }
+        }
 
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -65,7 +207,7 @@ namespace WPF_WMS01.ViewModels
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
 
-        private void OnRackClicked(object parameter)
+        private async void OnRackClicked(object parameter) // async로 변경 (DB 작업 때문)
         {
             // CommandParameter로 넘어온 RackViewModel을 사용 (만약 필요하다면)
             var clickedRackViewModel = parameter as RackViewModel;
@@ -76,9 +218,37 @@ namespace WPF_WMS01.ViewModels
             {
                 case 0:
                 case 3:
-                    // 1) ImageIndex가 0 또는 3일 때 띄울 팝업
-                    MessageBox.Show($"랙 {Title} (ImageIndex: {ImageIndex}): 첫 번째 유형의 팝업!", "랙 상세", MessageBoxButton.OK, MessageBoxImage.Information);
-                    // 실제 구현: new Type1PopupView { DataContext = new Type1PopupViewModel(clickedRackViewModel) }.ShowDialog();
+                    // 랙 타입 변경 팝업
+                    //int currentRackType = clickedRackViewModel.RackType;
+                    //int newRackType = (currentRackType == 0) ? 1 : 0; // 0이면 1로, 1이면 0으로 변경
+                    int currentRackType = clickedRackViewModel.RackModel.RackType; // 현재 모델의 타입 읽기
+                    int newRackType = (currentRackType == 0) ? 1 : 0; // 0과 1 사이 토글
+
+                    var popupViewModel = new RackTypeChangePopupViewModel(currentRackType, newRackType);
+                    var popupView = new RackTypeChangePopupView { DataContext = popupViewModel };
+                    // 팝업 윈도우의 제목 설정
+                    popupView.Title = $"랙 {clickedRackViewModel.Title} 용도 변경"; // <--- 이 부분이 수정되었습니다.
+                    bool? result = popupView.ShowDialog(); // 모달로 팝업 띄우고 결과 기다림
+
+                    if (result == true) // 사용자가 '확인'을 눌렀을 경우
+                    {
+                        try
+                        {
+                            // DB 업데이트
+                            await _databaseService.UpdateRackTypeAsync(clickedRackViewModel.Id, newRackType);
+                            // 모델 업데이트 (UI 반영을 위해)
+                            clickedRackViewModel.RackModel.RackType = newRackType;
+                            //MessageBox.Show($"랙 {Title}의 타입이 {currentRackType}에서 {newRackType}으로 변경되었습니다.", "변경 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                        }
+                        catch (Exception ex)
+                        {   
+                            MessageBox.Show($"랙 타입   변경 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                        }
+                    }
+                    else
+                    {
+                        MessageBox.Show("랙 타입 변경이 취소되었습니다.", "변경 취소", MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
                     break;
                 case 1:
                 case 2:
@@ -104,13 +274,6 @@ namespace WPF_WMS01.ViewModels
             // Title 이 "WRAP"이 아니고
             // Rack이 잠겨있지 않을 때만 클릭 가능
             // IsLocked는 RackModel.IsLocked에서 가져옴
-            return (!IsLocked && Title != "WRAP"); // 'locked' 상태가 아닐 때만 클릭 가능하도록 설정
-        }
-
-        private bool CanClickRack()
-        {
-            // 조건부 클릭 활성화 로직
-            // 예시: 특정 상태일 때만 클릭 가능하도록
             return (!IsLocked && Title != "WRAP"); // 'locked' 상태가 아닐 때만 클릭 가능하도록 설정
         }
     }

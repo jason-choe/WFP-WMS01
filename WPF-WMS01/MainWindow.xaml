@@ -50,7 +50,7 @@
                 </Trigger>
             </Style.Triggers>
         </Style>
-    </Window.Resources>
+    </Window.Resources> 
 
     <Grid>
         <Grid.RowDefinitions>
@@ -77,7 +77,7 @@
             <ItemsControl ItemsSource="{Binding RackList}" Background="#585858" Padding="20">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
-                        <UniformGrid Columns="24" Rows="6"/>
+                        <UniformGrid Columns="24" Rows="6" VirtualizingPanel.IsVirtualizing="False"/>
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
 
