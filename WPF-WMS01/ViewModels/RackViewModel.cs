@@ -64,7 +64,7 @@ namespace WPF_WMS01.ViewModels
             SetRackModel(rack); // RackModel의 set 접근자 로직이 여기서 실행됨
 
             _databaseService = databaseService ?? throw new ArgumentNullException(nameof(databaseService));
-            RackClickCommand = new RelayCommand<object>(OnRackClicked, CanClickRack);
+            RackClickCommand = new RelayCommand(OnRackClicked, CanClickRack);
         }
 
         // RackModel의 PropertyChanged 이벤트를 처리하는 핸들러 (이전과 동일하게 유지)
@@ -276,9 +276,12 @@ namespace WPF_WMS01.ViewModels
         private async Task HandleRackTransfer(RackViewModel sourceRackViewModel)
         {
             List<Rack> allRacks = await _databaseService.GetRackStatesAsync();
-            // sourceRackViewModel과 ID가 다르고 ImageIndex가 3인 랙을 필터링
-            List<Rack> targetRacks = allRacks.Where(r => r.ImageIndex == 3 && r.Id != sourceRackViewModel.Id).ToList();
-
+            // 🚨 수정할 부분: IsLocked가 false이면서 ImageIndex가 3인 랙만 필터링
+            List<Rack> targetRacks = allRacks
+                .Where(r => r.Id != sourceRackViewModel.Id && // 자기 자신 제외
+                            !r.IsLocked &&                     // 잠겨있지 않은 랙만
+                            r.ImageIndex == 3)                 // ImageIndex가 3인 랙만 (RackType 1, BulletType 0)
+                .ToList();
             if (!targetRacks.Any())
             {
                 MessageBox.Show("이동할 랙(ImageIndex 3)이 없습니다.", "알림", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -300,6 +303,9 @@ namespace WPF_WMS01.ViewModels
 
                 MessageBox.Show($"랙 {sourceRackViewModel.Title} 와 랙 {destinationRack.Title} 이(가) 작업 중입니다. 10초 대기...", "작업 시작", MessageBoxButton.OK, MessageBoxImage.Information);
 
+                // 이 값은 원본 랙의 BulletType이 0으로 변경되기 전에 가져와야 합니다.
+                int originalSourceBulletType = sourceRackViewModel.RackModel.BulletType;
+
                 // 2) 별도 스레드에서 지연 및 데이터 업데이트 (시뮬레이션)
                 await Task.Run(async () =>
                 {
@@ -307,20 +313,22 @@ namespace WPF_WMS01.ViewModels
 
                     try
                     {
-                        // 3) 기존 랙 (sourceRack)의 BulletType을 선택된 랙 (destinationRack)의 BulletType으로 복사
+                        // 3) 대상 랙 (destinationRack)의 BulletType을 원본 랙의 기존 BulletType으로 복사
+                        // (대상 랙은 RackType을 유지하면서 원본 랙의 BulletType을 복사)
                         await _databaseService.UpdateRackStateAsync(
-                            sourceRackViewModel.Id,
-                            sourceRackViewModel.RackModel.RackType, // RackType은 유지
-                            destinationRack.BulletType,             // BulletType을 대상 랙의 BulletType으로 복사
+                            destinationRack.Id,
+                            destinationRack.RackType,               // 대상 랙의 RackType은 유지
+                            originalSourceBulletType,               // <-- 미리 저장해둔 원본 랙의 BulletType을 사용
                             false                                   // IsLocked 해제
                         );
 
-                        // 4) 선택된 랙 (destinationRack)의 BulletType을 0으로 설정
+                        // 4) 원본 랙 (sourceRack)의 BulletType을 0으로 설정하여 '비움'
+                        // (원래 랙은 RackType을 유지하면서 BulletType만 0으로)
                         await _databaseService.UpdateRackStateAsync(
-                            destinationRack.Id,
-                            destinationRack.RackType,   // RackType은 유지
-                            0,                          // BulletType을 0으로 설정
-                            false                       // IsLocked 해제
+                            sourceRackViewModel.Id,
+                            sourceRackViewModel.RackModel.RackType, // 원본 랙의 RackType은 유지
+                            0,                                      // 원본 랙의 BulletType을 0으로 설정
+                            false                                   // IsLocked 해제
                         );
 
                         Application.Current.Dispatcher.Invoke(() =>

@@ -54,20 +54,26 @@ namespace WPF_WMS01.ViewModels.Popups
 
             Message = $"현재 랙의 용도는 '{currentTypeDesc}' 용입니다. 랙 용도를 '{newTypeDesc}' 용으로 변경하시겠습니까?";
 
-            OkCommand = new RelayCommand<Window>(ExecuteOk);
-            CancelCommand = new RelayCommand<Window>(ExecuteCancel);
+            OkCommand = new RelayCommand(ExecuteConfirm); // <Window> 제거
+            CancelCommand = new RelayCommand(ExecuteCancel); // <Window> 제거
         }
 
-        private void ExecuteOk(Window window)
+        private void ExecuteConfirm(object parameter) // 매개변수 object로 변경
         {
-            DialogResult = true;
-            window?.Close();
+            if (parameter is Window window)
+            {
+                window.DialogResult = true;
+                window.Close();
+            }
         }
 
-        private void ExecuteCancel(Window window)
+        private void ExecuteCancel(object parameter) // 매개변수 object로 변경
         {
-            DialogResult = false;
-            window?.Close();
+            if (parameter is Window window)
+            {
+                window.DialogResult = false;
+                window.Close();
+            }
         }
     }
 }

@@ -29,8 +29,12 @@
                    HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,20"/>
 
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center">
-            <Button Content="확인 (OK)" Command="{Binding OkCommand}" Margin="0,0,10,0" Padding="15,5"/>
-            <Button Content="취소 (Cancel)" Command="{Binding CancelCommand}" Padding="15,5"/>
+            <Button Content="확인 (OK)" Command="{Binding OkCommand}"
+                    CommandParameter="{Binding RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                    Margin="0,0,10,0" Padding="15,5"/>
+            <Button Content="취소 (Cancel)" Command="{Binding CancelCommand}"
+                    CommandParameter="{Binding RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                    Padding="15,5"/>
         </StackPanel>
     </Grid>
 </Window>

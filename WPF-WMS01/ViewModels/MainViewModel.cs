@@ -80,9 +80,10 @@ namespace WPF_WMS01.ViewModels
         }
 
         // 예시: 랙 상태를 업데이트하는 명령 (버튼 등에 바인딩 가능)
-        public ICommand UpdateRackStateCommand => new RelayCommand<RackViewModel>(async (rackViewModel) =>
+        public ICommand UpdateRackStateCommand => new RelayCommand(async (parameter) => // 👈 <RackViewModel> 제거
         {
-            if (rackViewModel != null)
+            // parameter를 RackViewModel로 캐스팅해야 합니다.
+            if (parameter is RackViewModel rackViewModel)
             {
                 // RackViewModel의 ImageIndex는 읽기 전용이므로,
                 // 내부 RackModel의 RackType과 BulletType을 변경해야 합니다.
@@ -97,10 +98,18 @@ namespace WPF_WMS01.ViewModels
                 // BulletType = ImageIndex % 3;
                 // RackType = ImageIndex / 3;
                 rackViewModel.RackModel.BulletType = newImageIndex % 3; // BulletType은 0, 1, 2
-                rackViewModel.RackModel.RackType = newImageIndex / 3;   // RackType은 0, 1
+                rackViewModel.RackModel.RackType = newImageIndex / 3;    // RackType은 0, 1
 
                 // 데이터베이스에 변경 사항을 저장 (필요시, RackType과 BulletType 저장)
-                // await _databaseService.UpdateRackStateAsync(rackViewModel.Id, rackViewModel.RackModel.RackType, rackViewModel.RackModel.BulletType);
+                // 현재는 이 UpdateRackStateCommand가 RackViewModel의 OnRackClicked와는 별개로 존재합니다.
+                // 따라서 여기에 데이터베이스 업데이트 로직을 추가하려면 _databaseService 인스턴스가 필요합니다.
+                // MainViewModel이 DatabaseService를 가지고 있다면 (아마 가지고 있을 것), 사용 가능합니다.
+                await _databaseService.UpdateRackStateAsync(
+                    rackViewModel.Id,
+                    rackViewModel.RackModel.RackType,
+                    rackViewModel.RackModel.BulletType,
+                    rackViewModel.RackModel.IsLocked // IsLocked도 함께 전달
+                );
             }
         });
 

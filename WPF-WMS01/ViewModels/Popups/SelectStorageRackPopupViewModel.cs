@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Windows;
 using System.Windows.Input;
 using WPF_WMS01.Commands;
 using WPF_WMS01.Models; // Rack 모델 사용
@@ -48,24 +49,41 @@ namespace WPF_WMS01.ViewModels.Popups
 
         public SelectStorageRackPopupViewModel(IEnumerable<Rack> racks)
         {
-            AvailableRacks = new ObservableCollection<Rack>(racks);
+            // 🚨 수정할 부분: AvailableRacks를 설정하기 전에 Title(랙 번호) 기준으로 정렬
+            AvailableRacks = new ObservableCollection<Rack>(
+                racks.OrderBy(r => r.Title) // Title 속성으로 오름차순 정렬
+            );
+            // 🚨 수정할 부분: Title을 숫자로 파싱하여 정렬
+            //AvailableRacks = new ObservableCollection<Rack>(
+            //    racks.OrderBy(r => int.TryParse(r.Title, out int number) ? number : int.MaxValue) // 숫자로 파싱하여 정렬
+            //);
             SelectCommand = new RelayCommand(ExecuteSelect, CanExecuteSelect);
             CancelCommand = new RelayCommand(ExecuteCancel);
         }
 
         private void ExecuteSelect(object parameter)
         {
-            DialogResult = true;
+            if (parameter is Window window) // parameter가 Window 객체인지 확인
+            {
+                DialogResult = true; // 뷰모델의 논리적 결과 설정
+                window.DialogResult = true; // 팝업 윈도우의 DialogResult 속성 설정 (이것이 ShowDialog()의 반환 값 결정)
+                window.Close(); // 팝업 윈도우 닫기
+            }
         }
 
         private bool CanExecuteSelect(object parameter)
         {
-            return SelectedRack != null;
+            return SelectedRack != null;    // 랙이 선택되어야만 확인 버튼 활성화
         }
 
         private void ExecuteCancel(object parameter)
         {
-            DialogResult = false;
+            if (parameter is Window window) // parameter가 Window 객체인지 확인
+            {
+                DialogResult = false; // 뷰모델의 논리적 결과 설정
+                window.DialogResult = false; // 팝업 윈도우의 DialogResult 속성 설정
+                window.Close(); // 팝업 윈도우 닫기
+            }
         }
     }
 }
