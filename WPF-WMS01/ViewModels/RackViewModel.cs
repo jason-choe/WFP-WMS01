@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using System.Windows;
@@ -262,8 +261,7 @@ namespace WPF_WMS01.ViewModels
                 case 4:
                 case 5:
                     // 3) ImageIndex가 4 또는 5일 때 띄울 팝업
-                    MessageBox.Show($"랙 {Title} (ImageIndex: {ImageIndex}): 세 번째 유형의 팝업!", "랙 상세", MessageBoxButton.OK, MessageBoxImage.Error);
-                    // 실제 구현: new Type3PopupView { DataContext = new Type3PopupViewModel(clickedRackViewModel) }.ShowDialog();
+                    await HandleRackShipout(clickedRackViewModel);
                     break;
                 default:
                     // 그 외의 경우
@@ -352,6 +350,66 @@ namespace WPF_WMS01.ViewModels
                 // 잠갔던 sourceRackViewModel.IsLocked = true; 를 다시 false로 되돌려야 합니다.
                 // 이 역시 DatabaseService를 통해 다시 업데이트
                 await _databaseService.UpdateRackStateAsync(sourceRackViewModel.Id, sourceRackViewModel.RackModel.RackType, sourceRackViewModel.RackModel.BulletType, false);
+            }
+        }
+
+        // 새롭게 추가할 출고 로직
+        private async Task HandleRackShipout(RackViewModel targetRackViewModel)
+        {
+            var confirmPopupViewModel = new ConfirmShipoutPopupViewModel(targetRackViewModel.Title, targetRackViewModel.BulletType);
+            var confirmPopupView = new ConfirmShipoutPopupView { DataContext = confirmPopupViewModel };
+
+            if (confirmPopupView.ShowDialog() == true && confirmPopupViewModel.DialogResult == true)
+            {
+                // UI 잠금 메시지
+                MessageBox.Show($"랙 {targetRackViewModel.Title} 출고 작업을 시작합니다. 10초 대기...", "작업 시작", MessageBoxButton.OK, MessageBoxImage.Information);
+
+                // 랙 잠금 및 비동기 작업 시작
+                await _databaseService.UpdateRackStateAsync(targetRackViewModel.Id, targetRackViewModel.RackType, targetRackViewModel.BulletType, true); // 랙 잠금
+
+                await Task.Run(async () =>
+                {
+                    // === 향후 REST API 및 폴링 로직이 추가될 부분 ===
+                    // 예: var commandResult = await _restApiClient.SendCommandAsync(targetRackViewModel.Id, "checkout");
+                    //     while (true)
+                    //     {
+                    //         var status = await _restApiClient.GetStatusCommandAsync(commandResult.OperationId);
+                    //         if (status.IsCompleted) break;
+                    //         await Task.Delay(TimeSpan.FromSeconds(5)); // 5초마다 폴링
+                    //     }
+                    // ===============================================
+
+                    await Task.Delay(TimeSpan.FromSeconds(10)); // 10초 지연 시뮬레이션
+
+                    try
+                    {
+                        // BulletType을 0으로 설정하고 잠금 해제
+                        await _databaseService.UpdateRackStateAsync(
+                            targetRackViewModel.Id,
+                            targetRackViewModel.RackType, // RackType은 유지
+                            0,                            // BulletType을 0으로 설정 (출고)
+                            false                         // IsLocked 해제
+                        );
+
+                        Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            MessageBox.Show($"랙 {targetRackViewModel.Title} 출고 작업이 완료되었습니다.", "작업 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            MessageBox.Show($"출고 작업 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                        });
+                    }
+                });
+            }
+            else
+            {
+                MessageBox.Show("랙 출고 작업이 취소되었습니다.", "취소", MessageBoxButton.OK, MessageBoxImage.Information);
+                // 취소 시 랙 잠금 해제 (작업 시작 전에 잠겼다면)
+                // await _databaseService.UpdateRackStateAsync(targetRackViewModel.Id, targetRackViewModel.RackType, targetRackViewModel.BulletType, false);
             }
         }
 
