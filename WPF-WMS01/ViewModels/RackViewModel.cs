@@ -291,7 +291,7 @@ namespace WPF_WMS01.ViewModels
             // 랙 선택 팝업 표시 (이름 변경)
             var selectPopupViewModel = new SelectStorageRackPopupViewModel(targetRacks);
             var selectPopupView = new SelectStorageRackPopupView { DataContext = selectPopupViewModel };
-            selectPopupView.Title = $"랙 {sourceRackViewModel.Title} 의 내용 이동";
+            selectPopupView.Title = $"랙 {sourceRackViewModel.Title} 의 제품 이동";
 
             if (selectPopupView.ShowDialog() == true && selectPopupViewModel.SelectedRack != null)
             {
