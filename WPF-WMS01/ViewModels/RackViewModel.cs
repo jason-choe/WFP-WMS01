@@ -1,14 +1,18 @@
 ﻿// ViewModels/RackViewModel.cs
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Input;
 using System.Windows;
 using WPF_WMS01.Models;
 using WPF_WMS01.Commands;
-using WPF_WMS01.Services; // DatabaseService 사용을 위해 추가
-using WPF_WMS01.Views.Popups;
-using WPF_WMS01.ViewModels.Popups;
+using WPF_WMS01.Services;
+using WPF_WMS01.Views.Popups; // SelectStorageRackPopupView 추가
+using WPF_WMS01.ViewModels.Popups; // SelectStorageRackPopupViewModel 추가
 
 namespace WPF_WMS01.ViewModels
 {
@@ -252,9 +256,8 @@ namespace WPF_WMS01.ViewModels
                     break;
                 case 1:
                 case 2:
-                    // 2) ImageIndex가 1 또는 2일 때 띄울 팝업
-                    MessageBox.Show($"랙 {Title} (ImageIndex: {ImageIndex}): 두 번째 유형의 팝업!", "랙 상세", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    // 실제 구현: new Type2PopupView { DataContext = new Type2PopupViewModel(clickedRackViewModel) }.ShowDialog();
+                    // ImageIndex가 1 또는 2일 때 띄울 팝업 - 이동/복사 로직
+                    await HandleRackTransfer(clickedRackViewModel); // 새로운 비동기 처리 메서드 호출
                     break;
                 case 4:
                 case 5:
@@ -266,6 +269,81 @@ namespace WPF_WMS01.ViewModels
                     // 그 외의 경우
                     MessageBox.Show($"랙 {Title} (ImageIndex: {ImageIndex}): 기타 유형의 팝업!", "랙 상세", MessageBoxButton.OK, MessageBoxImage.Information);
                     break;
+            }
+        }
+
+        // 랙 이동/복사 로직을 처리하는 새로운 비동기 메서드
+        private async Task HandleRackTransfer(RackViewModel sourceRackViewModel)
+        {
+            List<Rack> allRacks = await _databaseService.GetRackStatesAsync();
+            // sourceRackViewModel과 ID가 다르고 ImageIndex가 3인 랙을 필터링
+            List<Rack> targetRacks = allRacks.Where(r => r.ImageIndex == 3 && r.Id != sourceRackViewModel.Id).ToList();
+
+            if (!targetRacks.Any())
+            {
+                MessageBox.Show("이동할 랙(ImageIndex 3)이 없습니다.", "알림", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            // 랙 선택 팝업 표시 (이름 변경)
+            var selectPopupViewModel = new SelectStorageRackPopupViewModel(targetRacks);
+            var selectPopupView = new SelectStorageRackPopupView { DataContext = selectPopupViewModel };
+            selectPopupView.Title = $"랙 {sourceRackViewModel.Title} 의 내용 이동";
+
+            if (selectPopupView.ShowDialog() == true && selectPopupViewModel.SelectedRack != null)
+            {
+                Rack destinationRack = selectPopupViewModel.SelectedRack;
+
+                // 1) 기존 랙 (sourceRack)과 대상 랙 (destinationRack)을 DB에서 잠금
+                await _databaseService.UpdateRackStateAsync(sourceRackViewModel.Id, sourceRackViewModel.RackModel.RackType, sourceRackViewModel.RackModel.BulletType, true); // source 랙 잠금
+                await _databaseService.UpdateRackStateAsync(destinationRack.Id, destinationRack.RackType, destinationRack.BulletType, true); // destination 랙 잠금
+
+                MessageBox.Show($"랙 {sourceRackViewModel.Title} 와 랙 {destinationRack.Title} 이(가) 작업 중입니다. 10초 대기...", "작업 시작", MessageBoxButton.OK, MessageBoxImage.Information);
+
+                // 2) 별도 스레드에서 지연 및 데이터 업데이트 (시뮬레이션)
+                await Task.Run(async () =>
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(10)); // 10초 지연
+
+                    try
+                    {
+                        // 3) 기존 랙 (sourceRack)의 BulletType을 선택된 랙 (destinationRack)의 BulletType으로 복사
+                        await _databaseService.UpdateRackStateAsync(
+                            sourceRackViewModel.Id,
+                            sourceRackViewModel.RackModel.RackType, // RackType은 유지
+                            destinationRack.BulletType,             // BulletType을 대상 랙의 BulletType으로 복사
+                            false                                   // IsLocked 해제
+                        );
+
+                        // 4) 선택된 랙 (destinationRack)의 BulletType을 0으로 설정
+                        await _databaseService.UpdateRackStateAsync(
+                            destinationRack.Id,
+                            destinationRack.RackType,   // RackType은 유지
+                            0,                          // BulletType을 0으로 설정
+                            false                       // IsLocked 해제
+                        );
+
+                        Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            MessageBox.Show($"랙 {sourceRackViewModel.Title} 와 랙 {destinationRack.Title} 의 작업이 완료되었습니다.", "작업 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            MessageBox.Show($"랙 작업 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                        });
+                    }
+                });
+            }
+            else
+            {
+                MessageBox.Show("랙 이동/복사 작업이 취소되었습니다.", "취소", MessageBoxButton.OK, MessageBoxImage.Information);
+                // 팝업이 닫히거나, 선택된 랙이 없으면 취소.
+                // 잠갔던 sourceRackViewModel.IsLocked = true; 를 다시 false로 되돌려야 합니다.
+                // 이 역시 DatabaseService를 통해 다시 업데이트
+                await _databaseService.UpdateRackStateAsync(sourceRackViewModel.Id, sourceRackViewModel.RackModel.RackType, sourceRackViewModel.RackModel.BulletType, false);
             }
         }
 
