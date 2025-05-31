@@ -87,7 +87,7 @@
                        TextAlignment="Center" />
 
             <Button Grid.Column="1" Content="입고"
-                    Command="{Binding CheckInputStringCommand}"
+                    Command="{Binding InboundProductCommand}"
                     Width="150" Height="64" FontSize="20" FontWeight="Bold"
                     VerticalAlignment="Center" HorizontalAlignment="Left"/>
 

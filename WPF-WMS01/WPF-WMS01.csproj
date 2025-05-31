@@ -17,6 +17,9 @@
     <None Remove="images\rack_state_3.png" />
     <None Remove="images\rack_state_4.png" />
     <None Remove="images\rack_state_5.png" />
+    <None Remove="images\rack_state_6.png" />
+    <None Remove="images\rack_state_7.png" />
+    <None Remove="images\rack_state_8.png" />
   </ItemGroup>
 
   <ItemGroup>
@@ -36,6 +39,9 @@
     <Resource Include="images\rack_state_3.png" />
     <Resource Include="images\rack_state_4.png" />
     <Resource Include="images\rack_state_5.png" />
+    <Resource Include="images\rack_state_6.png" />
+    <Resource Include="images\rack_state_7.png" />
+    <Resource Include="images\rack_state_8.png" />
   </ItemGroup>
 
 </Project>

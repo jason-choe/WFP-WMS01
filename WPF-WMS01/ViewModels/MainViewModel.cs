@@ -7,6 +7,8 @@ using System;
 using WPF_WMS01.Commands; // ICommand 구현 클래스를 필요로 합니다.
 using WPF_WMS01.Services;
 using WPF_WMS01.Models;
+using WPF_WMS01.ViewModels.Popups;
+using WPF_WMS01.Views.Popups;
 using System.Windows;
 using System.Collections.Generic;
 using System.Linq;
@@ -29,7 +31,7 @@ namespace WPF_WMS01.ViewModels
             _ = LoadRacks(); // 비동기 메서드를 호출하지만, 결과를 기다리지 않음
 
             // --- Grid>Row="1"에 새로 추가된 명령 초기화 ---
-            CheckInputStringCommand = new RelayCommand(ExecuteCheckInputString, CanExecuteCheckInputString);
+            InboundProductCommand = new RelayCommand(ExecuteInboundProduct, CanExecuteInboundProduct);
             Checkout223ProductCommand = new RelayCommand(ExecuteCheckout223Product, CanExecuteCheckout223Product);
             Checkout308ProductCommand = new RelayCommand(ExecuteCheckout308Product, CanExecuteCheckout308Product);
 
@@ -189,27 +191,84 @@ namespace WPF_WMS01.ViewModels
                 _inputStringForButton = value;
                 OnPropertyChanged();
                 // TextBlock 내용이 변경될 때마다 버튼의 활성화 여부를 다시 평가
-                ((RelayCommand)CheckInputStringCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)InboundProductCommand).RaiseCanExecuteChanged();
             }
         }
 
-        public ICommand CheckInputStringCommand { get; private set; }
-        public ICommand Checkout223ProductCommand { get; private set; }
-        public ICommand Checkout308ProductCommand { get; private set; }
+        public ICommand InboundProductCommand { get; private set; } // '입고' 버튼 명령
+        public ICommand Checkout223ProductCommand { get; private set; } // '232 출고' 버튼 명령
+        public ICommand Checkout308ProductCommand { get; private set; } // '308 출고' 버튼 명령
 
         // Grid>Row="1"에 새로 추가된 명령 구현 ---
 
         // '입고' 버튼
-        private void ExecuteCheckInputString(object parameter)
+        private async void ExecuteInboundProduct(object parameter)
         {
-            MessageBox.Show($"입력된 문자열: {_inputStringForButton}", "입력 확인", MessageBoxButton.OK, MessageBoxImage.Information);
-            // 여기에서 실제 문자열을 사용하여 다른 작업을 수행할 수 있습니다.
+            // 이 시점에서는 CanExecute에서 이미 빈 랙 존재 여부를 확인했으나, 한 번 더 확인하여 안전성을 높입니다.
+            var emptyRacks = RackList?.Where(r => r.ImageIndex == 0 && r.IsVisible).ToList();
+
+            if (emptyRacks == null || !emptyRacks.Any())
+            {
+                MessageBox.Show("현재 입고 가능한 빈 랙이 없습니다.", "입고 불가", MessageBoxButton.OK, MessageBoxImage.Warning);
+                // CanExecute에서 이미 막았지만, 혹시 모를 상황 대비 (경쟁 조건 등)
+                return;
+            }
+
+            var selectEmptyRackViewModel = new SelectEmptyRackPopupViewModel(emptyRacks.Select(r => r.RackModel).ToList());
+            var selectEmptyRackView = new SelectEmptyRackPopupView { DataContext = selectEmptyRackViewModel };
+            selectEmptyRackView.Title = $"{InputStringForButton} 제품 입고할 랙 선택";
+
+            if (selectEmptyRackView.ShowDialog() == true && selectEmptyRackViewModel.DialogResult == true)
+            {
+                var selectedRack = selectEmptyRackViewModel.SelectedRack;
+                if (selectedRack != null)
+                {
+                    MessageBox.Show($"랙 {selectedRack.Title} 에 {InputStringForButton} 제품을 입고합니다.", "입고 확인", MessageBoxButton.OK, MessageBoxImage.Information);
+
+                    int newBulletType = 0;
+                    if (InputStringForButton.Contains("223"))
+                    {
+                        newBulletType = 1; // '223' 포함 시 BulletType 1
+                    }
+                    else if (InputStringForButton.Contains("308"))
+                    {
+                        newBulletType = 2; // '308' 포함 시 BulletType 2
+                    }
+                    else
+                    {
+                        // 예외 처리 또는 기본값 설정 (이 경우는 CanExecute에서 걸러지므로 거의 발생하지 않음)
+                        MessageBox.Show("입력된 문자열에서 유효한 제품 유형을 찾을 수 없습니다.", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                        return;
+                    }
+
+                    // RackType은 1 (제품 보관 랙)로 설정하고 BulletType을 입력된 문자열에 따라 설정
+                    await _databaseService.UpdateRackStateAsync(
+                        selectedRack.Id,
+                        selectedRack.RackType, // RackType을 기존 값(0)으로 유지
+                        newBulletType,
+                        false // 입고 후 잠금 해제 상태로
+                    );
+                    MessageBox.Show($"랙 {selectedRack.Title} 에 제품 입고 완료.", "입고 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                    InputStringForButton = string.Empty; // 입고 후 TextBox 내용 초기화
+                }
+            }
+            else
+            {
+                MessageBox.Show("입고 작업이 취소되었습니다.", "취소", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
         }
 
-        private bool CanExecuteCheckInputString(object parameter)
+        private bool CanExecuteInboundProduct(object parameter)
         {
-            // InputStringForButton이 null이거나 비어있지 않을 때만 true 반환
-            return !string.IsNullOrWhiteSpace(_inputStringForButton);
+            // 1) InputStringForButton이 '223' 또는 '308'을 포함하는지 확인
+            bool inputContainsValidProduct = !string.IsNullOrWhiteSpace(_inputStringForButton) &&
+                                             (_inputStringForButton.Contains("223") || _inputStringForButton.Contains("308"));
+
+            // 2) ImageIndex가 0인 랙 (빈 랙)이 존재하는지 확인
+            bool emptyAndVisibleRackExists = RackList?.Any(r => (r.ImageIndex == 0 && r.IsVisible)) == true;
+
+            // 두 조건을 모두 만족할 때만 true 반환
+            return inputContainsValidProduct && emptyAndVisibleRackExists;
         }
 
         // '223 제품 출고' 버튼
@@ -241,7 +300,6 @@ namespace WPF_WMS01.ViewModels
 
         private bool CanExecuteCheckout223Product(object parameter)
         {
-            // RackList를 사용하여 랙 확인
             return RackList?.Any(r => r.RackType == 1 && r.BulletType == 1 && !r.IsLocked) == true;
         }
 
