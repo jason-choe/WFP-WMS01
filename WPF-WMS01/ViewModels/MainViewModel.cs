@@ -12,6 +12,8 @@ using WPF_WMS01.Views.Popups;
 using System.Windows;
 using System.Collections.Generic;
 using System.Linq;
+using System.Configuration; // App.config 읽기를 위해 추가
+using System.Threading.Tasks; // Task.Run, Task.Delay 사용을 위해 추가
 
 namespace WPF_WMS01.ViewModels
 {
@@ -20,10 +22,15 @@ namespace WPF_WMS01.ViewModels
         private readonly DatabaseService _databaseService;
         private ObservableCollection<RackViewModel> _rackList;
         private DispatcherTimer _refreshTimer; // 타이머 선언
+        public readonly string _waitRackTitle; // App.config에서 읽어올 WAIT 랙 타이틀
+
 
         public MainViewModel()
         {
             _databaseService = new DatabaseService(); // 실제 서비스 인스턴스화
+            // App.config에서 WAIT 랙 타이틀 읽기
+            _waitRackTitle = ConfigurationManager.AppSettings["WaitRackTitle"] ?? "WAIT";
+
             RackList = new ObservableCollection<RackViewModel>();
             LoadRacksCommand = new AsyncCommand(LoadRacks); // AsyncCommand는 비동기 ICommand 구현체입니다.
 
@@ -150,7 +157,7 @@ namespace WPF_WMS01.ViewModels
                 if (existingRackVm == null)
                 {
                     // 새 랙을 추가
-                    RackList.Add(new RackViewModel(newRackData, _databaseService));
+                    RackList.Add(new RackViewModel(newRackData, _databaseService, this));
                 }
                 else
                 {
@@ -223,33 +230,89 @@ namespace WPF_WMS01.ViewModels
                 var selectedRack = selectEmptyRackViewModel.SelectedRack;
                 if (selectedRack != null)
                 {
-                    MessageBox.Show($"랙 {selectedRack.Title} 에 {InputStringForButton} 제품을 입고합니다.", "입고 확인", MessageBoxButton.OK, MessageBoxImage.Information);
+                    var targetRackVm = RackList?.FirstOrDefault(r => r.Id == selectedRack.Id);
+                    var waitRackVm = RackList?.FirstOrDefault(r => r.Title == _waitRackTitle);
 
-                    int newBulletType = 0;
-                    if (InputStringForButton.Contains("223"))
+                    if (targetRackVm == null) return;
+                    // WAIT 랙이 없으면 잠금 처리할 대상이 없으므로 null 체크
+                    // 만약 WAIT 랙이 필수라면 여기서 오류 메시지 표시
+                    MessageBox.Show($"랙 {selectedRack.Title} 에 {InputStringForButton} 제품 입고 작업을 시작합니다. 10초 대기...", "입고 작업 시작", MessageBoxButton.OK, MessageBoxImage.Information);
+
+                    // **타겟 랙과 WAIT 랙 잠금**
+                    await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, true);
+                    Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = true);
+
+                    if (waitRackVm != null)
                     {
-                        newBulletType = 1; // '223' 포함 시 BulletType 1
-                    }
-                    else if (InputStringForButton.Contains("308"))
-                    {
-                        newBulletType = 2; // '308' 포함 시 BulletType 2
-                    }
-                    else
-                    {
-                        // 예외 처리 또는 기본값 설정 (이 경우는 CanExecute에서 걸러지므로 거의 발생하지 않음)
-                        MessageBox.Show("입력된 문자열에서 유효한 제품 유형을 찾을 수 없습니다.", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
-                        return;
+                        await _databaseService.UpdateRackStateAsync(waitRackVm.Id, waitRackVm.RackType, waitRackVm.BulletType, true);
+                        Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = true);
                     }
 
-                    // RackType은 1 (제품 보관 랙)로 설정하고 BulletType을 입력된 문자열에 따라 설정
-                    await _databaseService.UpdateRackStateAsync(
-                        selectedRack.Id,
-                        selectedRack.RackType, // RackType을 기존 값(0)으로 유지
-                        newBulletType,
-                        false // 입고 후 잠금 해제 상태로
-                    );
-                    MessageBox.Show($"랙 {selectedRack.Title} 에 제품 입고 완료.", "입고 완료", MessageBoxButton.OK, MessageBoxImage.Information);
-                    InputStringForButton = string.Empty; // 입고 후 TextBox 내용 초기화
+                    await Task.Run(async () =>
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(10)); // 10초 지연 시뮬레이션
+
+                        try
+                        {
+                            int newBulletType = 0;
+                            if (InputStringForButton.Contains("223"))
+                            {
+                                newBulletType = 1;
+                            }
+                            else if (InputStringForButton.Contains("308"))
+                            {
+                                newBulletType = 2;
+                            }
+                            else
+                            {
+                                Application.Current.Dispatcher.Invoke(() =>
+                                {
+                                    MessageBox.Show("입력된 문자열에서 유효한 제품 유형을 찾을 수 없습니다.", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                                });
+                                return;
+                            }
+
+                            // 데이터베이스 업데이트
+                            await _databaseService.UpdateRackStateAsync(
+                                selectedRack.Id,
+                                selectedRack.RackType, // RackType은 0으로 유지
+                                newBulletType,
+                                false // 입고 후 잠금 해제 상태로
+                            );
+
+                            Application.Current.Dispatcher.Invoke(() =>
+                            {
+                                targetRackVm.BulletType = newBulletType;
+                                targetRackVm.IsLocked = false; // UI 업데이트 (잠금 해제)
+
+                                if (waitRackVm != null)
+                                {
+                                    // WAIT 랙 잠금 해제 (BulletType은 CanExecute에서 이미 관리됨)
+                                    waitRackVm.IsLocked = false;
+                                    // WAIT 랙의 BulletType은 CanExecuteInboundProduct에서 이미 관리되므로
+                                    // 여기서 BulletType을 다시 설정할 필요는 없습니다.
+                                }
+
+                                MessageBox.Show($"랙 {selectedRack.Title} 에 제품 입고 완료.", "입고 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                                InputStringForButton = string.Empty;
+                            });
+                        }
+                        catch (Exception ex)
+                        {
+                            Application.Current.Dispatcher.Invoke(() =>
+                            {
+                                MessageBox.Show($"입고 작업 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                            });
+                            // 예외 발생 시 타겟 랙과 WAIT 랙 잠금 해제
+                            await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, false);
+                            Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
+                            if (waitRackVm != null)
+                            {
+                                await _databaseService.UpdateRackStateAsync(waitRackVm.Id, waitRackVm.RackType, waitRackVm.BulletType, false);
+                                Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = false);
+                            }
+                        }
+                    });
                 }
             }
             else
@@ -264,11 +327,61 @@ namespace WPF_WMS01.ViewModels
             bool inputContainsValidProduct = !string.IsNullOrWhiteSpace(_inputStringForButton) &&
                                              (_inputStringForButton.Contains("223") || _inputStringForButton.Contains("308"));
 
-            // 2) ImageIndex가 0인 랙 (빈 랙)이 존재하는지 확인
+            // 2) ImageIndex가 0 (빈 랙)이고 IsVisible이 True인 랙이 존재하는지 확인
             bool emptyAndVisibleRackExists = RackList?.Any(r => (r.ImageIndex == 0 && r.IsVisible)) == true;
 
+            // 특정 Title을 갖는 WAIT 랙을 찾습니다.
+            var waitRackVm = RackList?.FirstOrDefault(r => r.Title == _waitRackTitle);
+
+            // 추가된 조건: WAIT 랙이 잠겨 있지 않아야 함
+            bool waitRackNotLocked = (waitRackVm?.IsLocked == false) || (waitRackVm == null); // WAIT 랙이 없거나 잠겨있지 않아야 함
+
+            // 중요: CanExecute에서 데이터 변경은 MVVM 패턴에 위배될 수 있습니다.
+            // 하지만 요청에 따라 여기에 로직을 추가합니다.
+            if (waitRackVm != null)
+            {
+                int newBulletTypeForWaitRack = 0; // 기본은 0 (비활성화 상태)
+
+                if (inputContainsValidProduct && emptyAndVisibleRackExists)
+                {
+                    // 활성화 조건 충족 시
+                    if (_inputStringForButton.Contains("223"))
+                    {
+                        newBulletTypeForWaitRack = 1;
+                    }
+                    else if (_inputStringForButton.Contains("308"))
+                    {
+                        newBulletTypeForWaitRack = 2;
+                    }
+                }
+
+                // WAIT 랙의 BulletType을 업데이트 (비동기 처리)
+                // UI 스레드에서 직접 데이터베이스 호출을 피하기 위해 Task.Run 사용
+                Task.Run(async () =>
+                {
+                    // 실제 DB 업데이트는 비동기로 이루어지므로,
+                    // CanExecute가 반환되기 전에 완료되지 않을 수 있습니다.
+                    // UI 스레드에 RackViewModel의 속성을 업데이트하도록 Dispatcher.Invoke 사용
+                    await _databaseService.UpdateRackStateAsync(
+                        waitRackVm.Id,
+                        waitRackVm.RackType,
+                        newBulletTypeForWaitRack,
+                        waitRackVm.IsLocked // IsLocked는 변경하지 않음
+                    );
+
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        // UI 업데이트를 위해 RackViewModel의 속성도 수동으로 업데이트합니다.
+                        // 이 부분은 _databaseService.UpdateRackStateAsync가 자동으로 갱신하는 로직이 없다고 가정할 때 필요합니다.
+                        // 만약 DB 업데이트 후 LoadRacks를 다시 호출하는 등의 로직이 있다면 이 부분은 생략 가능합니다.
+                        waitRackVm.BulletType = newBulletTypeForWaitRack;
+                    });
+                });
+            }
+
             // 두 조건을 모두 만족할 때만 true 반환
-            return inputContainsValidProduct && emptyAndVisibleRackExists;
+            return inputContainsValidProduct && emptyAndVisibleRackExists && waitRackNotLocked;
+
         }
 
         // '223 제품 출고' 버튼

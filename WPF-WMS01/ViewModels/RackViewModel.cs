@@ -12,6 +12,7 @@ using WPF_WMS01.Commands;
 using WPF_WMS01.Services;
 using WPF_WMS01.Views.Popups; // SelectStorageRackPopupView 추가
 using WPF_WMS01.ViewModels.Popups; // SelectStorageRackPopupViewModel 추가
+using System.Configuration;
 
 namespace WPF_WMS01.ViewModels
 {
@@ -55,14 +56,16 @@ namespace WPF_WMS01.ViewModels
         }
 
         private readonly DatabaseService _databaseService; // DatabaseService 추가
+        private readonly MainViewModel _mainViewModel; // MainViewModel 참조 추가
 
         // 생성자: 최초 RackViewModel 생성 시 호출
-        public RackViewModel(Rack rack, DatabaseService databaseService)
+        public RackViewModel(Rack rack, DatabaseService databaseService, MainViewModel mainViewModel)
         {
             // 생성자에서는 SetRackModel을 호출하여 _rackModel에 할당하고 구독 로직을 실행
             SetRackModel(rack); // RackModel의 set 접근자 로직이 여기서 실행됨
 
             _databaseService = databaseService ?? throw new ArgumentNullException(nameof(databaseService));
+            _mainViewModel = mainViewModel; // MainViewModel 참조 저장
             RackClickCommand = new RelayCommand(OnRackClicked, CanClickRack);
         }
 
@@ -255,6 +258,8 @@ namespace WPF_WMS01.ViewModels
                     break;
                 case 1:
                 case 2:
+                case 7:
+                case 8:
                     // ImageIndex가 1 또는 2일 때 띄울 팝업 - 이동/복사 로직
                     await HandleRackTransfer(clickedRackViewModel); // 새로운 비동기 처리 메서드 호출
                     break;
@@ -328,6 +333,8 @@ namespace WPF_WMS01.ViewModels
                             0,                                      // 원본 랙의 BulletType을 0으로 설정
                             false                                   // IsLocked 해제
                         );
+                        if (sourceRackViewModel.Title.Equals(ConfigurationManager.AppSettings["WaitRackTitle"] ?? "WAIT"))
+                            _mainViewModel.InputStringForButton = string.Empty; // 입고 후 TextBox 내용 초기화;
 
                         Application.Current.Dispatcher.Invoke(() =>
                         {
