@@ -27,6 +27,15 @@ namespace WPF_WMS01.ViewModels.Popups
         public ICommand ConfirmCommand { get; private set; }
         public ICommand CancelCommand { get; private set; }
 
+        // 디자인 타임 전용 매개변수 없는 생성자 (XDG0062 오류 해결)
+        // 실제 런타임에서는 이 생성자가 호출되지 않습니다.
+        public SelectCheckoutRackPopupViewModel() : this(new List<Rack>())
+        {
+            // 이 생성자는 디자인 타임에만 사용됩니다.
+            // 필요하다면 여기에 디자인 타임 데이터를 초기화할 수 있습니다.
+            // 예를 들어, AvailableRacks.Add(new CheckoutRackItem(new Rack { Id = 1, Title = "Sample Rack" }, this));
+        }
+
         public SelectCheckoutRackPopupViewModel(List<Rack> racks)
         {
             AvailableRacks = new ObservableCollection<CheckoutRackItem>(
