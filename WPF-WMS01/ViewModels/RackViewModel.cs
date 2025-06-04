@@ -245,6 +245,7 @@ namespace WPF_WMS01.ViewModels
                             // 모델 업데이트 (UI 반영을 위해)
                             clickedRackViewModel.RackModel.RackType = newRackType;
                             //MessageBox.Show($"랙 {Title}의 타입이 {currentRackType}에서 {newRackType}으로 변경되었습니다.", "변경 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                            ShowAutoClosingMessage($"랙 {Title}의 타입이 {currentRackType}에서 {newRackType}으로 변경되었습니다.");
                         }
                         catch (Exception ex)
                         {   
@@ -253,7 +254,8 @@ namespace WPF_WMS01.ViewModels
                     }
                     else
                     {
-                        MessageBox.Show("랙 타입 변경이 취소되었습니다.", "변경 취소", MessageBoxButton.OK, MessageBoxImage.Information);
+                        //MessageBox.Show("랙 타입 변경이 취소되었습니다.", "변경 취소", MessageBoxButton.OK, MessageBoxImage.Information);
+                        ShowAutoClosingMessage("랙 타입 변경이 취소되었습니다.");
                     }
                     break;
                 case 1:
@@ -304,8 +306,8 @@ namespace WPF_WMS01.ViewModels
                 await _databaseService.UpdateRackStateAsync(sourceRackViewModel.Id, sourceRackViewModel.RackModel.RackType, sourceRackViewModel.RackModel.BulletType, true); // source 랙 잠금
                 await _databaseService.UpdateRackStateAsync(destinationRack.Id, destinationRack.RackType, destinationRack.BulletType, true); // destination 랙 잠금
 
-                MessageBox.Show($"랙 {sourceRackViewModel.Title} 와 랙 {destinationRack.Title} 이(가) 작업 중입니다. 10초 대기...", "작업 시작", MessageBoxButton.OK, MessageBoxImage.Information);
-
+                //MessageBox.Show($"랙 {sourceRackViewModel.Title} 에서 랙 {destinationRack.Title} 로 이동 중입니다. 10초 대기...", "이동 시작", MessageBoxButton.OK, MessageBoxImage.Information);
+                ShowAutoClosingMessage($"랙 {sourceRackViewModel.Title} 에서 랙 {destinationRack.Title} 로 이동 중입니다. 10초 대기...");
                 // 이 값은 원본 랙의 BulletType이 0으로 변경되기 전에 가져와야 합니다.
                 int originalSourceBulletType = sourceRackViewModel.RackModel.BulletType;
 
@@ -338,7 +340,8 @@ namespace WPF_WMS01.ViewModels
 
                         Application.Current.Dispatcher.Invoke(() =>
                         {
-                            MessageBox.Show($"랙 {sourceRackViewModel.Title} 와 랙 {destinationRack.Title} 의 작업이 완료되었습니다.", "작업 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                            //MessageBox.Show($"랙 {sourceRackViewModel.Title} 에서 랙 {destinationRack.Title} 로의 이동이 완료되었습니다.", "이동 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                            ShowAutoClosingMessage($"랙 {sourceRackViewModel.Title} 에서 랙 {destinationRack.Title} 로의 이동이 완료되었습니다.");
                         });
                     }
                     catch (Exception ex)
@@ -352,7 +355,8 @@ namespace WPF_WMS01.ViewModels
             }
             else
             {
-                MessageBox.Show("랙 이동/복사 작업이 취소되었습니다.", "취소", MessageBoxButton.OK, MessageBoxImage.Information);
+                //MessageBox.Show("랙 이동/복사 작업이 취소되었습니다.", "취소", MessageBoxButton.OK, MessageBoxImage.Information);
+                ShowAutoClosingMessage("랙 이동/복사 작업이 취소되었습니다.");
                 // 팝업이 닫히거나, 선택된 랙이 없으면 취소.
                 // 잠갔던 sourceRackViewModel.IsLocked = true; 를 다시 false로 되돌려야 합니다.
                 // 이 역시 DatabaseService를 통해 다시 업데이트
@@ -369,7 +373,8 @@ namespace WPF_WMS01.ViewModels
             if (confirmPopupView.ShowDialog() == true && confirmPopupViewModel.DialogResult == true)
             {
                 // UI 잠금 메시지
-                MessageBox.Show($"랙 {targetRackViewModel.Title} 출고 작업을 시작합니다. 10초 대기...", "작업 시작", MessageBoxButton.OK, MessageBoxImage.Information);
+                //MessageBox.Show($"랙 {targetRackViewModel.Title} 출고 작업을 시작합니다. 10초 대기...", "작업 시작", MessageBoxButton.OK, MessageBoxImage.Information);
+                ShowAutoClosingMessage($"랙 {targetRackViewModel.Title} 출고 작업을 시작합니다. 10초 대기...");
 
                 // 랙 잠금 및 비동기 작업 시작
                 await _databaseService.UpdateRackStateAsync(targetRackViewModel.Id, targetRackViewModel.RackType, targetRackViewModel.BulletType, true); // 랙 잠금
@@ -400,7 +405,8 @@ namespace WPF_WMS01.ViewModels
 
                         Application.Current.Dispatcher.Invoke(() =>
                         {
-                            MessageBox.Show($"랙 {targetRackViewModel.Title} 출고 작업이 완료되었습니다.", "작업 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                            //MessageBox.Show($"랙 {targetRackViewModel.Title} 출고 작업이 완료되었습니다.", "작업 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                            ShowAutoClosingMessage($"랙 {targetRackViewModel.Title} 출고 작업이 완료되었습니다.");
                         });
                     }
                     catch (Exception ex)
@@ -414,7 +420,8 @@ namespace WPF_WMS01.ViewModels
             }
             else
             {
-                MessageBox.Show("랙 출고 작업이 취소되었습니다.", "취소", MessageBoxButton.OK, MessageBoxImage.Information);
+                //MessageBox.Show("랙 출고 작업이 취소되었습니다.", "취소", MessageBoxButton.OK, MessageBoxImage.Information);
+                ShowAutoClosingMessage("랙 출고 작업이 취소되었습니다.");
                 // 취소 시 랙 잠금 해제 (작업 시작 전에 잠겼다면)
                 // await _databaseService.UpdateRackStateAsync(targetRackViewModel.Id, targetRackViewModel.RackType, targetRackViewModel.BulletType, false);
             }
@@ -427,5 +434,17 @@ namespace WPF_WMS01.ViewModels
             // IsLocked는 RackModel.IsLocked에서 가져옴
             return (!IsLocked && Title != "WRAP"); // 'locked' 상태가 아닐 때만 클릭 가능하도록 설정
         }
+        // 자동 닫힘 메시지 팝업을 표시하는 헬퍼 메서드
+        private void ShowAutoClosingMessage(string message)
+        {
+            // UI 스레드에서 팝업을 띄웁니다.
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                var viewModel = new AutoClosingMessagePopupViewModel(message);
+                var view = new AutoClosingMessagePopupView { DataContext = viewModel };
+                view.Show(); // ShowDialog() 대신 Show()를 사용하여 비모달로 띄웁니다.
+            });
+        }
     }
+
 }

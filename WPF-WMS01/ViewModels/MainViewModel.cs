@@ -187,6 +187,18 @@ namespace WPF_WMS01.ViewModels
             _refreshTimer.Tick -= RefreshTimer_Tick;
         }
 
+        // 자동 닫힘 메시지 팝업을 표시하는 헬퍼 메서드
+        private void ShowAutoClosingMessage(string message)
+        {
+            // UI 스레드에서 팝업을 띄웁니다.
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                var viewModel = new AutoClosingMessagePopupViewModel(message);
+                var view = new AutoClosingMessagePopupView { DataContext = viewModel };
+                view.Show(); // ShowDialog() 대신 Show()를 사용하여 비모달로 띄웁니다.
+            });
+        }
+
         // Grid>Row="1"에 새로 추가된 속성 및 명령 ---
 
         private string _inputStringForButton;
@@ -236,7 +248,8 @@ namespace WPF_WMS01.ViewModels
                     if (targetRackVm == null) return;
                     // WAIT 랙이 없으면 잠금 처리할 대상이 없으므로 null 체크
                     // 만약 WAIT 랙이 필수라면 여기서 오류 메시지 표시
-                    MessageBox.Show($"랙 {selectedRack.Title} 에 {InputStringForButton} 제품 입고 작업을 시작합니다. 10초 대기...", "입고 작업 시작", MessageBoxButton.OK, MessageBoxImage.Information);
+                    //MessageBox.Show($"랙 {selectedRack.Title} 에 {InputStringForButton} 제품 입고 작업을 시작합니다. 10초 대기...", "입고 작업 시작", MessageBoxButton.OK, MessageBoxImage.Information);
+                    ShowAutoClosingMessage($"랙 {selectedRack.Title} 에 {InputStringForButton} 제품 입고 작업을 시작합니다. 10초 대기...");
 
                     // **타겟 랙과 WAIT 랙 잠금**
                     await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, true);
@@ -265,10 +278,12 @@ namespace WPF_WMS01.ViewModels
                             }
                             else
                             {
-                                Application.Current.Dispatcher.Invoke(() =>
-                                {
-                                    MessageBox.Show("입력된 문자열에서 유효한 제품 유형을 찾을 수 없습니다.", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
-                                });
+                                //Application.Current.Dispatcher.Invoke(() =>   // ToDo Check
+                                //{
+                                //MessageBox.Show("입력된 문자열에서 유효한 제품 유형을 찾을 수 없습니다.", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                                ShowAutoClosingMessage("입력된 문자열에서 유효한 제품 유형을 찾을 수 없습니다."); // 오류 메시지도 자동 닫힘
+
+                                //});
                                 // 오류 발생 시 타겟 랙과 WAIT 랙 모두 잠금 해제
                                 await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, false);
                                 Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
@@ -302,7 +317,8 @@ namespace WPF_WMS01.ViewModels
                                 }
 
                                 // WAIT 랙은 계속 잠금 상태를 유지 (CanExecute에서 제어됨)
-                                MessageBox.Show($"랙 {selectedRack.Title} 에 제품 입고 완료.", "입고 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                                //MessageBox.Show($"랙 {selectedRack.Title} 에 제품 입고 완료.", "입고 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                                ShowAutoClosingMessage($"랙 {selectedRack.Title} 에 제품 입고 완료.");
                                 InputStringForButton = string.Empty;
                             });
                         }
@@ -326,7 +342,8 @@ namespace WPF_WMS01.ViewModels
             }
             else
             {
-                MessageBox.Show("입고 작업이 취소되었습니다.", "취소", MessageBoxButton.OK, MessageBoxImage.Information);
+                //MessageBox.Show("입고 작업이 취소되었습니다.", "취소", MessageBoxButton.OK, MessageBoxImage.Information);
+                ShowAutoClosingMessage("입고 작업이 취소되었습니다.");
             }
         }
 
@@ -421,7 +438,8 @@ namespace WPF_WMS01.ViewModels
                     return;
                 }
 
-                MessageBox.Show($"{selectedRacksForCheckout.Count}개의 223 제품 랙 출고 작업을 시작합니다.", "출고 작업 시작", MessageBoxButton.OK, MessageBoxImage.Information);
+                //MessageBox.Show($"{selectedRacksForCheckout.Count}개의 223 제품 랙 출고 작업을 시작합니다.", "출고 작업 시작", MessageBoxButton.OK, MessageBoxImage.Information);
+                ShowAutoClosingMessage($"{selectedRacksForCheckout.Count}개의 223 제품 랙 출고 작업을 시작합니다.");
 
                 // **출고: 모든 선택된 랙을 동시에 잠금 (IsLocked = true)**
                 var targetRackVmsToLock = selectedRacksForCheckout.Select(r => RackList?.FirstOrDefault(rvm => rvm.Id == r.Id))
@@ -443,10 +461,11 @@ namespace WPF_WMS01.ViewModels
 
                         try
                         {
-                            Application.Current.Dispatcher.Invoke(() =>
-                            {
-                                MessageBox.Show($"랙 {targetRackVm.Title} 출고 처리 중... (10초 대기)", "출고 진행", MessageBoxButton.OK, MessageBoxImage.Information);
-                            });
+                            //Application.Current.Dispatcher.Invoke(() =>   // ToDo Check
+                            //{
+                                //MessageBox.Show($"랙 {targetRackVm.Title} 출고 처리 중... (10초 대기)", "출고 진행", MessageBoxButton.OK, MessageBoxImage.Information);
+                                ShowAutoClosingMessage($"랙 {targetRackVm.Title} 출고 처리 중... (10초 대기)");
+                            //});
 
                             await Task.Delay(TimeSpan.FromSeconds(10)); // 10초 지연
 
@@ -456,7 +475,8 @@ namespace WPF_WMS01.ViewModels
                             {
                                 targetRackVm.BulletType = 0; // UI 업데이트
                                 targetRackVm.IsLocked = false; // UI 업데이트 (잠금 해제)
-                                MessageBox.Show($"랙 {targetRackVm.Title} 출고 완료.", "출고 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                                //MessageBox.Show($"랙 {targetRackVm.Title} 출고 완료.", "출고 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                                ShowAutoClosingMessage($"랙 {targetRackVm.Title} 출고 완료.");
                             });
                         }
                         catch (Exception ex)
@@ -473,13 +493,15 @@ namespace WPF_WMS01.ViewModels
 
                     Application.Current.Dispatcher.Invoke(() =>
                     {
-                        MessageBox.Show("모든 223 제품 출고 작업이 완료되었습니다.", "모든 출고 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                        //MessageBox.Show("모든 223 제품 출고 작업이 완료되었습니다.", "모든 출고 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                        ShowAutoClosingMessage("모든 223 제품 출고 작업이 완료되었습니다.");
                     });
                 });
             }
             else
             {
-                MessageBox.Show("223 제품 출고 작업이 취소되었습니다.", "취소", MessageBoxButton.OK, MessageBoxImage.Information);
+                //MessageBox.Show("223 제품 출고 작업이 취소되었습니다.", "취소", MessageBoxButton.OK, MessageBoxImage.Information);
+                ShowAutoClosingMessage("223 제품 출고 작업이 취소되었습니다.");
             }
         }
 
@@ -517,7 +539,8 @@ namespace WPF_WMS01.ViewModels
                     return;
                 }
 
-                MessageBox.Show($"{selectedRacksForCheckout.Count}개의 308 제품 랙 출고 작업을 시작합니다.", "출고 작업 시작", MessageBoxButton.OK, MessageBoxImage.Information);
+                //MessageBox.Show($"{selectedRacksForCheckout.Count}개의 308 제품 랙 출고 작업을 시작합니다.", "출고 작업 시작", MessageBoxButton.OK, MessageBoxImage.Information);
+                ShowAutoClosingMessage($"{selectedRacksForCheckout.Count}개의 308 제품 랙 출고 작업을 시작합니다.");
 
                 // **출고: 모든 선택된 랙을 동시에 잠금 (IsLocked = true)**
                 var targetRackVmsToLock = selectedRacksForCheckout.Select(r => RackList?.FirstOrDefault(rvm => rvm.Id == r.Id))
@@ -539,10 +562,11 @@ namespace WPF_WMS01.ViewModels
 
                         try
                         {
-                            Application.Current.Dispatcher.Invoke(() =>
-                            {
-                                MessageBox.Show($"랙 {targetRackVm.Title} 출고 처리 중... (10초 대기)", "출고 진행", MessageBoxButton.OK, MessageBoxImage.Information);
-                            });
+                            //Application.Current.Dispatcher.Invoke(() =>   // ToDo Check
+                            //{
+                                //MessageBox.Show($"랙 {targetRackVm.Title} 출고 처리 중... (10초 대기)", "출고 진행", MessageBoxButton.OK, MessageBoxImage.Information);
+                                ShowAutoClosingMessage($"랙 {targetRackVm.Title} 출고 처리 중... (10초 대기)");
+                            //});
 
                             await Task.Delay(TimeSpan.FromSeconds(10)); // 10초 지연
 
@@ -552,7 +576,8 @@ namespace WPF_WMS01.ViewModels
                             {
                                 targetRackVm.BulletType = 0; // UI 업데이트
                                 targetRackVm.IsLocked = false; // UI 업데이트 (잠금 해제)
-                                MessageBox.Show($"랙 {targetRackVm.Title} 출고 완료.", "출고 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                                //MessageBox.Show($"랙 {targetRackVm.Title} 출고 완료.", "출고 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                                ShowAutoClosingMessage($"랙 {targetRackVm.Title} 출고 완료.");
                             });
                         }
                         catch (Exception ex)
@@ -569,13 +594,15 @@ namespace WPF_WMS01.ViewModels
 
                     Application.Current.Dispatcher.Invoke(() =>
                     {
-                        MessageBox.Show("모든 308 제품 출고 작업이 완료되었습니다.", "모든 출고 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                        //MessageBox.Show("모든 308 제품 출고 작업이 완료되었습니다.", "모든 출고 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                        ShowAutoClosingMessage("모든 308 제품 출고 작업이 완료되었습니다.");
                     });
                 });
             }
             else
             {
-                MessageBox.Show("308 제품 출고 작업이 취소되었습니다.", "취소", MessageBoxButton.OK, MessageBoxImage.Information);
+                //MessageBox.Show("308 제품 출고 작업이 취소되었습니다.", "취소", MessageBoxButton.OK, MessageBoxImage.Information);
+                ShowAutoClosingMessage("308 제품 출고 작업이 취소되었습니다.");
             }
         }
 
