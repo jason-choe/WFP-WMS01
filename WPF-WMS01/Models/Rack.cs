@@ -22,7 +22,7 @@ namespace WPF_WMS01.Models
                 if (_id != value)
                 {
                     _id = value;
-                    OnPropertyChanged(nameof(Id));
+                    //OnPropertyChanged(nameof(Id));
                 }
             }
         }
@@ -103,6 +103,34 @@ namespace WPF_WMS01.Models
         public int ImageIndex
         {
             get { return RackType * 3 + BulletType; }
+        }
+
+        private string _lotNumber;
+        public string LotNumber
+        {
+            get { return _lotNumber; }
+            set
+            {
+                if (_lotNumber != value)
+                {
+                    _lotNumber = value;
+                    //OnPropertyChanged(nameof(LotNumber));
+                }
+            }
+        }
+
+        private DateTime? _rackedAt;
+        public DateTime? RackedAt
+        {
+            get { return _rackedAt; }
+            set
+            {
+                if (_rackedAt != value)
+                {
+                    _rackedAt = value;
+                    //OnPropertyChanged(nameof(RackedAt));
+                }
+            }
         }
 
         public Rack()

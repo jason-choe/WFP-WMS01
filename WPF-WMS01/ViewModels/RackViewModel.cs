@@ -44,7 +44,7 @@ namespace WPF_WMS01.ViewModels
                     }
 
                     // RackModel 객체 자체가 바뀌었으므로, 모든 래퍼 속성에 대해 PropertyChanged 알림
-                    OnPropertyChanged(nameof(Id));
+                    //OnPropertyChanged(nameof(Id));
                     OnPropertyChanged(nameof(Title));
                     OnPropertyChanged(nameof(IsLocked));
                     OnPropertyChanged(nameof(IsVisible));
@@ -206,6 +206,35 @@ namespace WPF_WMS01.ViewModels
             }
         }
 
+        // 새로운 속성 추가 (모델의 속성을 래핑)
+        public string LotNumber
+        {
+            get => _rackModel.LotNumber;
+            set
+            {
+                if (_rackModel.LotNumber != value)
+                {
+                    _rackModel.LotNumber = value;
+                    OnPropertyChanged();
+                    // 데이터베이스 업데이트 로직이 필요한 경우 여기에 추가 (또는 상위 ViewModel에서 처리)
+                }
+            }
+        }
+
+        public DateTime? RackedAt
+        {
+            get => _rackModel.RackedAt;
+            set
+            {
+                if (_rackModel.RackedAt != value)
+                {
+                    _rackModel.RackedAt = value;
+                    OnPropertyChanged();
+                    // 데이터베이스 업데이트 로직이 필요한 경우 여기에 추가
+                }
+            }
+        }
+
         public event PropertyChangedEventHandler PropertyChanged;
 
         protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
@@ -326,6 +355,10 @@ namespace WPF_WMS01.ViewModels
                             originalSourceBulletType,               // <-- 미리 저장해둔 원본 랙의 BulletType을 사용
                             false                                   // IsLocked 해제
                         );
+                        if (sourceRackViewModel.Title.Equals(_mainViewModel._waitRackTitle))
+                            await _databaseService.UpdateLotNumberAsync(destinationRack.Id, _mainViewModel.InputStringForButton);
+                        else
+                            await _databaseService.UpdateLotNumberAsync(destinationRack.Id, sourceRackViewModel.LotNumber);
 
                         // 4) 원본 랙 (sourceRack)의 BulletType을 0으로 설정하여 '비움'
                         // (원래 랙은 RackType을 유지하면서 BulletType만 0으로)
@@ -335,6 +368,8 @@ namespace WPF_WMS01.ViewModels
                             0,                                      // 원본 랙의 BulletType을 0으로 설정
                             false                                   // IsLocked 해제
                         );
+                        await _databaseService.UpdateLotNumberAsync(sourceRackViewModel.Id, String.Empty);
+
                         if (sourceRackViewModel.Title.Equals(ConfigurationManager.AppSettings["WaitRackTitle"] ?? "WAIT"))
                             _mainViewModel.InputStringForButton = string.Empty; // 입고 후 TextBox 내용 초기화;
 
@@ -402,6 +437,7 @@ namespace WPF_WMS01.ViewModels
                             0,                            // BulletType을 0으로 설정 (출고)
                             false                         // IsLocked 해제
                         );
+                        await _databaseService.UpdateLotNumberAsync(targetRackViewModel.Id, String.Empty);
 
                         Application.Current.Dispatcher.Invoke(() =>
                         {

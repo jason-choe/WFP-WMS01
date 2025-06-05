@@ -56,8 +56,8 @@ namespace WPF_WMS01.ViewModels
 
         private async Task LoadRacks()
         {
-            try
-            {
+            /*try
+            {*/
                 // 실제 데이터 로딩 로직
                 var racks = await _databaseService.GetRackStatesAsync();
 
@@ -86,11 +86,11 @@ namespace WPF_WMS01.ViewModels
                     // 불필요한 UI 깜빡임을 줄일 수 있습니다.
                     UpdateRackList(racks);
                 });
-            }
+            /*}
             catch (Exception ex)
             {
                 MessageBox.Show($"데이터 로드 중 오류 발생: {ex.Message}");
-            }
+            }*/
         }
 
         // 예시: 랙 상태를 업데이트하는 명령 (버튼 등에 바인딩 가능)
@@ -302,6 +302,7 @@ namespace WPF_WMS01.ViewModels
                                 newBulletType,
                                 false // 입고 후 타겟 랙만 잠금 해제
                             );
+                            await _databaseService.UpdateLotNumberAsync(selectedRack.Id, InputStringForButton); // Register lot number
 
                             Application.Current.Dispatcher.Invoke(() =>
                             {
@@ -471,6 +472,7 @@ namespace WPF_WMS01.ViewModels
 
                             // **출고: 각 랙이 개별적으로 잠금 해제 (IsLocked = false) 및 BulletType 변경**
                             await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, 0, false);
+                            await _databaseService.UpdateLotNumberAsync(targetRackVm.Id, String.Empty);
                             Application.Current.Dispatcher.Invoke(() =>
                             {
                                 targetRackVm.BulletType = 0; // UI 업데이트
@@ -572,6 +574,7 @@ namespace WPF_WMS01.ViewModels
 
                             // **출고: 각 랙이 개별적으로 잠금 해제 (IsLocked = false) 및 BulletType 변경**
                             await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, 0, false);
+                            await _databaseService.UpdateLotNumberAsync(targetRackVm.Id, String.Empty);
                             Application.Current.Dispatcher.Invoke(() =>
                             {
                                 targetRackVm.BulletType = 0; // UI 업데이트
