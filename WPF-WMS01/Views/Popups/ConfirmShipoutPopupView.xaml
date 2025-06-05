@@ -4,6 +4,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:WPF_WMS01.Views.Popups"
         xmlns:viewmodels="clr-namespace:WPF_WMS01.ViewModels.Popups"
+        xmlns:sys="clr-namespace:System;assembly=mscorlib"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=viewmodels:ConfirmShipoutPopupViewModel}" Title="출고 확인"
         Height="300" Width="450"
@@ -15,10 +16,13 @@
         </Grid.RowDefinitions>
 
         <TextBlock Grid.Row="0"
-                   Text="{Binding ConfirmationMessage}"
                    VerticalAlignment="Center" HorizontalAlignment="Center"
                    TextWrapping="Wrap" TextAlignment="Center"
-                   FontSize="22" FontWeight="Bold" Margin="10"/>
+                   FontSize="22" FontWeight="Bold" Margin="20">
+            <Run Text="{Binding ConfirmationMessage}"/>
+                 <LineBreak/><LineBreak/>
+            <Run Text="{Binding LotNoMessage}"/>
+        </TextBlock>
 
         <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
             <Button Content="확인"

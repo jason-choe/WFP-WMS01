@@ -323,7 +323,7 @@ namespace WPF_WMS01.ViewModels
             }
 
             // 랙 선택 팝업 표시 (이름 변경)
-            var selectPopupViewModel = new SelectStorageRackPopupViewModel(targetRacks);
+            var selectPopupViewModel = new SelectStorageRackPopupViewModel(targetRacks, _rackModel.LotNumber);
             var selectPopupView = new SelectStorageRackPopupView { DataContext = selectPopupViewModel };
             selectPopupView.Title = $"랙 {sourceRackViewModel.Title} 의 제품 이동";
 
@@ -402,7 +402,7 @@ namespace WPF_WMS01.ViewModels
         // 새롭게 추가할 출고 로직
         private async Task HandleRackShipout(RackViewModel targetRackViewModel)
         {
-            var confirmPopupViewModel = new ConfirmShipoutPopupViewModel(targetRackViewModel.Title, targetRackViewModel.BulletType);
+            var confirmPopupViewModel = new ConfirmShipoutPopupViewModel(targetRackViewModel.Title, targetRackViewModel.BulletType, targetRackViewModel.LotNumber);
             var confirmPopupView = new ConfirmShipoutPopupView { DataContext = confirmPopupViewModel };
 
             if (confirmPopupView.ShowDialog() == true && confirmPopupViewModel.DialogResult == true)

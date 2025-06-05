@@ -5,31 +5,74 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:WPF_WMS01.Views.Popups"
         xmlns:viewmodels="clr-namespace:WPF_WMS01.ViewModels.Popups"
+        xmlns:sys="clr-namespace:System;assembly=mscorlib"
         mc:Ignorable="d"
-        Title="출고할 랙 선택" Height="450" Width="400"
+        Title="출고할 랙 선택" Height="600" Width="600"
         WindowStartupLocation="CenterScreen"
         d:DataContext="{d:DesignInstance Type=viewmodels:SelectCheckoutRackPopupViewModel, IsDesignTimeCreatable=True}"
         DataContextChanged="Window_DataContextChanged">
     <Grid>
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <ListBox Grid.Row="0" ItemsSource="{Binding AvailableRacks}" Margin="10">
-            <ListBox.ItemTemplate>
-                <DataTemplate>
-                    <StackPanel Orientation="Horizontal">
-                        <CheckBox IsChecked="{Binding IsSelected}" VerticalAlignment="Center"/>
-                        <TextBlock Text="{Binding DisplayText}" Margin="5,0,0,0" VerticalAlignment="Center"/>
-                    </StackPanel>
-                </DataTemplate>
-            </ListBox.ItemTemplate>
-        </ListBox>
+        <TextBlock Grid.Row="0" Text="출고할 랙들을 선택하세요."
+                   VerticalAlignment="Center" HorizontalAlignment="Center"
+                   TextWrapping="Wrap"
+                   FontSize="22" FontWeight="Bold" Margin="10"/>
 
-        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="10">
-            <Button Content="확인" Command="{Binding ConfirmCommand}" Width="80" Height="30" Margin="0,0,10,0"/>
-            <Button Content="취소" Command="{Binding CancelCommand}" Width="80" Height="30"/>
+        <ListView Grid.Row="1" ItemsSource="{Binding AvailableRacks}" Margin="10" FontSize="24">
+            <ListView.View>
+                <GridView>
+                    <!-- 랙 번호 컬럼 -->
+                    <GridViewColumn Header="랙 번호" Width="Auto">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding RackTitle}" Margin="10,0"/>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+
+                    <!-- Lot No. 컬럼 -->
+                    <GridViewColumn Header="Lot No." Width="Auto">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding LotNumber}" Margin="5,0"/>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+
+                    <!-- 입고 일자 컬럼 -->
+                    <GridViewColumn Header="입고 일자" Width="Auto">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <!-- DateTime? 바인딩 및 형식 지정 -->
+                                <TextBlock Text="{Binding RackedAt, StringFormat='yyyy-MM-dd HH:mm'}" Margin="5,0"/>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+
+                    <!-- 체크박스 컬럼 -->
+                    <GridViewColumn Header="선택" Width="50">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <CheckBox IsChecked="{Binding IsSelected}" HorizontalAlignment="Center">
+                                    <CheckBox.LayoutTransform>
+                                        <ScaleTransform ScaleX="2" ScaleY="2" />
+                                    </CheckBox.LayoutTransform>
+                                </CheckBox>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+                </GridView>
+            </ListView.View>
+        </ListView>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="20">
+            <Button Content="확인" Command="{Binding ConfirmCommand}" FontSize="20" Width="80" Height="50" Margin="0,0,30,0"/>
+            <Button Content="취소" Command="{Binding CancelCommand}" FontSize="20" Width="80" Height="50"/>
         </StackPanel>
     </Grid>
 </Window>

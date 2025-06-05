@@ -42,17 +42,29 @@ namespace WPF_WMS01.ViewModels.Popups
             }
         }
 
+        private string _lotNo; // LotNo 속성
+        public string LotNo
+        {
+            get => _lotNo;
+            set
+            {
+                _lotNo = value;
+                OnPropertyChanged();
+            }
+        }
+
         public ICommand SelectCommand { get; private set; }
         public ICommand CancelCommand { get; private set; }
 
         public bool DialogResult { get; private set; }
 
-        public SelectStorageRackPopupViewModel(IEnumerable<Rack> racks)
+        public SelectStorageRackPopupViewModel(IEnumerable<Rack> racks, string lotNo)
         {
             // 🚨 수정할 부분: AvailableRacks를 설정하기 전에 Title(랙 번호) 기준으로 정렬
             AvailableRacks = new ObservableCollection<Rack>(
                 racks.OrderBy(r => r.Title) // Title 속성으로 오름차순 정렬
             );
+            LotNo = lotNo;
             // 🚨 수정할 부분: Title을 숫자로 파싱하여 정렬
             //AvailableRacks = new ObservableCollection<Rack>(
             //    racks.OrderBy(r => int.TryParse(r.Title, out int number) ? number : int.MaxValue) // 숫자로 파싱하여 정렬

@@ -16,21 +16,20 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0" Text="이동할 (비어있는 보관)랙을 선택하세요" Margin="0,0,0,20" FontSize="24" FontWeight="Bold"/>
+        <TextBlock Grid.Row="0"
+                   FontSize="22" FontWeight="Bold" Margin="0,0,0,20"
+                   HorizontalAlignment="Left" VerticalAlignment="Center">
+            <Run Text="Lot No. : "/>
+            <Run Text="{Binding LotNo}"/>
+            <LineBreak/> <LineBreak/> <Run Text="아래 리스트에서 포장 후 적재할 랙을 선택해 주세요."/>
+        </TextBlock>
 
-        <ListView Grid.Row="1" ItemsSource="{Binding AvailableRacks}" SelectedItem="{Binding SelectedRack}" Margin="0,0,0,20" FontSize="18">
-            <ListView.View>
-                <GridView>
-                    <GridViewColumn Header="랙 번호" DisplayMemberBinding="{Binding Title}" Width="150"/>
-                    <GridViewColumn Header="RackType" DisplayMemberBinding="{Binding RackType}" Width="150"/>
-                    <GridViewColumn Header="BulletType" DisplayMemberBinding="{Binding BulletType}" Width="150"/>
-                </GridView>
-            </ListView.View>
-            <ListView.ItemContainerStyle>
-                <Style TargetType="ListViewItem">
-                    <Setter Property="Height" Value="40"/>
-                </Style>
-            </ListView.ItemContainerStyle>
+        <ListView Grid.Row="1" ItemsSource="{Binding AvailableRacks}"
+                  SelectedItem="{Binding SelectedRack}"
+                  DisplayMemberPath="Title"
+                  SelectionMode="Single"
+                  FontSize="32" FontWeight="Bold"
+                  Margin="0,0,0,20">
         </ListView>
 
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">

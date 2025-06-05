@@ -26,6 +26,17 @@ namespace WPF_WMS01.ViewModels.Popups
             }
         }
 
+        private string _lotNoMessage;
+        public string LotNoMessage
+        {
+            get => _lotNoMessage;
+            set
+            {
+                _lotNoMessage = value;
+                OnPropertyChanged();
+            }
+        }
+
         private bool? _dialogResult;
         public bool? DialogResult
         {
@@ -43,9 +54,10 @@ namespace WPF_WMS01.ViewModels.Popups
         public ICommand ConfirmCommand { get; private set; }
         public ICommand CancelCommand { get; private set; }
 
-        public ConfirmShipoutPopupViewModel(string rackTitle, int bulletType )
+        public ConfirmShipoutPopupViewModel(string rackTitle, int bulletType, string LotNo)
         {
             string product = bulletType == 1 ? "232" : "308";
+            LotNoMessage = $"Lot No. :  {LotNo}";
             ConfirmationMessage = $"랙 {rackTitle}의 {product} 제품을 출고할까요?";
             ConfirmCommand = new RelayCommand(ExecuteConfirm);
             CancelCommand = new RelayCommand(ExecuteCancel);

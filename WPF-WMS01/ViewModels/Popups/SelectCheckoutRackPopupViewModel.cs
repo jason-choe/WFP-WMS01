@@ -5,6 +5,8 @@ using WPF_WMS01.Commands;
 using WPF_WMS01.Models; // Rack 모델 사용
 using System.Collections.Generic;
 using System.Windows;
+using System; // DateTime 사용을 위해 추가
+using System.ComponentModel;
 
 namespace WPF_WMS01.ViewModels.Popups
 {
@@ -38,8 +40,10 @@ namespace WPF_WMS01.ViewModels.Popups
 
         public SelectCheckoutRackPopupViewModel(List<Rack> racks)
         {
+            // 입고 일자(RackedAt) 기준으로 오름차순 정렬하여 컬렉션 초기화
             AvailableRacks = new ObservableCollection<CheckoutRackItem>(
-                racks.Select(r => new CheckoutRackItem(r, this))
+                racks.OrderBy(r => r.RackedAt) // RackedAt 기준으로 정렬
+                     .Select(r => new CheckoutRackItem(r, this))
             );
 
             ConfirmCommand = new RelayCommand(ExecuteConfirm, CanExecuteConfirm);
@@ -74,7 +78,11 @@ namespace WPF_WMS01.ViewModels.Popups
         public class CheckoutRackItem : ViewModelBase
         {
             public Rack RackModel { get; }
-            public string DisplayText => $"랙 {RackModel.Title} (제품: {GetBulletTypeName(RackModel.BulletType)})";
+            // 랙 번호, Lot No., 입고 일자를 직접 노출
+            public string RackTitle => RackModel.Title;
+            public string LotNumber => RackModel.LotNumber;
+            public DateTime? RackedAt => RackModel.RackedAt; // Nullable DateTime
+            //public string DisplayText => $"랙 {RackModel.Title} (제품: {GetBulletTypeName(RackModel.BulletType)})";
 
             private SelectCheckoutRackPopupViewModel _parentViewModel;
 
@@ -87,10 +95,13 @@ namespace WPF_WMS01.ViewModels.Popups
                     if (SetProperty(ref _isSelected, value))
                     {
                         // 선택 상태 변경 시 부모 ViewModel의 ConfirmCommand의 CanExecute를 다시 평가
-                        if (_parentViewModel != null && _parentViewModel.ConfirmCommand is RelayCommand confirmCommand)
+                        // Application.Current가 null인 디자인 타임에는 호출되지 않도록 방어 코드 추가
+                        if (!DesignerProperties.GetIsInDesignMode(new DependencyObject()) && _parentViewModel != null && _parentViewModel.ConfirmCommand is RelayCommand confirmCommand)
+
                         {
                             confirmCommand.RaiseCanExecuteChanged(); // <-- 수정된 부분
                         }
+                        // 선택 상태 변경 시 부모 ViewModel의 ConfirmCommand의 CanExecute를 다시 평가
                     }
                 }
             }
