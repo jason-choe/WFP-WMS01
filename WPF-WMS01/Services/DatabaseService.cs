@@ -50,7 +50,7 @@ namespace WPF_WMS01.Services
                             string lotNumber = reader.IsDBNull(reader.GetOrdinal("LotNumber")) ? string.Empty : reader["LotNumber"].ToString();
                             DateTime? rackedAt = reader.IsDBNull(reader.GetOrdinal("RackedAt")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("RackedAt"));
 
-                            int imageIndex = rackType * 3 + bulletType;
+                            int imageIndex = rackType * 7 + bulletType;
 
                             Rack rack;
                             lock (_cacheLock) // 캐시 접근 시 락 걸기 (멀티스레드 환경 대비)

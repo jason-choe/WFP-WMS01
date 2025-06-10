@@ -252,7 +252,7 @@ namespace WPF_WMS01.ViewModels
             switch (ImageIndex)
             {
                 case 0:
-                case 3:
+                case 7:
                     // 랙 타입 변경 팝업
                     //int currentRackType = clickedRackViewModel.RackType;
                     //int newRackType = (currentRackType == 0) ? 1 : 0; // 0이면 1로, 1이면 0으로 변경
@@ -289,13 +289,25 @@ namespace WPF_WMS01.ViewModels
                     break;
                 case 1:
                 case 2:
-                case 7:
-                case 8:
-                    // ImageIndex가 1 또는 2일 때 띄울 팝업 - 이동/복사 로직
-                    await HandleRackTransfer(clickedRackViewModel); // 새로운 비동기 처리 메서드 호출
-                    break;
+                case 3:
                 case 4:
                 case 5:
+                case 6:
+                case 15:    // WAIT rack click
+                case 16:    // WAIT rack click
+                case 17:    // WAIT rack click
+                case 18:    // WAIT rack click
+                case 19:    // WAIT rack click
+                case 20:    // WAIT rack click
+                    // ImageIndex가 1~6 또는 15~20일 때 띄울 팝업 - 이동/복사 로직
+                    await HandleRackTransfer(clickedRackViewModel); // 새로운 비동기 처리 메서드 호출
+                    break;
+                case 8:
+                case 9:
+                case 10:
+                case 11:
+                case 12:
+                case 13:
                     // 3) ImageIndex가 4 또는 5일 때 띄울 팝업
                     await HandleRackShipout(clickedRackViewModel);
                     break;
@@ -314,7 +326,7 @@ namespace WPF_WMS01.ViewModels
             List<Rack> targetRacks = allRacks
                 .Where(r => r.Id != sourceRackViewModel.Id && // 자기 자신 제외
                             !r.IsLocked &&                     // 잠겨있지 않은 랙만
-                            r.ImageIndex == 3)                 // ImageIndex가 3인 랙만 (RackType 1, BulletType 0)
+                            r.ImageIndex == 7)                 // ImageIndex가 7인 랙만 (RackType 1, BulletType 0)
                 .ToList();
             if (!targetRacks.Any())
             {

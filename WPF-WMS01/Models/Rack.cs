@@ -102,7 +102,7 @@ namespace WPF_WMS01.Models
         // 계산된 ImageIndex 속성
         public int ImageIndex
         {
-            get { return RackType * 3 + BulletType; }
+            get { return RackType * 7 + BulletType; }
         }
 
         private string _lotNumber;

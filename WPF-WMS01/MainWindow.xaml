@@ -73,11 +73,16 @@
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
             <TextBox Grid.Column="0"
                        Text="{Binding InputStringForButton, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                       Width="300" Height="80" Background="LightSeaGreen"
+                       MaxLength="13" Width="300" Height="80" Background="LightSeaGreen"
                        VerticalAlignment="Center" HorizontalAlignment="Left"
                        Margin="0,0,20,0"
                        BorderThickness="3" 
@@ -88,18 +93,48 @@
 
             <Button Grid.Column="1" Content="입고"
                     Command="{Binding InboundProductCommand}"
-                    Width="150" Height="64" FontSize="20" FontWeight="Bold"
+                    Width="120" Height="64" FontSize="20" FontWeight="Bold"
                     VerticalAlignment="Center" HorizontalAlignment="Left"/>
 
-            <Button Grid.Column="3" Content="223 제품 출고"
+            <TextBox Grid.Column="3"
+                       Text="{Binding InputStringForShipOut, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                       MaxLength="4" Width="300" Height="80" Background="LightSeaGreen"
+                       VerticalAlignment="Center" HorizontalAlignment="Left"
+                       Margin="0,0,20,0"
+                       BorderThickness="3" 
+                       BorderBrush="Black"
+                       FontSize="28" Foreground="White"
+                       VerticalContentAlignment="Center"
+                       TextAlignment="Center" />
+
+            <Button Grid.Column="4" Content="223A 출고"
                     Command="{Binding Checkout223ProductCommand}"
-                    Width="200" Height="64" FontSize="20" FontWeight="Bold"
+                    Width="120" Height="64" FontSize="20" FontWeight="Bold"
                     VerticalAlignment="Center" HorizontalAlignment="Right"
                     Margin="0,0,20,0"/>
-
-            <Button Grid.Column="4" Content="308 제품 출고"
+            <Button Grid.Column="5" Content="5.56X 출고"
+                    Command="{Binding Checkout556xProductCommand}"
+                    Width="120" Height="64" FontSize="20" FontWeight="Bold"
+                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                    Margin="0,0,20,0"/>
+            <Button Grid.Column="6" Content="5.56K 출고"
+                    Command="{Binding Checkout556kProductCommand}"
+                    Width="120" Height="64" FontSize="20" FontWeight="Bold"
+                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                    Margin="0,0,20,0"/>
+            <Button Grid.Column="7" Content="308B 출고"
                     Command="{Binding Checkout308ProductCommand}"
-                    Width="200" Height="64" FontSize="20" FontWeight="Bold"
+                    Width="120" Height="64" FontSize="20" FontWeight="Bold"
+                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                    Margin="0,0,20,0"/>
+            <Button Grid.Column="8" Content="7.62X 출고"
+                    Command="{Binding Checkout762xProductCommand}"
+                    Width="120" Height="64" FontSize="20" FontWeight="Bold"
+                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                    Margin="0,0,20,0"/>
+            <Button Grid.Column="9" Content="M855T 출고"
+                    Command="{Binding CheckoutPsdProductCommand}"
+                    Width="120" Height="64" FontSize="20" FontWeight="Bold"
                     VerticalAlignment="Center" HorizontalAlignment="Right"/>
         </Grid>
 
@@ -146,7 +181,7 @@
             </Grid.ColumnDefinitions>
 
             <Image Grid.Column="0" Source="images/poongsan.png" Height="32" Margin="10"/> 
-            <TextBlock Grid.Column="1" Text="부산 사업소"
+            <TextBlock Grid.Column="1" Text="(주)풍산 부산 사업소"
                        FontSize="20" FontWeight="Bold"
                        VerticalAlignment="Center" HorizontalAlignment="Left"/>
             <Image Grid.Column="3" Source="images/arobotics.png" Height="32" Margin="10"/>

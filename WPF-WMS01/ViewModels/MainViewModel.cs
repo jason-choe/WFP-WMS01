@@ -24,7 +24,7 @@ namespace WPF_WMS01.ViewModels
         private DispatcherTimer _refreshTimer; // 타이머 선언
         public readonly string _waitRackTitle; // App.config에서 읽어올 WAIT 랙 타이틀
 
-
+        
         public MainViewModel()
         {
             _databaseService = new DatabaseService(); // 실제 서비스 인스턴스화
@@ -41,6 +41,10 @@ namespace WPF_WMS01.ViewModels
             InboundProductCommand = new RelayCommand(ExecuteInboundProduct, CanExecuteInboundProduct);
             Checkout223ProductCommand = new RelayCommand(ExecuteCheckout223Product, CanExecuteCheckout223Product);
             Checkout308ProductCommand = new RelayCommand(ExecuteCheckout308Product, CanExecuteCheckout308Product);
+            Checkout556xProductCommand = new RelayCommand(ExecuteCheckout556xProduct, CanExecuteCheckout556xProduct);
+            Checkout556kProductCommand = new RelayCommand(ExecuteCheckout556kProduct, CanExecuteCheckout556kProduct);
+            Checkout762xProductCommand = new RelayCommand(ExecuteCheckout762xProduct, CanExecuteCheckout762xProduct);
+            CheckoutPsdProductCommand = new RelayCommand(ExecuteCheckoutPsdProduct, CanExecuteCheckoutPsdProduct);
 
             // 타이머 설정 및 시작
             SetupRefreshTimer();
@@ -108,11 +112,11 @@ namespace WPF_WMS01.ViewModels
                 int newImageIndex = (rackViewModel.ImageIndex + 1) % 6; // 0-5 사이 순환
 
                 // RackViewModel의 RackModel에 직접 접근하여 RackType과 BulletType을 변경
-                // ImageIndex = RackType * 3 + BulletType;
-                // BulletType = ImageIndex % 3;
-                // RackType = ImageIndex / 3;
-                rackViewModel.RackModel.BulletType = newImageIndex % 3; // BulletType은 0, 1, 2
-                rackViewModel.RackModel.RackType = newImageIndex / 3;    // RackType은 0, 1
+                // ImageIndex = RackType * 7 + BulletType;
+                // BulletType = ImageIndex % 7;
+                // RackType = ImageIndex / 7;
+                rackViewModel.RackModel.BulletType = newImageIndex % 7; // BulletType은 0, 1, 2, 3, 4, 5, 6,
+                rackViewModel.RackModel.RackType = newImageIndex / 7;    // RackType은 0, 1, 2
 
                 // 데이터베이스에 변경 사항을 저장 (필요시, RackType과 BulletType 저장)
                 // 현재는 이 UpdateRackStateCommand가 RackViewModel의 OnRackClicked와는 별개로 존재합니다.
@@ -214,9 +218,28 @@ namespace WPF_WMS01.ViewModels
             }
         }
 
+        // Grid>Row="3"에 새로 추가된 속성 및 명령 ---
+
+        private string _inputStringForShipOut;
+        public string InputStringForShipOut
+        {
+            get => _inputStringForShipOut;
+            set
+            {
+                _inputStringForShipOut = value;
+                OnPropertyChanged();
+                // TextBlock 내용이 변경될 때마다 버튼의 활성화 여부를 다시 평가
+                //((RelayCommand)InboundProductCommand).RaiseCanExecuteChanged();
+            }
+        }
+
         public ICommand InboundProductCommand { get; private set; } // '입고' 버튼 명령
         public ICommand Checkout223ProductCommand { get; private set; } // '232 출고' 버튼 명령
         public ICommand Checkout308ProductCommand { get; private set; } // '308 출고' 버튼 명령
+        public ICommand Checkout556xProductCommand { get; private set; } // '308 출고' 버튼 명령
+        public ICommand Checkout556kProductCommand { get; private set; } // '308 출고' 버튼 명령
+        public ICommand Checkout762xProductCommand { get; private set; } // '308 출고' 버튼 명령
+        public ICommand CheckoutPsdProductCommand { get; private set; } // '308 출고' 버튼 명령
 
         // Grid>Row="1"에 새로 추가된 명령 구현 ---
 
@@ -268,13 +291,29 @@ namespace WPF_WMS01.ViewModels
                         try
                         {
                             int newBulletType = 0;
-                            if (InputStringForButton.Contains("223"))
+                            if (InputStringForButton.Contains("223A"))
                             {
                                 newBulletType = 1;
                             }
-                            else if (InputStringForButton.Contains("308"))
+                            else if (InputStringForButton.Contains("5.56X"))
                             {
                                 newBulletType = 2;
+                            }
+                            else if (InputStringForButton.Contains("5.56K"))
+                            {
+                                newBulletType = 3;
+                            }
+                            else if (InputStringForButton.Contains("308B"))
+                            {
+                                newBulletType = 4;
+                            }
+                            else if (InputStringForButton.Contains("7.62X"))
+                            {
+                                newBulletType = 5;
+                            }
+                            else if (InputStringForButton.Contains("PSD"))
+                            {
+                                newBulletType = 6;
                             }
                             else
                             {
@@ -352,7 +391,13 @@ namespace WPF_WMS01.ViewModels
         {
             // 1) InputStringForButton이 '223' 또는 '308'을 포함하는지 확인
             bool inputContainsValidProduct = !string.IsNullOrWhiteSpace(_inputStringForButton) &&
-                                             (_inputStringForButton.Contains("223") || _inputStringForButton.Contains("308"));
+                                             (_inputStringForButton.Contains("223A")
+                                             || _inputStringForButton.Contains("308B")
+                                              || _inputStringForButton.Contains("5.56X")
+                                               || _inputStringForButton.Contains("5.56K")
+                                                || _inputStringForButton.Contains("7.62X")
+                                                 || _inputStringForButton.Contains("PSD")
+                                             );
 
             // 2) ImageIndex가 0 (빈 랙)이고 IsVisible이 True인 랙이 존재하는지 확인
             bool emptyAndVisibleRackExists = RackList?.Any(r => (r.ImageIndex == 0 && r.IsVisible)) == true;
@@ -372,13 +417,29 @@ namespace WPF_WMS01.ViewModels
                 if (inputContainsValidProduct && emptyAndVisibleRackExists)
                 {
                     // 활성화 조건 충족 시
-                    if (_inputStringForButton.Contains("223"))
+                    if (_inputStringForButton.Contains("223A"))
                     {
                         newBulletTypeForWaitRack = 1;
                     }
-                    else if (_inputStringForButton.Contains("308"))
+                    else if (_inputStringForButton.Contains("5.56X"))
                     {
                         newBulletTypeForWaitRack = 2;
+                    }
+                    else if (_inputStringForButton.Contains("5.56K"))
+                    {
+                        newBulletTypeForWaitRack = 3;
+                    }
+                    else if (_inputStringForButton.Contains("308B"))
+                    {
+                        newBulletTypeForWaitRack = 4;
+                    }
+                    else if (_inputStringForButton.Contains("7.62X"))
+                    {
+                        newBulletTypeForWaitRack = 5;
+                    }
+                    else if (_inputStringForButton.Contains("PSD"))
+                    {
+                        newBulletTypeForWaitRack = 6;
                     }
                 }
 
@@ -411,124 +472,23 @@ namespace WPF_WMS01.ViewModels
 
         }
 
-        // '223 제품 출고' 버튼 수정
+        // 1. '223 제품 출고' 버튼 수정
         private async void ExecuteCheckout223Product(object parameter)
         {
-            // 출고 가능한 223 제품 랙 목록 가져오기 (잠겨있지 않은 랙만)
-            var availableRacksForCheckout = RackList?.Where(r => r.RackType == 1 && r.BulletType == 1 && !r.IsLocked).Select(rvm => rvm.RackModel).ToList();
-
-            if (availableRacksForCheckout == null || !availableRacksForCheckout.Any())
-            {
-                MessageBox.Show("출고할 223 제품이 있는 랙이 없습니다.", "223 출고 불가", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            // 팝업 ViewModel 인스턴스 생성 및 랙 리스트 전달
-            var selectCheckoutRackViewModel = new SelectCheckoutRackPopupViewModel(availableRacksForCheckout);
-            var selectCheckoutRackView = new SelectCheckoutRackPopupView { DataContext = selectCheckoutRackViewModel };
-            selectCheckoutRackView.Title = "223 제품 출고할 랙 선택";
-
-            if (selectCheckoutRackView.ShowDialog() == true && selectCheckoutRackViewModel.DialogResult == true)
-            {
-                // 사용자가 선택한 랙 목록 가져오기
-                var selectedRacksForCheckout = selectCheckoutRackViewModel.GetSelectedRacks();
-
-                if (selectedRacksForCheckout == null || !selectedRacksForCheckout.Any())
-                {
-                    MessageBox.Show("선택된 랙이 없습니다.", "출고 취소", MessageBoxButton.OK, MessageBoxImage.Information);
-                    return;
-                }
-
-                //MessageBox.Show($"{selectedRacksForCheckout.Count}개의 223 제품 랙 출고 작업을 시작합니다.", "출고 작업 시작", MessageBoxButton.OK, MessageBoxImage.Information);
-                ShowAutoClosingMessage($"{selectedRacksForCheckout.Count}개의 223 제품 랙 출고 작업을 시작합니다.");
-
-                // **출고: 모든 선택된 랙을 동시에 잠금 (IsLocked = true)**
-                var targetRackVmsToLock = selectedRacksForCheckout.Select(r => RackList?.FirstOrDefault(rvm => rvm.Id == r.Id))
-                                                                   .Where(rvm => rvm != null)
-                                                                   .ToList();
-                foreach (var rvm in targetRackVmsToLock)
-                {
-                    await _databaseService.UpdateRackStateAsync(rvm.Id, rvm.RackType, rvm.BulletType, true);
-                    Application.Current.Dispatcher.Invoke(() => rvm.IsLocked = true);
-                }
-
-                // 새로운 스레드에서 순차적으로 각 랙 출고 처리
-                await Task.Run(async () =>
-                {
-                    foreach (var rackModelToCheckout in selectedRacksForCheckout)
-                    {
-                        var targetRackVm = RackList?.FirstOrDefault(r => r.Id == rackModelToCheckout.Id);
-                        if (targetRackVm == null) continue; // 뷰모델이 없으면 다음 랙으로
-
-                        try
-                        {
-                            //Application.Current.Dispatcher.Invoke(() =>   // ToDo Check
-                            //{
-                                //MessageBox.Show($"랙 {targetRackVm.Title} 출고 처리 중... (10초 대기)", "출고 진행", MessageBoxButton.OK, MessageBoxImage.Information);
-                                ShowAutoClosingMessage($"랙 {targetRackVm.Title} 출고 처리 중... (10초 대기)");
-                            //});
-
-                            await Task.Delay(TimeSpan.FromSeconds(10)); // 10초 지연
-
-                            // **출고: 각 랙이 개별적으로 잠금 해제 (IsLocked = false) 및 BulletType 변경**
-                            await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, 0, false);
-                            await _databaseService.UpdateLotNumberAsync(targetRackVm.Id, String.Empty);
-                            Application.Current.Dispatcher.Invoke(() =>
-                            {
-                                targetRackVm.BulletType = 0; // UI 업데이트
-                                targetRackVm.IsLocked = false; // UI 업데이트 (잠금 해제)
-                                //MessageBox.Show($"랙 {targetRackVm.Title} 출고 완료.", "출고 완료", MessageBoxButton.OK, MessageBoxImage.Information);
-                                ShowAutoClosingMessage($"랙 {targetRackVm.Title} 출고 완료.");
-                            });
-                        }
-                        catch (Exception ex)
-                        {
-                            Application.Current.Dispatcher.Invoke(() =>
-                            {
-                                MessageBox.Show($"랙 {targetRackVm.Title} 출고 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
-                            });
-                            // 오류 발생 시 해당 랙만 잠금 해제
-                            await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, false);
-                            Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
-                        }
-                    } // foreach 끝
-
-                    Application.Current.Dispatcher.Invoke(() =>
-                    {
-                        //MessageBox.Show("모든 223 제품 출고 작업이 완료되었습니다.", "모든 출고 완료", MessageBoxButton.OK, MessageBoxImage.Information);
-                        ShowAutoClosingMessage("모든 223 제품 출고 작업이 완료되었습니다.");
-                    });
-                });
-            }
-            else
-            {
-                //MessageBox.Show("223 제품 출고 작업이 취소되었습니다.", "취소", MessageBoxButton.OK, MessageBoxImage.Information);
-                ShowAutoClosingMessage("223 제품 출고 작업이 취소되었습니다.");
-            }
-        }
-
-        private bool CanExecuteCheckout223Product(object parameter)
-        {
-            // 잠겨있지 않은 223 제품 랙이 하나라도 있으면 활성화
-            return RackList?.Any(r => r.RackType == 1 && r.BulletType == 1 && !r.IsLocked) == true;
-        }
-
-        // '308 제품 출고' 버튼 수정 (223과 동일한 로직)
-        private async void ExecuteCheckout308Product(object parameter)
-        {
             // 출고 가능한 308 제품 랙 목록 가져오기 (잠겨있지 않은 랙만)
-            var availableRacksForCheckout = RackList?.Where(r => r.RackType == 1 && r.BulletType == 2 && !r.IsLocked).Select(rvm => rvm.RackModel).ToList();
+            var availableRacksForCheckout = RackList?.Where(r => r.RackType == 1 && r.BulletType == 1 && r.LotNumber.Contains(InputStringForShipOut == null ? "" : "-" + InputStringForShipOut) && !r.IsLocked).Select(rvm => rvm.RackModel).ToList();
+            var productName = "223A";
 
             if (availableRacksForCheckout == null || !availableRacksForCheckout.Any())
             {
-                MessageBox.Show("출고할 308 제품이 있는 랙이 없습니다.", "308 출고 불가", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show($"출고할 {productName} 제품이 있는 랙이 없습니다.", $"{productName} 출고 불가", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
             // 팝업 ViewModel 인스턴스 생성 및 랙 리스트 전달
             var selectCheckoutRackViewModel = new SelectCheckoutRackPopupViewModel(availableRacksForCheckout);
             var selectCheckoutRackView = new SelectCheckoutRackPopupView { DataContext = selectCheckoutRackViewModel };
-            selectCheckoutRackView.Title = "308 제품 출고할 랙 선택";
+            selectCheckoutRackView.Title = $"출고할 {productName} 제품 랙 선택";
 
             if (selectCheckoutRackView.ShowDialog() == true && selectCheckoutRackViewModel.DialogResult == true)
             {
@@ -542,7 +502,7 @@ namespace WPF_WMS01.ViewModels
                 }
 
                 //MessageBox.Show($"{selectedRacksForCheckout.Count}개의 308 제품 랙 출고 작업을 시작합니다.", "출고 작업 시작", MessageBoxButton.OK, MessageBoxImage.Information);
-                ShowAutoClosingMessage($"{selectedRacksForCheckout.Count}개의 308 제품 랙 출고 작업을 시작합니다.");
+                ShowAutoClosingMessage($"{selectedRacksForCheckout.Count}개의 {productName} 제품 랙 출고 작업을 시작합니다.");
 
                 // **출고: 모든 선택된 랙을 동시에 잠금 (IsLocked = true)**
                 var targetRackVmsToLock = selectedRacksForCheckout.Select(r => RackList?.FirstOrDefault(rvm => rvm.Id == r.Id))
@@ -566,8 +526,8 @@ namespace WPF_WMS01.ViewModels
                         {
                             //Application.Current.Dispatcher.Invoke(() =>   // ToDo Check
                             //{
-                                //MessageBox.Show($"랙 {targetRackVm.Title} 출고 처리 중... (10초 대기)", "출고 진행", MessageBoxButton.OK, MessageBoxImage.Information);
-                                ShowAutoClosingMessage($"랙 {targetRackVm.Title} 출고 처리 중... (10초 대기)");
+                            //MessageBox.Show($"랙 {targetRackVm.Title} 출고 처리 중... (10초 대기)", "출고 진행", MessageBoxButton.OK, MessageBoxImage.Information);
+                            ShowAutoClosingMessage($"랙 {targetRackVm.Title} 출고 처리 중... (10초 대기)");
                             //});
 
                             await Task.Delay(TimeSpan.FromSeconds(10)); // 10초 지연
@@ -598,22 +558,538 @@ namespace WPF_WMS01.ViewModels
                     Application.Current.Dispatcher.Invoke(() =>
                     {
                         //MessageBox.Show("모든 308 제품 출고 작업이 완료되었습니다.", "모든 출고 완료", MessageBoxButton.OK, MessageBoxImage.Information);
-                        ShowAutoClosingMessage("모든 308 제품 출고 작업이 완료되었습니다.");
+                        ShowAutoClosingMessage($"모든 {productName} 제품 출고 작업이 완료되었습니다.");
                     });
                 });
             }
             else
             {
                 //MessageBox.Show("308 제품 출고 작업이 취소되었습니다.", "취소", MessageBoxButton.OK, MessageBoxImage.Information);
-                ShowAutoClosingMessage("308 제품 출고 작업이 취소되었습니다.");
+                ShowAutoClosingMessage($"{productName} 제품 출고 작업이 취소되었습니다.");
+            }
+        }
+
+        private bool CanExecuteCheckout223Product(object parameter)
+        {
+            // 잠겨있지 않은 223 제품 랙이 하나라도 있으면 활성화
+            return RackList?.Any(r => r.RackType == 1 && r.BulletType == 1 && !r.IsLocked) == true;
+        }
+
+        // 2. '308 제품 출고' 버튼 수정 (223과 동일한 로직)
+        private async void ExecuteCheckout308Product(object parameter)
+        {
+            // 출고 가능한 308 제품 랙 목록 가져오기 (잠겨있지 않은 랙만)
+            var availableRacksForCheckout = RackList?.Where(r => r.RackType == 1 && r.BulletType == 4 && r.LotNumber.Contains(InputStringForShipOut == null ? "" : "-" + InputStringForShipOut) && !r.IsLocked).Select(rvm => rvm.RackModel).ToList();
+            var productName = "308B";
+
+            if (availableRacksForCheckout == null || !availableRacksForCheckout.Any())
+            {
+                MessageBox.Show($"출고할 {productName} 제품이 있는 랙이 없습니다.", $"{productName} 출고 불가", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // 팝업 ViewModel 인스턴스 생성 및 랙 리스트 전달
+            var selectCheckoutRackViewModel = new SelectCheckoutRackPopupViewModel(availableRacksForCheckout);
+            var selectCheckoutRackView = new SelectCheckoutRackPopupView { DataContext = selectCheckoutRackViewModel };
+            selectCheckoutRackView.Title = $"출고할 {productName} 제품 랙 선택";
+
+            if (selectCheckoutRackView.ShowDialog() == true && selectCheckoutRackViewModel.DialogResult == true)
+            {
+                // 사용자가 선택한 랙 목록 가져오기
+                var selectedRacksForCheckout = selectCheckoutRackViewModel.GetSelectedRacks();
+
+                if (selectedRacksForCheckout == null || !selectedRacksForCheckout.Any())
+                {
+                    MessageBox.Show("선택된 랙이 없습니다.", "출고 취소", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                //MessageBox.Show($"{selectedRacksForCheckout.Count}개의 308 제품 랙 출고 작업을 시작합니다.", "출고 작업 시작", MessageBoxButton.OK, MessageBoxImage.Information);
+                ShowAutoClosingMessage($"{selectedRacksForCheckout.Count}개의 {productName} 제품 랙 출고 작업을 시작합니다.");
+
+                // **출고: 모든 선택된 랙을 동시에 잠금 (IsLocked = true)**
+                var targetRackVmsToLock = selectedRacksForCheckout.Select(r => RackList?.FirstOrDefault(rvm => rvm.Id == r.Id))
+                                                                   .Where(rvm => rvm != null)
+                                                                   .ToList();
+                foreach (var rvm in targetRackVmsToLock)
+                {
+                    await _databaseService.UpdateRackStateAsync(rvm.Id, rvm.RackType, rvm.BulletType, true);
+                    Application.Current.Dispatcher.Invoke(() => rvm.IsLocked = true);
+                }
+
+                // 새로운 스레드에서 순차적으로 각 랙 출고 처리
+                await Task.Run(async () =>
+                {
+                    foreach (var rackModelToCheckout in selectedRacksForCheckout)
+                    {
+                        var targetRackVm = RackList?.FirstOrDefault(r => r.Id == rackModelToCheckout.Id);
+                        if (targetRackVm == null) continue; // 뷰모델이 없으면 다음 랙으로
+
+                        try
+                        {
+                            //Application.Current.Dispatcher.Invoke(() =>   // ToDo Check
+                            //{
+                            //MessageBox.Show($"랙 {targetRackVm.Title} 출고 처리 중... (10초 대기)", "출고 진행", MessageBoxButton.OK, MessageBoxImage.Information);
+                            ShowAutoClosingMessage($"랙 {targetRackVm.Title} 출고 처리 중... (10초 대기)");
+                            //});
+
+                            await Task.Delay(TimeSpan.FromSeconds(10)); // 10초 지연
+
+                            // **출고: 각 랙이 개별적으로 잠금 해제 (IsLocked = false) 및 BulletType 변경**
+                            await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, 0, false);
+                            await _databaseService.UpdateLotNumberAsync(targetRackVm.Id, String.Empty);
+                            Application.Current.Dispatcher.Invoke(() =>
+                            {
+                                targetRackVm.BulletType = 0; // UI 업데이트
+                                targetRackVm.IsLocked = false; // UI 업데이트 (잠금 해제)
+                                //MessageBox.Show($"랙 {targetRackVm.Title} 출고 완료.", "출고 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                                ShowAutoClosingMessage($"랙 {targetRackVm.Title} 출고 완료.");
+                            });
+                        }
+                        catch (Exception ex)
+                        {
+                            Application.Current.Dispatcher.Invoke(() =>
+                            {
+                                MessageBox.Show($"랙 {targetRackVm.Title} 출고 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                            });
+                            // 오류 발생 시 해당 랙만 잠금 해제
+                            await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, false);
+                            Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
+                        }
+                    } // foreach 끝
+
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        //MessageBox.Show("모든 308 제품 출고 작업이 완료되었습니다.", "모든 출고 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                        ShowAutoClosingMessage($"모든 {productName} 제품 출고 작업이 완료되었습니다.");
+                    });
+                });
+            }
+            else
+            {
+                //MessageBox.Show("308 제품 출고 작업이 취소되었습니다.", "취소", MessageBoxButton.OK, MessageBoxImage.Information);
+                ShowAutoClosingMessage($"{productName} 제품 출고 작업이 취소되었습니다.");
             }
         }
 
         private bool CanExecuteCheckout308Product(object parameter)
         {
             // 잠겨있지 않은 308 제품 랙이 하나라도 있으면 활성화
+            return RackList?.Any(r => r.RackType == 1 && r.BulletType == 4 && !r.IsLocked) == true;
+        }
+
+        // 3. '5.56X 제품 출고' 버튼 수정 (223과 동일한 로직)
+        private async void ExecuteCheckout556xProduct(object parameter)
+        {
+            // 출고 가능한 308 제품 랙 목록 가져오기 (잠겨있지 않은 랙만)
+            var availableRacksForCheckout = RackList?.Where(r => r.RackType == 1 && r.BulletType == 2 && r.LotNumber.Contains(InputStringForShipOut == null ? "" : "-" + InputStringForShipOut) && !r.IsLocked).Select(rvm => rvm.RackModel).ToList();
+            var productName = "5.56X";
+
+            if (availableRacksForCheckout == null || !availableRacksForCheckout.Any())
+            {
+                MessageBox.Show($"출고할 {productName} 제품이 있는 랙이 없습니다.", $"{productName} 출고 불가", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // 팝업 ViewModel 인스턴스 생성 및 랙 리스트 전달
+            var selectCheckoutRackViewModel = new SelectCheckoutRackPopupViewModel(availableRacksForCheckout);
+            var selectCheckoutRackView = new SelectCheckoutRackPopupView { DataContext = selectCheckoutRackViewModel };
+            selectCheckoutRackView.Title = $"출고할 {productName} 제품 랙 선택";
+
+            if (selectCheckoutRackView.ShowDialog() == true && selectCheckoutRackViewModel.DialogResult == true)
+            {
+                // 사용자가 선택한 랙 목록 가져오기
+                var selectedRacksForCheckout = selectCheckoutRackViewModel.GetSelectedRacks();
+
+                if (selectedRacksForCheckout == null || !selectedRacksForCheckout.Any())
+                {
+                    MessageBox.Show("선택된 랙이 없습니다.", "출고 취소", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                //MessageBox.Show($"{selectedRacksForCheckout.Count}개의 308 제품 랙 출고 작업을 시작합니다.", "출고 작업 시작", MessageBoxButton.OK, MessageBoxImage.Information);
+                ShowAutoClosingMessage($"{selectedRacksForCheckout.Count}개의 {productName} 제품 랙 출고 작업을 시작합니다.");
+
+                // **출고: 모든 선택된 랙을 동시에 잠금 (IsLocked = true)**
+                var targetRackVmsToLock = selectedRacksForCheckout.Select(r => RackList?.FirstOrDefault(rvm => rvm.Id == r.Id))
+                                                                   .Where(rvm => rvm != null)
+                                                                   .ToList();
+                foreach (var rvm in targetRackVmsToLock)
+                {
+                    await _databaseService.UpdateRackStateAsync(rvm.Id, rvm.RackType, rvm.BulletType, true);
+                    Application.Current.Dispatcher.Invoke(() => rvm.IsLocked = true);
+                }
+
+                // 새로운 스레드에서 순차적으로 각 랙 출고 처리
+                await Task.Run(async () =>
+                {
+                    foreach (var rackModelToCheckout in selectedRacksForCheckout)
+                    {
+                        var targetRackVm = RackList?.FirstOrDefault(r => r.Id == rackModelToCheckout.Id);
+                        if (targetRackVm == null) continue; // 뷰모델이 없으면 다음 랙으로
+
+                        try
+                        {
+                            //Application.Current.Dispatcher.Invoke(() =>   // ToDo Check
+                            //{
+                            //MessageBox.Show($"랙 {targetRackVm.Title} 출고 처리 중... (10초 대기)", "출고 진행", MessageBoxButton.OK, MessageBoxImage.Information);
+                            ShowAutoClosingMessage($"랙 {targetRackVm.Title} 출고 처리 중... (10초 대기)");
+                            //});
+
+                            await Task.Delay(TimeSpan.FromSeconds(10)); // 10초 지연
+
+                            // **출고: 각 랙이 개별적으로 잠금 해제 (IsLocked = false) 및 BulletType 변경**
+                            await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, 0, false);
+                            await _databaseService.UpdateLotNumberAsync(targetRackVm.Id, String.Empty);
+                            Application.Current.Dispatcher.Invoke(() =>
+                            {
+                                targetRackVm.BulletType = 0; // UI 업데이트
+                                targetRackVm.IsLocked = false; // UI 업데이트 (잠금 해제)
+                                //MessageBox.Show($"랙 {targetRackVm.Title} 출고 완료.", "출고 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                                ShowAutoClosingMessage($"랙 {targetRackVm.Title} 출고 완료.");
+                            });
+                        }
+                        catch (Exception ex)
+                        {
+                            Application.Current.Dispatcher.Invoke(() =>
+                            {
+                                MessageBox.Show($"랙 {targetRackVm.Title} 출고 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                            });
+                            // 오류 발생 시 해당 랙만 잠금 해제
+                            await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, false);
+                            Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
+                        }
+                    } // foreach 끝
+
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        //MessageBox.Show("모든 308 제품 출고 작업이 완료되었습니다.", "모든 출고 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                        ShowAutoClosingMessage($"모든 {productName} 제품 출고 작업이 완료되었습니다.");
+                    });
+                });
+            }
+            else
+            {
+                //MessageBox.Show("308 제품 출고 작업이 취소되었습니다.", "취소", MessageBoxButton.OK, MessageBoxImage.Information);
+                ShowAutoClosingMessage($"{productName} 제품 출고 작업이 취소되었습니다.");
+            }
+        }
+
+        private bool CanExecuteCheckout556xProduct(object parameter)
+        {
+            // 잠겨있지 않은 308 제품 랙이 하나라도 있으면 활성화
             return RackList?.Any(r => r.RackType == 1 && r.BulletType == 2 && !r.IsLocked) == true;
         }
+
+        // 4. '5.56K 제품 출고' 버튼 수정 (223과 동일한 로직)
+        private async void ExecuteCheckout556kProduct(object parameter)
+        {
+            // 출고 가능한 308 제품 랙 목록 가져오기 (잠겨있지 않은 랙만)
+            var availableRacksForCheckout = RackList?.Where(r => r.RackType == 1 && r.BulletType == 3 && r.LotNumber.Contains(InputStringForShipOut == null ? "" : "-" + InputStringForShipOut) && !r.IsLocked).Select(rvm => rvm.RackModel).ToList();
+            var productName = "5.56K";
+
+            if (availableRacksForCheckout == null || !availableRacksForCheckout.Any())
+            {
+                MessageBox.Show($"출고할 {productName} 제품이 있는 랙이 없습니다.", $"{productName} 출고 불가", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // 팝업 ViewModel 인스턴스 생성 및 랙 리스트 전달
+            var selectCheckoutRackViewModel = new SelectCheckoutRackPopupViewModel(availableRacksForCheckout);
+            var selectCheckoutRackView = new SelectCheckoutRackPopupView { DataContext = selectCheckoutRackViewModel };
+            selectCheckoutRackView.Title = $"출고할 {productName} 제품 랙 선택";
+
+            if (selectCheckoutRackView.ShowDialog() == true && selectCheckoutRackViewModel.DialogResult == true)
+            {
+                // 사용자가 선택한 랙 목록 가져오기
+                var selectedRacksForCheckout = selectCheckoutRackViewModel.GetSelectedRacks();
+
+                if (selectedRacksForCheckout == null || !selectedRacksForCheckout.Any())
+                {
+                    MessageBox.Show("선택된 랙이 없습니다.", "출고 취소", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                //MessageBox.Show($"{selectedRacksForCheckout.Count}개의 308 제품 랙 출고 작업을 시작합니다.", "출고 작업 시작", MessageBoxButton.OK, MessageBoxImage.Information);
+                ShowAutoClosingMessage($"{selectedRacksForCheckout.Count}개의 {productName} 제품 랙 출고 작업을 시작합니다.");
+
+                // **출고: 모든 선택된 랙을 동시에 잠금 (IsLocked = true)**
+                var targetRackVmsToLock = selectedRacksForCheckout.Select(r => RackList?.FirstOrDefault(rvm => rvm.Id == r.Id))
+                                                                   .Where(rvm => rvm != null)
+                                                                   .ToList();
+                foreach (var rvm in targetRackVmsToLock)
+                {
+                    await _databaseService.UpdateRackStateAsync(rvm.Id, rvm.RackType, rvm.BulletType, true);
+                    Application.Current.Dispatcher.Invoke(() => rvm.IsLocked = true);
+                }
+
+                // 새로운 스레드에서 순차적으로 각 랙 출고 처리
+                await Task.Run(async () =>
+                {
+                    foreach (var rackModelToCheckout in selectedRacksForCheckout)
+                    {
+                        var targetRackVm = RackList?.FirstOrDefault(r => r.Id == rackModelToCheckout.Id);
+                        if (targetRackVm == null) continue; // 뷰모델이 없으면 다음 랙으로
+
+                        try
+                        {
+                            //Application.Current.Dispatcher.Invoke(() =>   // ToDo Check
+                            //{
+                            //MessageBox.Show($"랙 {targetRackVm.Title} 출고 처리 중... (10초 대기)", "출고 진행", MessageBoxButton.OK, MessageBoxImage.Information);
+                            ShowAutoClosingMessage($"랙 {targetRackVm.Title} 출고 처리 중... (10초 대기)");
+                            //});
+
+                            await Task.Delay(TimeSpan.FromSeconds(10)); // 10초 지연
+
+                            // **출고: 각 랙이 개별적으로 잠금 해제 (IsLocked = false) 및 BulletType 변경**
+                            await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, 0, false);
+                            await _databaseService.UpdateLotNumberAsync(targetRackVm.Id, String.Empty);
+                            Application.Current.Dispatcher.Invoke(() =>
+                            {
+                                targetRackVm.BulletType = 0; // UI 업데이트
+                                targetRackVm.IsLocked = false; // UI 업데이트 (잠금 해제)
+                                //MessageBox.Show($"랙 {targetRackVm.Title} 출고 완료.", "출고 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                                ShowAutoClosingMessage($"랙 {targetRackVm.Title} 출고 완료.");
+                            });
+                        }
+                        catch (Exception ex)
+                        {
+                            Application.Current.Dispatcher.Invoke(() =>
+                            {
+                                MessageBox.Show($"랙 {targetRackVm.Title} 출고 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                            });
+                            // 오류 발생 시 해당 랙만 잠금 해제
+                            await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, false);
+                            Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
+                        }
+                    } // foreach 끝
+
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        //MessageBox.Show("모든 308 제품 출고 작업이 완료되었습니다.", "모든 출고 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                        ShowAutoClosingMessage($"모든 {productName} 제품 출고 작업이 완료되었습니다.");
+                    });
+                });
+            }
+            else
+            {
+                //MessageBox.Show("308 제품 출고 작업이 취소되었습니다.", "취소", MessageBoxButton.OK, MessageBoxImage.Information);
+                ShowAutoClosingMessage($"{productName} 제품 출고 작업이 취소되었습니다.");
+            }
+        }
+
+        private bool CanExecuteCheckout556kProduct(object parameter)
+        {
+            // 잠겨있지 않은 308 제품 랙이 하나라도 있으면 활성화
+            return RackList?.Any(r => r.RackType == 1 && r.BulletType == 3 && !r.IsLocked) == true;
+        }
+        
+        // 5. '7.62X 제품 출고' 버튼 수정 (223과 동일한 로직)
+        private async void ExecuteCheckout762xProduct(object parameter)
+        {
+            // 출고 가능한 308 제품 랙 목록 가져오기 (잠겨있지 않은 랙만)
+            var availableRacksForCheckout = RackList?.Where(r => r.RackType == 1 && r.BulletType == 5 && r.LotNumber.Contains(InputStringForShipOut == null ? "" : "-" + InputStringForShipOut) && !r.IsLocked).Select(rvm => rvm.RackModel).ToList();
+            var productName = "7.62X";
+
+            if (availableRacksForCheckout == null || !availableRacksForCheckout.Any())
+            {
+                MessageBox.Show($"출고할 {productName} 제품이 있는 랙이 없습니다.", $"{productName} 출고 불가", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // 팝업 ViewModel 인스턴스 생성 및 랙 리스트 전달
+            var selectCheckoutRackViewModel = new SelectCheckoutRackPopupViewModel(availableRacksForCheckout);
+            var selectCheckoutRackView = new SelectCheckoutRackPopupView { DataContext = selectCheckoutRackViewModel };
+            selectCheckoutRackView.Title = $"출고할 {productName} 제품 랙 선택";
+
+            if (selectCheckoutRackView.ShowDialog() == true && selectCheckoutRackViewModel.DialogResult == true)
+            {
+                // 사용자가 선택한 랙 목록 가져오기
+                var selectedRacksForCheckout = selectCheckoutRackViewModel.GetSelectedRacks();
+
+                if (selectedRacksForCheckout == null || !selectedRacksForCheckout.Any())
+                {
+                    MessageBox.Show("선택된 랙이 없습니다.", "출고 취소", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                //MessageBox.Show($"{selectedRacksForCheckout.Count}개의 308 제품 랙 출고 작업을 시작합니다.", "출고 작업 시작", MessageBoxButton.OK, MessageBoxImage.Information);
+                ShowAutoClosingMessage($"{selectedRacksForCheckout.Count}개의 {productName} 제품 랙 출고 작업을 시작합니다.");
+
+                // **출고: 모든 선택된 랙을 동시에 잠금 (IsLocked = true)**
+                var targetRackVmsToLock = selectedRacksForCheckout.Select(r => RackList?.FirstOrDefault(rvm => rvm.Id == r.Id))
+                                                                   .Where(rvm => rvm != null)
+                                                                   .ToList();
+                foreach (var rvm in targetRackVmsToLock)
+                {
+                    await _databaseService.UpdateRackStateAsync(rvm.Id, rvm.RackType, rvm.BulletType, true);
+                    Application.Current.Dispatcher.Invoke(() => rvm.IsLocked = true);
+                }
+
+                // 새로운 스레드에서 순차적으로 각 랙 출고 처리
+                await Task.Run(async () =>
+                {
+                    foreach (var rackModelToCheckout in selectedRacksForCheckout)
+                    {
+                        var targetRackVm = RackList?.FirstOrDefault(r => r.Id == rackModelToCheckout.Id);
+                        if (targetRackVm == null) continue; // 뷰모델이 없으면 다음 랙으로
+
+                        try
+                        {
+                            //Application.Current.Dispatcher.Invoke(() =>   // ToDo Check
+                            //{
+                            //MessageBox.Show($"랙 {targetRackVm.Title} 출고 처리 중... (10초 대기)", "출고 진행", MessageBoxButton.OK, MessageBoxImage.Information);
+                            ShowAutoClosingMessage($"랙 {targetRackVm.Title} 출고 처리 중... (10초 대기)");
+                            //});
+
+                            await Task.Delay(TimeSpan.FromSeconds(10)); // 10초 지연
+
+                            // **출고: 각 랙이 개별적으로 잠금 해제 (IsLocked = false) 및 BulletType 변경**
+                            await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, 0, false);
+                            await _databaseService.UpdateLotNumberAsync(targetRackVm.Id, String.Empty);
+                            Application.Current.Dispatcher.Invoke(() =>
+                            {
+                                targetRackVm.BulletType = 0; // UI 업데이트
+                                targetRackVm.IsLocked = false; // UI 업데이트 (잠금 해제)
+                                //MessageBox.Show($"랙 {targetRackVm.Title} 출고 완료.", "출고 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                                ShowAutoClosingMessage($"랙 {targetRackVm.Title} 출고 완료.");
+                            });
+                        }
+                        catch (Exception ex)
+                        {
+                            Application.Current.Dispatcher.Invoke(() =>
+                            {
+                                MessageBox.Show($"랙 {targetRackVm.Title} 출고 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                            });
+                            // 오류 발생 시 해당 랙만 잠금 해제
+                            await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, false);
+                            Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
+                        }
+                    } // foreach 끝
+
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        //MessageBox.Show("모든 308 제품 출고 작업이 완료되었습니다.", "모든 출고 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                        ShowAutoClosingMessage($"모든 {productName} 제품 출고 작업이 완료되었습니다.");
+                    });
+                });
+            }
+            else
+            {
+                //MessageBox.Show("308 제품 출고 작업이 취소되었습니다.", "취소", MessageBoxButton.OK, MessageBoxImage.Information);
+                ShowAutoClosingMessage($"{productName} 제품 출고 작업이 취소되었습니다.");
+            }
+        }
+
+        private bool CanExecuteCheckout762xProduct(object parameter)
+        {
+            // 잠겨있지 않은 308 제품 랙이 하나라도 있으면 활성화
+            return RackList?.Any(r => r.RackType == 1 && r.BulletType == 5 && !r.IsLocked) == true;
+        }
+        
+        // 6. 'M855T 제품 출고' 버튼 수정 (223과 동일한 로직)
+        private async void ExecuteCheckoutPsdProduct(object parameter)
+        {
+            // 출고 가능한 308 제품 랙 목록 가져오기 (잠겨있지 않은 랙만)
+            var availableRacksForCheckout = RackList?.Where(r => r.RackType == 1 && r.BulletType == 6 && r.LotNumber.Contains(InputStringForShipOut==null ? "" : "-"+InputStringForShipOut) && !r.IsLocked).Select(rvm => rvm.RackModel).ToList();
+            var productName = "M885T";
+
+            if (availableRacksForCheckout == null || !availableRacksForCheckout.Any())
+            {
+                MessageBox.Show($"출고할 {productName} 제품이 있는 랙이 없습니다.", $"{productName} 출고 불가", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // 팝업 ViewModel 인스턴스 생성 및 랙 리스트 전달
+            var selectCheckoutRackViewModel = new SelectCheckoutRackPopupViewModel(availableRacksForCheckout);
+            var selectCheckoutRackView = new SelectCheckoutRackPopupView { DataContext = selectCheckoutRackViewModel };
+            selectCheckoutRackView.Title = $"출고할 {productName} 제품 랙 선택";
+
+            if (selectCheckoutRackView.ShowDialog() == true && selectCheckoutRackViewModel.DialogResult == true)
+            {
+                // 사용자가 선택한 랙 목록 가져오기
+                var selectedRacksForCheckout = selectCheckoutRackViewModel.GetSelectedRacks();
+
+                if (selectedRacksForCheckout == null || !selectedRacksForCheckout.Any())
+                {
+                    MessageBox.Show("선택된 랙이 없습니다.", "출고 취소", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                //MessageBox.Show($"{selectedRacksForCheckout.Count}개의 308 제품 랙 출고 작업을 시작합니다.", "출고 작업 시작", MessageBoxButton.OK, MessageBoxImage.Information);
+                ShowAutoClosingMessage($"{selectedRacksForCheckout.Count}개의 {productName} 제품 랙 출고 작업을 시작합니다.");
+
+                // **출고: 모든 선택된 랙을 동시에 잠금 (IsLocked = true)**
+                var targetRackVmsToLock = selectedRacksForCheckout.Select(r => RackList?.FirstOrDefault(rvm => rvm.Id == r.Id))
+                                                                   .Where(rvm => rvm != null)
+                                                                   .ToList();
+                foreach (var rvm in targetRackVmsToLock)
+                {
+                    await _databaseService.UpdateRackStateAsync(rvm.Id, rvm.RackType, rvm.BulletType, true);
+                    Application.Current.Dispatcher.Invoke(() => rvm.IsLocked = true);
+                }
+
+                // 새로운 스레드에서 순차적으로 각 랙 출고 처리
+                await Task.Run(async () =>
+                {
+                    foreach (var rackModelToCheckout in selectedRacksForCheckout)
+                    {
+                        var targetRackVm = RackList?.FirstOrDefault(r => r.Id == rackModelToCheckout.Id);
+                        if (targetRackVm == null) continue; // 뷰모델이 없으면 다음 랙으로
+
+                        try
+                        {
+                            //Application.Current.Dispatcher.Invoke(() =>   // ToDo Check
+                            //{
+                            //MessageBox.Show($"랙 {targetRackVm.Title} 출고 처리 중... (10초 대기)", "출고 진행", MessageBoxButton.OK, MessageBoxImage.Information);
+                            ShowAutoClosingMessage($"랙 {targetRackVm.Title} 출고 처리 중... (10초 대기)");
+                            //});
+
+                            await Task.Delay(TimeSpan.FromSeconds(10)); // 10초 지연
+
+                            // **출고: 각 랙이 개별적으로 잠금 해제 (IsLocked = false) 및 BulletType 변경**
+                            await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, 0, false);
+                            await _databaseService.UpdateLotNumberAsync(targetRackVm.Id, String.Empty);
+                            Application.Current.Dispatcher.Invoke(() =>
+                            {
+                                targetRackVm.BulletType = 0; // UI 업데이트
+                                targetRackVm.IsLocked = false; // UI 업데이트 (잠금 해제)
+                                //MessageBox.Show($"랙 {targetRackVm.Title} 출고 완료.", "출고 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                                ShowAutoClosingMessage($"랙 {targetRackVm.Title} 출고 완료.");
+                            });
+                        }
+                        catch (Exception ex)
+                        {
+                            Application.Current.Dispatcher.Invoke(() =>
+                            {
+                                MessageBox.Show($"랙 {targetRackVm.Title} 출고 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                            });
+                            // 오류 발생 시 해당 랙만 잠금 해제
+                            await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, false);
+                            Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
+                        }
+                    } // foreach 끝
+
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        //MessageBox.Show("모든 308 제품 출고 작업이 완료되었습니다.", "모든 출고 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                        ShowAutoClosingMessage($"모든 {productName} 제품 출고 작업이 완료되었습니다.");
+                    });
+                });
+            }
+            else
+            {
+                //MessageBox.Show("308 제품 출고 작업이 취소되었습니다.", "취소", MessageBoxButton.OK, MessageBoxImage.Information);
+                ShowAutoClosingMessage($"{productName} 제품 출고 작업이 취소되었습니다.");
+            }
+        }
+
+        private bool CanExecuteCheckoutPsdProduct(object parameter)
+        {
+            // 잠겨있지 않은 308 제품 랙이 하나라도 있으면 활성화
+            return RackList?.Any(r => r.RackType == 1 && r.BulletType == 6 && !r.IsLocked) == true;
+        }
+
 
         // 모든 출고 관련 버튼의 CanExecute 상태를 갱신
         private void RaiseAllCheckoutCanExecuteChanged()
@@ -621,6 +1097,10 @@ namespace WPF_WMS01.ViewModels
             ((RelayCommand)InboundProductCommand).RaiseCanExecuteChanged(); // 입고 버튼도 갱신하도록 추가
             ((RelayCommand)Checkout223ProductCommand).RaiseCanExecuteChanged();
             ((RelayCommand)Checkout308ProductCommand).RaiseCanExecuteChanged();
+            ((RelayCommand)Checkout556xProductCommand).RaiseCanExecuteChanged();
+            ((RelayCommand)Checkout556kProductCommand).RaiseCanExecuteChanged();
+            ((RelayCommand)Checkout762xProductCommand).RaiseCanExecuteChanged();
+            ((RelayCommand)CheckoutPsdProductCommand).RaiseCanExecuteChanged();
         }
 
     }
