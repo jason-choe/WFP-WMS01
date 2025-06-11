@@ -50,7 +50,7 @@
                 </Trigger>
             </Style.Triggers>
         </Style>
-    </Window.Resources> 
+    </Window.Resources>
 
     <Grid>
         <Grid.RowDefinitions>
@@ -97,7 +97,11 @@
                     VerticalAlignment="Center" HorizontalAlignment="Left"/>
 
             <TextBox Grid.Column="3"
+                     Name="ProductCodeTextBox"
                        Text="{Binding InputStringForShipOut, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                       PreviewTextInput="ProductCodeTextBox_PreviewTextInput"
+                       GotFocus="ProductCodeTextBox_GotFocus"
+                       LostFocus="ProductCodeTextBox_LostFocus"
                        MaxLength="4" Width="300" Height="80" Background="LightSeaGreen"
                        VerticalAlignment="Center" HorizontalAlignment="Left"
                        Margin="0,0,20,0"
@@ -180,7 +184,7 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
-            <Image Grid.Column="0" Source="images/poongsan.png" Height="32" Margin="10"/> 
+            <Image Grid.Column="0" Source="images/poongsan.png" Height="32" Margin="10"/>
             <TextBlock Grid.Column="1" Text="(주)풍산 부산 사업소"
                        FontSize="20" FontWeight="Bold"
                        VerticalAlignment="Center" HorizontalAlignment="Left"/>
@@ -190,5 +194,4 @@
                        VerticalAlignment="Center" HorizontalAlignment="Right" Margin="5, 0, 20, 0"/>
         </Grid>
     </Grid>
-
 </Window>

@@ -368,7 +368,7 @@ namespace WPF_WMS01.ViewModels
                             false                                   // IsLocked 해제
                         );
                         if (sourceRackViewModel.Title.Equals(_mainViewModel._waitRackTitle))
-                            await _databaseService.UpdateLotNumberAsync(destinationRack.Id, _mainViewModel.InputStringForButton);
+                            await _databaseService.UpdateLotNumberAsync(destinationRack.Id, _mainViewModel.InputStringForButton.TrimStart());
                         else
                             await _databaseService.UpdateLotNumberAsync(destinationRack.Id, sourceRackViewModel.LotNumber);
 
