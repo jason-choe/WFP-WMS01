@@ -148,7 +148,7 @@
             <ItemsControl ItemsSource="{Binding RackList}" Background="#585858" Padding="20">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
-                        <UniformGrid Columns="24" Rows="6" VirtualizingPanel.IsVirtualizing="False"/>
+                        <UniformGrid Columns="22" Rows="6" VirtualizingPanel.IsVirtualizing="False"/>
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
 
