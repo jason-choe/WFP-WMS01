@@ -39,7 +39,6 @@ namespace WPF_WMS01.ViewModels.Popups
             get => _isSelectedAll;
             set
             {
-                Debug.WriteLine($"[SelectAllVM] IsSelectedAll Setter Called. New Value: {value}"); // 이 줄 추가
                 // _isUpdatingAllSelection 플래그를 설정하여 개별 항목의 PropertyChanged 이벤트에서 UpdateIsSelectedAllState 호출 방지
                 _isUpdatingAllSelection = true;
                 try
@@ -55,10 +54,6 @@ namespace WPF_WMS01.ViewModels.Popups
                         }
                         // IsSelectedAll이 변경될 때 ConfirmCommand의 CanExecute 상태 업데이트 (안정적으로 호출)
                         ((RelayCommand)ConfirmCommand).RaiseCanExecuteChanged();
-                    }
-                    else
-                    {
-                        Debug.WriteLine($"[SelectAllVM] SetProperty for IsSelectedAll returned false (value unchanged). Current: {_isSelectedAll}, Attempted: {value}"); // 이 줄 추가
                     }
                 }
                 finally
@@ -140,7 +135,6 @@ namespace WPF_WMS01.ViewModels.Popups
         {
             // IsSelectedAll 속성의 Setter에서 모든 항목의 IsSelected를 업데이트하므로
             // 여기서는 단순히 IsSelectedAll 값을 토글합니다.
-            Debug.WriteLine("[SelectAllVM] ExecuteToggleSelectAll Called."); // 이 줄 추가
             IsSelectedAll = !IsSelectedAll;
         }
 
@@ -185,10 +179,8 @@ namespace WPF_WMS01.ViewModels.Popups
                 get => _isSelected;
                 set
                 {
-                    Debug.WriteLine($"[CheckoutRackItem] {RackTitle}.IsSelected Setter Called. Current: {_isSelected}, New: {value}"); // 이 줄 추가
                     if (SetProperty(ref _isSelected, value))
                     {
-                        Debug.WriteLine($"[CheckoutRackItem] {RackTitle}.IsSelected changed to {value} and PropertyChanged fired."); // 이 줄 추가
                         // --- 수정된 부분: _parentViewModel의 UpdateIsSelectedAllState 호출 로직 제거 (이제 SelectCheckoutRackPopupViewModel에서 직접 처리) ---
                         // 이 부분은 이제 CheckoutRackItem의 PropertyChanged 구독 로직에서 처리됩니다.
                         // 이전에 있었던 _parentViewModel.UpdateIsSelectedAllState() 호출은 제거합니다.
@@ -199,10 +191,6 @@ namespace WPF_WMS01.ViewModels.Popups
                             {
                                 confirmCommand.RaiseCanExecuteChanged();
                             }
-                        }
-                        else
-                        {
-                            Console.WriteLine($"[CheckoutRackItem] {RackTitle}.IsSelected SetProperty returned false (value unchanged)."); // 이 줄 추가
                         }
                     }
                 }

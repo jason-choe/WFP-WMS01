@@ -115,7 +115,6 @@ namespace WPF_WMS01.Services
                 if (_rackCache.TryGetValue(rackId, out Rack rackToUpdate))
                 {
                     rackToUpdate.RackType = newRackType; // Rack 모델의 setter 호출 (여기서는 _rackType이 -1로 초기화되지 않음)
-                    System.Diagnostics.Debug.WriteLine($"[DatabaseService] Cached Rack ID {rackId} RackType updated to {newRackType}.");
                 }
             }
         }
@@ -148,7 +147,6 @@ namespace WPF_WMS01.Services
                     rackToUpdate.RackType = newRackType;
                     rackToUpdate.BulletType = newBulletType;
                     rackToUpdate.IsLocked = newIsLocked;
-                    System.Diagnostics.Debug.WriteLine($"[DatabaseService] Cached Rack ID {rackId} state updated.");
                 }
             }
         }
@@ -175,7 +173,6 @@ namespace WPF_WMS01.Services
                 {
                     rackToUpdate.LotNumber = newLotNumber;
                     rackToUpdate.RackedAt = String.IsNullOrEmpty(newLotNumber) ? null : DateTime.Now;
-                    System.Diagnostics.Debug.WriteLine($"[DatabaseService] Cached Rack ID {rackId} state updated.");
                 }
             }
         }
