@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Windows;
 using System; // DateTime 사용을 위해 추가
 using System.ComponentModel;
+using System.Diagnostics;
 
 namespace WPF_WMS01.ViewModels.Popups
 {
@@ -29,6 +30,47 @@ namespace WPF_WMS01.ViewModels.Popups
         public ICommand ConfirmCommand { get; private set; }
         public ICommand CancelCommand { get; private set; }
 
+        private bool _isSelectedAll;
+        // --- 수정된 부분: _isUpdatingAllSelection 플래그 추가 ---
+        private bool _isUpdatingAllSelection = false; // 순환 업데이트 방지를 위한 플래그
+
+        public bool IsSelectedAll
+        {
+            get => _isSelectedAll;
+            set
+            {
+                Debug.WriteLine($"[SelectAllVM] IsSelectedAll Setter Called. New Value: {value}"); // 이 줄 추가
+                // _isUpdatingAllSelection 플래그를 설정하여 개별 항목의 PropertyChanged 이벤트에서 UpdateIsSelectedAllState 호출 방지
+                _isUpdatingAllSelection = true;
+                try
+                {
+                    if (SetProperty(ref _isSelectedAll, value))
+                    {
+                        if (AvailableRacks != null)
+                        {
+                            foreach (var item in AvailableRacks)
+                            {
+                                item.IsSelected = value; // 개별 항목의 IsSelected 변경
+                            }
+                        }
+                        // IsSelectedAll이 변경될 때 ConfirmCommand의 CanExecute 상태 업데이트 (안정적으로 호출)
+                        ((RelayCommand)ConfirmCommand).RaiseCanExecuteChanged();
+                    }
+                    else
+                    {
+                        Debug.WriteLine($"[SelectAllVM] SetProperty for IsSelectedAll returned false (value unchanged). Current: {_isSelectedAll}, Attempted: {value}"); // 이 줄 추가
+                    }
+                }
+                finally
+                {
+                    // 작업이 끝나면 플래그 해제
+                    _isUpdatingAllSelection = false;
+                }
+            }
+        }
+
+        public ICommand ToggleSelectAllCommand { get; private set; } // '모두 선택/해제' 명령
+
         // 디자인 타임 전용 매개변수 없는 생성자 (XDG0062 오류 해결)
         // 실제 런타임에서는 이 생성자가 호출되지 않습니다.
         public SelectCheckoutRackPopupViewModel() : this(new List<Rack>())
@@ -40,14 +82,34 @@ namespace WPF_WMS01.ViewModels.Popups
 
         public SelectCheckoutRackPopupViewModel(List<Rack> racks)
         {
+            ConfirmCommand = new RelayCommand(ExecuteConfirm, CanExecuteConfirm);
+            CancelCommand = new RelayCommand(ExecuteCancel);
+            ToggleSelectAllCommand = new RelayCommand(ExecuteToggleSelectAll);
             // 입고 일자(RackedAt) 기준으로 오름차순 정렬하여 컬렉션 초기화
             AvailableRacks = new ObservableCollection<CheckoutRackItem>(
                 racks.OrderBy(r => r.RackedAt) // RackedAt 기준으로 정렬
                      .Select(r => new CheckoutRackItem(r, this))
             );
 
-            ConfirmCommand = new RelayCommand(ExecuteConfirm, CanExecuteConfirm);
-            CancelCommand = new RelayCommand(ExecuteCancel);
+            // 각 CheckoutRackItem의 IsSelected 속성 변경을 구독하여 IsSelectedAll 상태를 동기화
+            foreach (var item in AvailableRacks)
+            {
+                item.PropertyChanged += (sender, e) =>
+                {
+                    if (e.PropertyName == nameof(CheckoutRackItem.IsSelected))
+                    {
+                        // --- 수정된 부분: 플래그 확인 후 UpdateIsSelectedAllState 호출 ---
+                        if (!_isUpdatingAllSelection) // IsSelectedAll Setter에서 호출된 것이 아닐 때만 업데이트
+                        {
+                            UpdateIsSelectedAllState();
+                        }
+                    }
+                };
+            }
+
+            // 초기 IsSelectedAll 상태 설정
+            UpdateIsSelectedAllState();
+
         }
 
         private void ExecuteConfirm(object parameter)
@@ -74,6 +136,37 @@ namespace WPF_WMS01.ViewModels.Popups
                                  .ToList();
         }
 
+        private void ExecuteToggleSelectAll(object parameter)
+        {
+            // IsSelectedAll 속성의 Setter에서 모든 항목의 IsSelected를 업데이트하므로
+            // 여기서는 단순히 IsSelectedAll 값을 토글합니다.
+            Debug.WriteLine("[SelectAllVM] ExecuteToggleSelectAll Called."); // 이 줄 추가
+            IsSelectedAll = !IsSelectedAll;
+        }
+
+        // 모든 CheckoutRackItem의 IsSelected 상태에 따라 IsSelectedAll을 업데이트하는 내부 메서드
+        private void UpdateIsSelectedAllState()
+        {
+            // --- 수정된 부분: ConfirmCommand CanExecuteChanged 호출 추가 ---
+            ((RelayCommand)ConfirmCommand).RaiseCanExecuteChanged();
+
+            if (AvailableRacks == null || !AvailableRacks.Any())
+            {
+                // 리스트가 비어 있으면 '모두 선택'은 false 또는 원하는 초기값으로 설정
+                SetProperty(ref _isSelectedAll, false, nameof(IsSelectedAll));
+            }
+            else
+            {
+                // 모든 랙이 선택되었는지 확인
+                bool allSelected = AvailableRacks.All(item => item.IsSelected);
+                // 현재 _isSelectedAll 값과 다를 경우에만 업데이트 및 PropertyChanged 호출
+                if (_isSelectedAll != allSelected)
+                {
+                    SetProperty(ref _isSelectedAll, allSelected, nameof(IsSelectedAll));
+                }
+            }
+        }
+
         // 팝업에서 사용할 랙 아이템 클래스 (체크박스 상태 포함)
         public class CheckoutRackItem : ViewModelBase
         {
@@ -92,16 +185,25 @@ namespace WPF_WMS01.ViewModels.Popups
                 get => _isSelected;
                 set
                 {
+                    Debug.WriteLine($"[CheckoutRackItem] {RackTitle}.IsSelected Setter Called. Current: {_isSelected}, New: {value}"); // 이 줄 추가
                     if (SetProperty(ref _isSelected, value))
                     {
-                        // 선택 상태 변경 시 부모 ViewModel의 ConfirmCommand의 CanExecute를 다시 평가
-                        // Application.Current가 null인 디자인 타임에는 호출되지 않도록 방어 코드 추가
-                        if (!DesignerProperties.GetIsInDesignMode(new DependencyObject()) && _parentViewModel != null && _parentViewModel.ConfirmCommand is RelayCommand confirmCommand)
-
+                        Debug.WriteLine($"[CheckoutRackItem] {RackTitle}.IsSelected changed to {value} and PropertyChanged fired."); // 이 줄 추가
+                        // --- 수정된 부분: _parentViewModel의 UpdateIsSelectedAllState 호출 로직 제거 (이제 SelectCheckoutRackPopupViewModel에서 직접 처리) ---
+                        // 이 부분은 이제 CheckoutRackItem의 PropertyChanged 구독 로직에서 처리됩니다.
+                        // 이전에 있었던 _parentViewModel.UpdateIsSelectedAllState() 호출은 제거합니다.
+                        // 단, ConfirmCommand의 CanExecuteChanged는 계속 호출해야 합니다.
+                        if (!DesignerProperties.GetIsInDesignMode(new DependencyObject()) && _parentViewModel != null)
                         {
-                            confirmCommand.RaiseCanExecuteChanged(); // <-- 수정된 부분
+                            if (_parentViewModel.ConfirmCommand is RelayCommand confirmCommand)
+                            {
+                                confirmCommand.RaiseCanExecuteChanged();
+                            }
                         }
-                        // 선택 상태 변경 시 부모 ViewModel의 ConfirmCommand의 CanExecute를 다시 평가
+                        else
+                        {
+                            Console.WriteLine($"[CheckoutRackItem] {RackTitle}.IsSelected SetProperty returned false (value unchanged)."); // 이 줄 추가
+                        }
                     }
                 }
             }
@@ -111,16 +213,6 @@ namespace WPF_WMS01.ViewModels.Popups
             {
                 RackModel = rack;
                 _parentViewModel = parentViewModel; // <-- 부모 ViewModel 저장
-            }
-
-            private string GetBulletTypeName(int bulletType)
-            {
-                switch (bulletType)
-                {
-                    case 1: return "223 제품";
-                    case 2: return "308 제품";
-                    default: return "알 수 없음";
-                }
             }
         }
     }

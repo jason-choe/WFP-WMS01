@@ -7,8 +7,8 @@
         xmlns:vm="clr-namespace:WPF_WMS01.ViewModels"
         xmlns:cnv="clr-namespace:WPF_WMS01.Converters"
         mc:Ignorable="d"
-        Title="랙 관리 시스템" Height="768" Width="1024"
-        WindowState="Maximized">
+        Title="랙 관리 시스템" Height="1040" Width="1920" Left="0" Top="0" >
+        <!-- Height="768" Width="1024" WindowState="Maximized" -->
 
     <Window.DataContext>
         <vm:MainViewModel/>
@@ -66,8 +66,9 @@
                        HorizontalAlignment="Center"/>
         </Border>
 
-        <Grid Grid.Row="1" Margin="40,50,40,25">
+        <Grid Grid.Row="1" Margin="40,20,40,0">
             <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
@@ -94,9 +95,14 @@
             <Button Grid.Column="1" Content="입고"
                     Command="{Binding InboundProductCommand}"
                     Width="120" Height="64" FontSize="20" FontWeight="Bold"
+                    VerticalAlignment="Center" HorizontalAlignment="Left" Margin="0,0,20,0"/>
+
+            <Button Grid.Column="2" Content="가 입고"
+                    Command="{Binding InboundProductCommand}"
+                    Width="120" Height="64" FontSize="20" FontWeight="Bold"
                     VerticalAlignment="Center" HorizontalAlignment="Left"/>
 
-            <TextBox Grid.Column="3"
+            <TextBox Grid.Column="4"
                      Name="ProductCodeTextBox"
                        Text="{Binding InputStringForShipOut, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                        PreviewTextInput="ProductCodeTextBox_PreviewTextInput"
@@ -111,38 +117,49 @@
                        VerticalContentAlignment="Center"
                        TextAlignment="Center" />
 
-            <Button Grid.Column="4" Content="223A 출고"
+            <Grid Grid.Column="5">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="AUTO"/>
+                    <RowDefinition Height="AUTO"/>
+                </Grid.RowDefinitions>
+                <Button Grid.Row="0" Content="223A 출고"
+                    Command="{Binding Checkout223ProductCommand}"
+                    Width="120" Height="64" FontSize="20" FontWeight="Bold"
+                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                    Margin="0,0,20,20"/>
+                <Button Grid.Row="1" Content="223A 출고"
                     Command="{Binding Checkout223ProductCommand}"
                     Width="120" Height="64" FontSize="20" FontWeight="Bold"
                     VerticalAlignment="Center" HorizontalAlignment="Right"
                     Margin="0,0,20,0"/>
-            <Button Grid.Column="5" Content="5.56X 출고"
+            </Grid>
+            <Button Grid.Column="6" Content="5.56X 출고"
                     Command="{Binding Checkout556xProductCommand}"
                     Width="120" Height="64" FontSize="20" FontWeight="Bold"
                     VerticalAlignment="Center" HorizontalAlignment="Right"
                     Margin="0,0,20,0"/>
-            <Button Grid.Column="6" Content="5.56K 출고"
+            <Button Grid.Column="7" Content="5.56K 출고"
                     Command="{Binding Checkout556kProductCommand}"
                     Width="120" Height="64" FontSize="20" FontWeight="Bold"
                     VerticalAlignment="Center" HorizontalAlignment="Right"
                     Margin="0,0,20,0"/>
-            <Button Grid.Column="7" Content="308B 출고"
+            <Button Grid.Column="8" Content="308B 출고"
                     Command="{Binding Checkout308ProductCommand}"
                     Width="120" Height="64" FontSize="20" FontWeight="Bold"
                     VerticalAlignment="Center" HorizontalAlignment="Right"
                     Margin="0,0,20,0"/>
-            <Button Grid.Column="8" Content="7.62X 출고"
+            <Button Grid.Column="9" Content="7.62X 출고"
                     Command="{Binding Checkout762xProductCommand}"
                     Width="120" Height="64" FontSize="20" FontWeight="Bold"
                     VerticalAlignment="Center" HorizontalAlignment="Right"
                     Margin="0,0,20,0"/>
-            <Button Grid.Column="9" Content="M855T 출고"
+            <Button Grid.Column="10" Content="M855T 출고"
                     Command="{Binding CheckoutPsdProductCommand}"
                     Width="120" Height="64" FontSize="20" FontWeight="Bold"
                     VerticalAlignment="Center" HorizontalAlignment="Right"/>
         </Grid>
 
-        <ScrollViewer Grid.Row="2"  Margin="20,25,20,10" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+        <ScrollViewer Grid.Row="2"  Margin="20,20,20,10" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
             <!-- ItemsControl 자체에는 고정된 Width/Height를 주지 않습니다.
                  부모 Grid.Row="2"와 UniformGrid가 크기를 조절하도록 둡니다. -->
             <ItemsControl ItemsSource="{Binding RackList}" Background="#585858" Padding="20">

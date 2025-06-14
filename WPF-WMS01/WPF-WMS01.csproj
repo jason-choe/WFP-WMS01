@@ -25,6 +25,7 @@
     <None Remove="images\rack_state_19.png" />
     <None Remove="images\rack_state_2.png" />
     <None Remove="images\rack_state_20.png" />
+    <None Remove="images\rack_state_22.png" />
     <None Remove="images\rack_state_3.png" />
     <None Remove="images\rack_state_4.png" />
     <None Remove="images\rack_state_5.png" />
@@ -59,6 +60,7 @@
     <Resource Include="images\rack_state_19.png" />
     <Resource Include="images\rack_state_2.png" />
     <Resource Include="images\rack_state_20.png" />
+    <Resource Include="images\rack_state_22.png" />
     <Resource Include="images\rack_state_3.png" />
     <Resource Include="images\rack_state_4.png" />
     <Resource Include="images\rack_state_5.png" />

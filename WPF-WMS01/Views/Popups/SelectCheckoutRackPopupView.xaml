@@ -55,10 +55,21 @@
                     </GridViewColumn>
 
                     <!-- 체크박스 컬럼 -->
-                    <GridViewColumn Header="선택" Width="50">
+                    <GridViewColumn Width="98">
+                        <GridViewColumn.Header>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <CheckBox IsChecked="{Binding DataContext.IsSelectedAll, RelativeSource={RelativeSource AncestorType=ListView}, Mode=OneWay}"
+                                          Command="{Binding DataContext.ToggleSelectAllCommand, RelativeSource={RelativeSource AncestorType=ListView}}">
+                                    <CheckBox.LayoutTransform>
+                                        <ScaleTransform ScaleX="2" ScaleY="2"/>
+                                    </CheckBox.LayoutTransform>
+                                </CheckBox>
+                                <TextBlock Text="선택" Margin="5,0,0,0" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </GridViewColumn.Header>
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
-                                <CheckBox IsChecked="{Binding IsSelected}" HorizontalAlignment="Center">
+                                <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" HorizontalAlignment="Center">
                                     <CheckBox.LayoutTransform>
                                         <ScaleTransform ScaleX="2" ScaleY="2" />
                                     </CheckBox.LayoutTransform>
