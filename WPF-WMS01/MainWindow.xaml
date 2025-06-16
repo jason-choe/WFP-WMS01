@@ -50,6 +50,76 @@
                 </Trigger>
             </Style.Triggers>
         </Style>
+        <!-- 새로 추가된 컨버터들 (App.xaml에도 등록 필요) -->
+        <cnv:InvertBooleanConverter x:Key="InvertBooleanConverter"/>
+        <cnv:LoginStatusToColorConverter x:Key="LoginStatusToColorConverter"/>
+
+        <!-- 원형 로그인 상태 버튼 스타일 -->
+        <Style x:Key="LoginStatusButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="50"/>
+            <Setter Property="Height" Value="50"/>
+            <Setter Property="Margin" Value="5,0,5,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBorder"
+                                CornerRadius="25"
+                                BorderThickness="2"
+                                BorderBrush="Gray"
+                                Background="Gray"
+                                Padding="5">
+                            <Grid>
+                                <!-- 아이콘 또는 텍스트로 상태 표시 (예: 체크, X, 점 3개) -->
+                                <TextBlock x:Name="StatusIcon" Text="?" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Foreground="White" FontWeight="Bold" FontSize="20"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <!-- 상태: 로그인 시도 중 (노란색) - 가장 우선 순위 -->
+                            <DataTrigger Binding="{Binding IsLoginAttempting}" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="Yellow"/>
+                                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="Orange"/>
+                                <Setter TargetName="StatusIcon" Property="Text" Value="..."/>
+                                <Setter TargetName="StatusIcon" Property="Foreground" Value="Black"/>
+                                <Setter Property="IsEnabled" Value="False"/>
+                                <!-- 로그인 시도 중에는 클릭 불가능 -->
+                            </DataTrigger>
+
+                            <!-- 상태: 로그인 성공 (초록색) - 로그인 시도 중이 아닐 때 -->
+                            <DataTrigger Binding="{Binding IsLoggedIn}" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="Green"/>
+                                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="DarkGreen"/>
+                                <Setter TargetName="StatusIcon" Property="Text" Value="✓"/>
+                                <Setter TargetName="StatusIcon" Property="Foreground" Value="White"/>
+                                <Setter Property="IsEnabled" Value="False"/>
+                                <!-- 로그인 성공 시에는 클릭 불가능 -->
+                            </DataTrigger>
+
+                            <!-- 상태: 로그인 실패/로그인 안 됨 (빨간색) - 로그인 시도 중이 아니고 로그인되지 않았을 때 -->
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding IsLoggedIn}" Value="False"/>
+                                    <Condition Binding="{Binding IsLoginAttempting}" Value="False"/>
+                                </MultiDataTrigger.Conditions>
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="Red"/>
+                                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="DarkRed"/>
+                                <Setter TargetName="StatusIcon" Property="Text" Value="✗"/>
+                                <Setter TargetName="StatusIcon" Property="Foreground" Value="White"/>
+                                <Setter Property="IsEnabled" Value="True"/>
+                                <!-- 빨간색일 때만 클릭 가능 -->
+                            </MultiDataTrigger>
+
+                            <!-- 기본 비활성화 상태 (트리거에 의해 재정의되지 않은 경우) -->
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="ButtonBorder" Property="Opacity" Value="0.6"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <!-- 기본적으로 버튼은 비활성화 상태로 시작하며, 위의 트리거에 의해 활성화됩니다. -->
+            <Setter Property="IsEnabled" Value="False"/>
+        </Style>
     </Window.Resources>
 
     <Grid>
@@ -61,9 +131,26 @@
         </Grid.RowDefinitions>
 
         <Border Grid.Row="0" Background="#34495e" Padding="10">
-            <TextBlock Text="풍산 스포츠 탄 랙 관리 시스템"
-                       FontSize="28" FontWeight="Bold" Foreground="White"
-                       HorizontalAlignment="Center"/>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Column="0"
+                           Text="풍산 스포츠 탄 랙 관리 시스템"
+                           FontSize="28" FontWeight="Bold" Foreground="White"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding LoginStatusMessage}"
+                               Foreground="{Binding IsLoggedIn, Converter={StaticResource LoginStatusToColorConverter}}"
+                               Margin="0,0,10,0" VerticalAlignment="Center" FontWeight="Bold" FontSize="18"/>
+
+                    <Button Command="{Binding LoginCommand}"
+                            Style="{StaticResource LoginStatusButtonStyle}"/>
+                </StackPanel>
+            </Grid>
         </Border>
 
         <Grid Grid.Row="1" Margin="40,20,40,0">

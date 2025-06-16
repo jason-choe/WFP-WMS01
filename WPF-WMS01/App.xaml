@@ -2,8 +2,12 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:WPF_WMS01"
-             StartupUri="MainWindow.xaml">
+             xmlns:converters="clr-namespace:WPF_WMS01.Converters">
     <Application.Resources>
-         
+        <!--converters:BackgroundColorConverter x:Key="BackgroundColorConverter" /-->
+        <!--converters:ImageIndexToImagePathConverter x:Key="ImageIndexToImagePathConverter"/-->
+        <!--converters:BooleanToVisibilityConverterForHidden x:Key="BooleanToVisibilityConverterForHidden"/-->
+        <converters:InvertBooleanConverter x:Key="InvertBooleanConverter"/>
+        <converters:LoginStatusToColorConverter x:Key="LoginStatusToColorConverter"/>
     </Application.Resources>
 </Application>

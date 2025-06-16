@@ -13,6 +13,8 @@ using System.Windows;
 using System.Collections.Generic;
 using System.Linq;
 using System.Configuration; // App.config 읽기를 위해 추가
+using System.Net.Http;
+using System.Text.Json;
 
 namespace WPF_WMS01.ViewModels
 {
@@ -25,31 +27,108 @@ namespace WPF_WMS01.ViewModels
     public class MainViewModel : ViewModelBase // INotifyPropertyChanged를 구현하는 ViewModelBase 사용
     {
         private readonly DatabaseService _databaseService;
+        private readonly HttpService _httpService; // HttpService 필드 추가
+        private readonly string _apiUsername; // App.config에서 읽어올 사용자 이름
+        private readonly string _apiPassword; // App.config에서 읽어올 비밀번호
+
         private ObservableCollection<RackViewModel> _rackList;
         private DispatcherTimer _refreshTimer; // 타이머 선언
         public readonly string _waitRackTitle; // App.config에서 읽어올 WAIT 랙 타이틀
 
-        
-        public MainViewModel()
+        // === 로그인 관련 속성 및 Command 추가 ===
+        private string _loginStatusMessage;
+        public string LoginStatusMessage
         {
-            _databaseService = new DatabaseService(); // 실제 서비스 인스턴스화
-            // App.config에서 WAIT 랙 타이틀 읽기
+            get => _loginStatusMessage;
+            set => SetProperty(ref _loginStatusMessage, value);
+        }
+
+        private bool _isLoggedIn;
+        public bool IsLoggedIn
+        {
+            get => _isLoggedIn;
+            set
+            {
+                if (SetProperty(ref _isLoggedIn, value))
+                {
+                    // 로그인 상태가 변경되면 로그인 버튼의 CanExecute 상태도 업데이트
+                    ((AsyncRelayCommand)LoginCommand).RaiseCanExecuteChanged();
+                    // ANT 서버와 통신하는 다른 Command들도 여기서 CanExecute 상태를 갱신할 수 있음
+                    // 예: RaiseAllAntApiCommandsCanExecuteChanged();
+                }
+            }
+        }
+
+        private string _authToken; // 받은 토큰 저장
+        public string AuthToken
+        {
+            get => _authToken;
+            set => SetProperty(ref _authToken, value);
+        }
+
+        private DateTime? _tokenExpiryTime; // 토큰 만료 시간
+        public DateTime? TokenExpiryTime
+        {
+            get => _tokenExpiryTime;
+            set => SetProperty(ref _tokenExpiryTime, value);
+        }
+
+        private bool _isLoginAttempting; // 로그인 시도 중임을 나타내는 플래그
+        public bool IsLoginAttempting
+        {
+            get => _isLoginAttempting;
+            set
+            {
+                if (SetProperty(ref _isLoginAttempting, value))
+                {
+                    ((AsyncRelayCommand)LoginCommand).RaiseCanExecuteChanged();
+                }
+            }
+        }
+
+        public ICommand LoginCommand { get; private set; }
+        // === 로그인 관련 속성 및 Command 끝 ===
+
+        public MainViewModel() // 디자인 타임용 또는 DI가 없는 경우를 위한 기본 생성자
+        {
+            _databaseService = new DatabaseService();
+            _waitRackTitle = ConfigurationManager.AppSettings["WaitRackTitle"] ?? "WAIT";
+            _httpService = new HttpService("http://localhost:8080/"); // 기본 URL, 실제 App.config에서 가져와야 함
+
+            InitializeCommands();
+            SetupRefreshTimer();
+            _ = LoadRacksAsync();
+        }
+
+        // DI를 통해 HttpService와 로그인 정보를 주입받는 주 생성자
+        public MainViewModel(HttpService httpService, string username, string password)
+        {
+            _databaseService = new DatabaseService();
             _waitRackTitle = ConfigurationManager.AppSettings["WaitRackTitle"] ?? "WAIT";
 
-            RackList = new ObservableCollection<RackViewModel>();
-            LoadRacksCommand = new AsyncCommand(LoadRacks); // AsyncCommand는 비동기 ICommand 구현체입니다.
+            _httpService = httpService ?? throw new ArgumentNullException(nameof(httpService));
+            _apiUsername = username;
+            _apiPassword = password;
 
-            // 애플리케이션 시작 시 데이터 로드
-            _ = LoadRacks(); // 비동기 메서드를 호출하지만, 결과를 기다리지 않음
+            InitializeCommands();
+            SetupRefreshTimer();
+            _ = LoadRacksAsync();
 
+            // 애플리케이션 시작 시 자동 로그인 시도
+            _ = AutoLoginOnStartup(); // Fire and forget. 비동기 메서드를 호출하고 반환 값을 기다리지 않음.
+        }
+
+        private void InitializeCommands()
+        {
+            // 기존 Command 초기화
             // --- Grid>Row="1"에 새로 추가된 명령 초기화 ---
             InboundProductCommand = new RelayCommand(ExecuteInboundProduct, CanExecuteInboundProduct);
             Checkout223ProductCommand = new RelayCommand(
                 param => ExecuteCheckoutProduct(new CheckoutRequest { BulletType = 1, ProductName = "233A" }),
-                param => CanExecuteCheckoutProduct(new CheckoutRequest { BulletType = 1, ProductName = "233A" })); 
+                param => CanExecuteCheckoutProduct(new CheckoutRequest { BulletType = 1, ProductName = "233A" }));
             Checkout308ProductCommand = new RelayCommand(
-                param => ExecuteCheckoutProduct(new CheckoutRequest { BulletType = 4, ProductName = "308B"}),
-                param => CanExecuteCheckoutProduct(new CheckoutRequest { BulletType = 4, ProductName = "308B"}));
+                param => ExecuteCheckoutProduct(new CheckoutRequest { BulletType = 4, ProductName = "308B" }),
+                param => CanExecuteCheckoutProduct(new CheckoutRequest { BulletType = 4, ProductName = "308B" }));
             Checkout556xProductCommand = new RelayCommand(
                 param => ExecuteCheckoutProduct(new CheckoutRequest { BulletType = 2, ProductName = "5.56X" }),
                 param => CanExecuteCheckoutProduct(new CheckoutRequest { BulletType = 2, ProductName = "5.56X" }));
@@ -68,9 +147,9 @@ namespace WPF_WMS01.ViewModels
             // StaticResource로 CheckoutRequest 인스턴스를 미리 정의해야 합니다.
             // 예를 들어 App.xaml에 <WPF_WMS01:CheckoutRequest x:Key="CheckoutRequest223" BulletType="1" ProductName="223 제품" ProductCode="223"/>
             // 이런 방식은 유연하지만, XAML 설정이 조금 더 복잡해질 수 있습니다.
-            
-            // 타이머 설정 및 시작
-            SetupRefreshTimer();
+
+            // 새로 추가된 로그인 Command 초기화
+            LoginCommand = new AsyncRelayCommand(ExecuteLogin, CanExecuteLogin);
         }
 
         public ObservableCollection<RackViewModel> RackList
@@ -80,7 +159,24 @@ namespace WPF_WMS01.ViewModels
         }
 
         public ICommand LoadRacksCommand { get; }
-
+        // RackView들의 상태 업데이트 및 초기화
+        private async Task LoadRacksAsync()
+        {
+            try
+            {
+                var rackData = await _databaseService.GetRackStatesAsync();
+                var rackViewModels = new ObservableCollection<RackViewModel>();
+                foreach (var rack in rackData)
+                {
+                    rackViewModels.Add(new RackViewModel(rack, _databaseService, this));
+                }
+                RackList = rackViewModels;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"랙 데이터 로드 중 오류 발생: {ex.Message}", "데이터베이스 오류", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
         private async Task LoadRacks()
         {
             /*try
@@ -198,13 +294,93 @@ namespace WPF_WMS01.ViewModels
         {
             _refreshTimer = new DispatcherTimer();
             _refreshTimer.Interval = TimeSpan.FromSeconds(1); // 1초마다 업데이트 (원하는 간격으로 설정)
+            //_refreshTimer.Tick += async (sender, e) => await LoadRacks(); // 비동기 메서드 호출
             _refreshTimer.Tick += RefreshTimer_Tick;
             _refreshTimer.Start();
         }
 
         private async void RefreshTimer_Tick(object sender, EventArgs e)
         {
-            await LoadRacks(); // 타이머 틱마다 데이터를 다시 로드
+            await LoadRacksAsync(); // 타이머 틱마다 데이터를 다시 로드
+        }
+
+        private async Task AutoLoginOnStartup()
+        {
+            LoginStatusMessage = "로그인 시도 중...";
+            IsLoggedIn = false;
+            // ExecuteLogin 메서드를 호출하여 실제 로그인 로직을 수행합니다.
+            // parameter는 null로 전달해도 무방합니다.
+            await ExecuteLogin(null);
+        }
+
+        private async Task ExecuteLogin(object parameter)
+        {
+            if (IsLoginAttempting) return; // 이미 로그인 시도 중이라면 중복 실행 방지
+
+            IsLoginAttempting = true; // 로그인 시도 중 상태 설정
+            LoginStatusMessage = "로그인 중...";
+            IsLoggedIn = false; // 로그인 시도 중이므로 잠시 false로 설정
+            AuthToken = null;
+            //TokenExpiryTime = null;   // 새 POST login response에 validity 필드가 없으므로 이 부분은 필요 없음.
+
+            try
+            {
+                LoginRequest loginReq = new LoginRequest
+                {
+                    Username = _apiUsername,
+                    Password = _apiPassword,
+                    // apiVersion 필드를 추가합니다.
+                    ApiVersion = new ApiVersion { Major = 0, Minor = 0 }
+                };
+
+                //Console.WriteLine($"로그인 요청: {_httpService.BaseApiUrl}login (사용자: {_apiUsername})");
+                LoginResponse loginRes = await _httpService.PostAsync<LoginRequest, LoginResponse>("wms/rest/login", loginReq);
+
+                if (!string.IsNullOrEmpty(loginRes?.Token))
+                {
+                    _httpService.SetAuthorizationHeader(loginRes.Token); // HttpService에 토큰 설정
+                    AuthToken = loginRes.Token;
+                    // Validity는 Unix timestamp (초)이므로 DateTime으로 변환
+                    // 새 응답에는 'validity' 필드가 없으므로 토큰 만료 시간 처리를 제거하거나 변경해야 합니다.
+                    //TokenExpiryTime = DateTimeOffset.FromUnixTimeSeconds(loginRes.Validity).LocalDateTime;
+                    IsLoggedIn = true;
+                    LoginStatusMessage = $"로그인 성공!"; //({TokenExpiryTime?.ToString("yyyy-MM-dd HH:mm:ss")} 만료)";
+                    Console.WriteLine("ANT 서버 로그인 성공!");
+                }
+                else
+                {
+                    IsLoggedIn = false;
+                    MessageBox.Show("로그인 실패: 토큰을 받지 못함. (서버 응답 오류)", "ANT");
+                }
+            }
+            catch (HttpRequestException httpEx)
+            {
+                IsLoggedIn = false;
+                LoginStatusMessage = "로그인 실패";
+                MessageBox.Show($"로그인 실패: 네트워크 오류 또는 서버 응답 없음.: {httpEx.Message}", "ANT");
+            }
+            catch (JsonException jsonEx)
+            {
+                IsLoggedIn = false;
+                LoginStatusMessage = "로그인 실패";
+                MessageBox.Show($"로그인 실패: 응답 데이터 형식 오류. {jsonEx.Message}", "ANT");
+            }
+            catch (Exception ex)
+            {
+                IsLoggedIn = false;
+                LoginStatusMessage = "로그인 실패";
+                MessageBox.Show($"로그인 실패: 예상치 못한 오류. {ex.Message}", "ANT");
+            }
+            finally
+            {
+                IsLoginAttempting = false; // 로그인 시도 중 상태 해제
+            }
+        }
+
+        private bool CanExecuteLogin(object parameter)
+        {
+            // 이미 로그인 상태이거나 로그인 시도 중이면 로그인 버튼 비활성화
+            return !IsLoggedIn && !IsLoginAttempting;
         }
 
         // ViewModel이 소멸될 때 타이머를 멈추는 것이 좋습니다. (Window.Closed 이벤트 등에서 호출)
@@ -492,7 +668,7 @@ namespace WPF_WMS01.ViewModels
             }
 
             // 두 조건을 모두 만족할 때만 true 반환
-            return inputContainsValidProduct && emptyAndVisibleRackExists && waitRackNotLocked;
+            return IsLoggedIn && inputContainsValidProduct && emptyAndVisibleRackExists && waitRackNotLocked;
 
         }
 
@@ -501,7 +677,7 @@ namespace WPF_WMS01.ViewModels
             // 출고 가능한 308 제품 랙 목록 가져오기 (잠겨있지 않은 랙만)
             if (parameter is CheckoutRequest request)
             {
-                var availableRacksForCheckout = RackList?.Where(r => r.RackType == 1 && r.BulletType == request.BulletType && r.LotNumber.Contains(InputStringForShipOut == null ? "" : "-" + InputStringForShipOut) && !r.IsLocked).Select(rvm => rvm.RackModel).ToList();
+                var availableRacksForCheckout = RackList?.Where(r => r.RackType == 1 && r.BulletType == request.BulletType && r.LotNumber.Contains((InputStringForShipOut == null || InputStringForShipOut == "") ? "" : "-" + InputStringForShipOut) && !r.IsLocked).Select(rvm => rvm.RackModel).ToList();
                 var productName = request.ProductName;
 
                 if (availableRacksForCheckout == null || !availableRacksForCheckout.Any())
@@ -603,8 +779,8 @@ namespace WPF_WMS01.ViewModels
         {
             if (parameter is CheckoutRequest request)
             {
-                // 잠겨있지 않은 308 제품 랙이 하나라도 있으면 활성화
-                return RackList?.Any(r => r.RackType == 1 && r.BulletType == request.BulletType && !r.IsLocked) == true;
+                // 잠겨있지 않은 해당 제품 랙이 하나라도 있으면 활성화
+                return IsLoggedIn && RackList?.Any(r => r.RackType == 1 && r.BulletType == request.BulletType && !r.IsLocked) == true;
             }
             return false; // 유효하지 않은 요청이면 비활성화
         }
@@ -620,6 +796,7 @@ namespace WPF_WMS01.ViewModels
             ((RelayCommand)Checkout762xProductCommand).RaiseCanExecuteChanged();
             ((RelayCommand)CheckoutPsdProductCommand).RaiseCanExecuteChanged();
             //((RelayCommand)CheckoutProductCommand).RaiseCanExecuteChanged();
+            // 필요한 경우 LoginCommand도 여기서 RaiseCanExecuteChanged()를 호출하여 상태를 갱신할 수 있음
         }
 
     }
