@@ -82,7 +82,7 @@ namespace WPF_WMS01.ViewModels.Popups
             ToggleSelectAllCommand = new RelayCommand(ExecuteToggleSelectAll);
             // 입고 일자(RackedAt) 기준으로 오름차순 정렬하여 컬렉션 초기화
             AvailableRacks = new ObservableCollection<CheckoutRackItem>(
-                racks.OrderBy(r => r.RackedAt) // RackedAt 기준으로 정렬
+                racks.OrderBy(r => r.RackedAt).OrderBy(r => r.LotNumber) // LotNumber and RackedAt 기준으로 정렬
                      .Select(r => new CheckoutRackItem(r, this))
             );
 

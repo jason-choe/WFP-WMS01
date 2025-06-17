@@ -152,7 +152,7 @@
             </Grid>
         </Border>
 
-        <Grid Grid.Row="1" Margin="40,20,40,0">
+        <Grid Grid.Row="1" Margin="40,20,20,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
@@ -169,7 +169,7 @@
 
             <TextBox Grid.Column="0"
                        Text="{Binding InputStringForButton, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                       MaxLength="13" Width="300" Height="80" Background="LightSeaGreen"
+                       MaxLength="15" Width="300" Height="80" Background="LightSeaGreen"
                        VerticalAlignment="Center" HorizontalAlignment="Left"
                        Margin="0,0,20,0"
                        BorderThickness="3" 
@@ -194,7 +194,7 @@
                        PreviewTextInput="ProductCodeTextBox_PreviewTextInput"
                        GotFocus="ProductCodeTextBox_GotFocus"
                        LostFocus="ProductCodeTextBox_LostFocus"
-                       MaxLength="4" Width="300" Height="80" Background="LightSeaGreen"
+                       MaxLength="4" Width="200" Height="80" Background="LightSeaGreen"
                        VerticalAlignment="Center" HorizontalAlignment="Left"
                        Margin="0,0,20,0"
                        BorderThickness="3" 
@@ -208,41 +208,97 @@
                     <RowDefinition Height="AUTO"/>
                     <RowDefinition Height="AUTO"/>
                 </Grid.RowDefinitions>
-                <Button Grid.Row="0" Content="223A 출고"
-                    Command="{Binding Checkout223ProductCommand}"
-                    Width="120" Height="64" FontSize="20" FontWeight="Bold"
+                <Button Grid.Row="0" Content="223A"
+                    Command="{Binding Checkout223aProductCommand}"
+                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
                     VerticalAlignment="Center" HorizontalAlignment="Right"
                     Margin="0,0,20,20"/>
-                <Button Grid.Row="1" Content="223A 출고"
-                    Command="{Binding Checkout223ProductCommand}"
-                    Width="120" Height="64" FontSize="20" FontWeight="Bold"
+                <Button Grid.Row="1" Content="223SP"
+                    Command="{Binding Checkout223spProductCommand}"
+                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
                     VerticalAlignment="Center" HorizontalAlignment="Right"
                     Margin="0,0,20,0"/>
             </Grid>
-            <Button Grid.Column="6" Content="5.56X 출고"
+            <Grid Grid.Column="6">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="AUTO"/>
+                    <RowDefinition Height="AUTO"/>
+                </Grid.RowDefinitions>
+                <Button Grid.Row="0" Content="223XM"
+                    Command="{Binding Checkout223xmProductCommand}"
+                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
+                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                    Margin="0,0,20,20"/>
+                <Button Grid.Row="1" Content="5.56X"
                     Command="{Binding Checkout556xProductCommand}"
-                    Width="120" Height="64" FontSize="20" FontWeight="Bold"
+                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
                     VerticalAlignment="Center" HorizontalAlignment="Right"
                     Margin="0,0,20,0"/>
-            <Button Grid.Column="7" Content="5.56K 출고"
+            </Grid>
+            <Grid Grid.Column="7">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="AUTO"/>
+                    <RowDefinition Height="AUTO"/>
+                </Grid.RowDefinitions>
+                <Button Grid.Row="0" Content="5.56K"
                     Command="{Binding Checkout556kProductCommand}"
-                    Width="120" Height="64" FontSize="20" FontWeight="Bold"
+                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
+                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                    Margin="0,0,20,20"/>
+                <Button Grid.Row="1" Content="M855T"
+                    Command="{Binding CheckoutM855tProductCommand}"
+                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
                     VerticalAlignment="Center" HorizontalAlignment="Right"
                     Margin="0,0,20,0"/>
-            <Button Grid.Column="8" Content="308B 출고"
-                    Command="{Binding Checkout308ProductCommand}"
-                    Width="120" Height="64" FontSize="20" FontWeight="Bold"
+            </Grid>
+            <Grid Grid.Column="8">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="AUTO"/>
+                    <RowDefinition Height="AUTO"/>
+                </Grid.RowDefinitions>
+                <Button Grid.Row="0" Content="M193"
+                    Command="{Binding CheckoutM193ProductCommand}"
+                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
+                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                    Margin="0,0,20,20"/>
+                <Button Grid.Row="1" Content="308B"
+                    Command="{Binding Checkout308bProductCommand}"
+                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
                     VerticalAlignment="Center" HorizontalAlignment="Right"
                     Margin="0,0,20,0"/>
-            <Button Grid.Column="9" Content="7.62X 출고"
+            </Grid>
+            <Grid Grid.Column="9">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="AUTO"/>
+                    <RowDefinition Height="AUTO"/>
+                </Grid.RowDefinitions>
+                <Button Grid.Row="0" Content="308SP"
+                    Command="{Binding Checkout308spProductCommand}"
+                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
+                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                    Margin="0,0,20,20"/>
+                <Button Grid.Row="1" Content="308XM"
+                    Command="{Binding Checkout308xmProductCommand}"
+                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
+                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                    Margin="0,0,20,0"/>
+            </Grid>
+            <Grid Grid.Column="10">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="AUTO"/>
+                    <RowDefinition Height="AUTO"/>
+                </Grid.RowDefinitions>
+                <Button Grid.Row="0" Content="7.62X"
                     Command="{Binding Checkout762xProductCommand}"
-                    Width="120" Height="64" FontSize="20" FontWeight="Bold"
+                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
+                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                    Margin="0,0,20,20"/>
+                <Button Grid.Row="1" Content="M80"
+                    Command="{Binding CheckoutM80ProductCommand}"
+                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
                     VerticalAlignment="Center" HorizontalAlignment="Right"
                     Margin="0,0,20,0"/>
-            <Button Grid.Column="10" Content="M855T 출고"
-                    Command="{Binding CheckoutPsdProductCommand}"
-                    Width="120" Height="64" FontSize="20" FontWeight="Bold"
-                    VerticalAlignment="Center" HorizontalAlignment="Right"/>
+            </Grid>
         </Grid>
 
         <ScrollViewer Grid.Row="2"  Margin="20,20,20,10" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
@@ -269,7 +325,7 @@
                                     <Image Width="64" Height="64"  HorizontalAlignment="Center" VerticalAlignment="Center"
                                                 Source="{Binding ImageIndex, Converter={StaticResource ImageIndexToImagePathConverter}}" />
                                     <TextBlock Text="{Binding Title}" FontWeight="Bold" HorizontalAlignment="Center"
-                                                Foreground="White" FontFamily="Romantic" Margin="0,4,0,0" FontSize="20"/>
+                                                Foreground="White" FontFamily="Times New Roman" Margin="0,4,0,0" FontSize="20"/>
                                 </StackPanel>
                             </Border>
                         </Button>

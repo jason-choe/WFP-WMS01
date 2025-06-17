@@ -35,6 +35,7 @@ namespace WPF_WMS01.ViewModels
         private ObservableCollection<RackViewModel> _rackList;
         private DispatcherTimer _refreshTimer; // 타이머 선언
         public readonly string _waitRackTitle; // App.config에서 읽어올 WAIT 랙 타이틀
+        public readonly char[] _militaryCharacter = { 'a', 'b', 'c', ' ' };
 
         // === 로그인 관련 속성 및 Command 추가 ===
         private string _loginStatusMessage;
@@ -124,24 +125,43 @@ namespace WPF_WMS01.ViewModels
             // 기존 Command 초기화
             // --- Grid>Row="1"에 새로 추가된 명령 초기화 ---
             InboundProductCommand = new RelayCommand(ExecuteInboundProduct, CanExecuteInboundProduct);
-            Checkout223ProductCommand = new RelayCommand(
+            FakeInboundProductCommand = new RelayCommand(ExecuteInboundProduct, CanExecuteInboundProduct);
+            Checkout223aProductCommand = new RelayCommand(
                 param => ExecuteCheckoutProduct(new CheckoutRequest { BulletType = 1, ProductName = "233A" }),
                 param => CanExecuteCheckoutProduct(new CheckoutRequest { BulletType = 1, ProductName = "233A" }));
-            Checkout308ProductCommand = new RelayCommand(
-                param => ExecuteCheckoutProduct(new CheckoutRequest { BulletType = 4, ProductName = "308B" }),
-                param => CanExecuteCheckoutProduct(new CheckoutRequest { BulletType = 4, ProductName = "308B" }));
+            Checkout223spProductCommand = new RelayCommand(
+                param => ExecuteCheckoutProduct(new CheckoutRequest { BulletType = 2, ProductName = "223SP" }),
+                param => CanExecuteCheckoutProduct(new CheckoutRequest { BulletType = 2, ProductName = "223SP" }));
+            Checkout223xmProductCommand = new RelayCommand(
+                param => ExecuteCheckoutProduct(new CheckoutRequest { BulletType = 3, ProductName = "223XM" }),
+                param => CanExecuteCheckoutProduct(new CheckoutRequest { BulletType = 4, ProductName = "223XM" }));
             Checkout556xProductCommand = new RelayCommand(
-                param => ExecuteCheckoutProduct(new CheckoutRequest { BulletType = 2, ProductName = "5.56X" }),
-                param => CanExecuteCheckoutProduct(new CheckoutRequest { BulletType = 2, ProductName = "5.56X" }));
+                param => ExecuteCheckoutProduct(new CheckoutRequest { BulletType = 4, ProductName = "5.56X" }),
+                param => CanExecuteCheckoutProduct(new CheckoutRequest { BulletType = 4, ProductName = "5.56K" }));
             Checkout556kProductCommand = new RelayCommand(
-                param => ExecuteCheckoutProduct(new CheckoutRequest { BulletType = 3, ProductName = "5.56K" }),
-                param => CanExecuteCheckoutProduct(new CheckoutRequest { BulletType = 3, ProductName = "5.56K" }));
-            Checkout762xProductCommand = new RelayCommand(
-                param => ExecuteCheckoutProduct(new CheckoutRequest { BulletType = 5, ProductName = "7.62X" }),
+                param => ExecuteCheckoutProduct(new CheckoutRequest { BulletType = 5, ProductName = "5.56K" }),
                 param => CanExecuteCheckoutProduct(new CheckoutRequest { BulletType = 5, ProductName = "7.62X" }));
-            CheckoutPsdProductCommand = new RelayCommand(
+            CheckoutM855tProductCommand = new RelayCommand(
                 param => ExecuteCheckoutProduct(new CheckoutRequest { BulletType = 6, ProductName = "M855T" }),
                 param => CanExecuteCheckoutProduct(new CheckoutRequest { BulletType = 6, ProductName = "M855T" }));
+            CheckoutM193ProductCommand = new RelayCommand(
+                param => ExecuteCheckoutProduct(new CheckoutRequest { BulletType = 7, ProductName = "M193" }),
+                param => CanExecuteCheckoutProduct(new CheckoutRequest { BulletType = 7, ProductName = "M193" }));
+            Checkout308bProductCommand = new RelayCommand(
+                param => ExecuteCheckoutProduct(new CheckoutRequest { BulletType = 8, ProductName = "308B" }),
+                param => CanExecuteCheckoutProduct(new CheckoutRequest { BulletType = 8, ProductName = "308B" }));
+            Checkout308spProductCommand = new RelayCommand(
+                param => ExecuteCheckoutProduct(new CheckoutRequest { BulletType = 9, ProductName = "308SP" }),
+                param => CanExecuteCheckoutProduct(new CheckoutRequest { BulletType = 9, ProductName = "308SP" }));
+            Checkout308xmProductCommand = new RelayCommand(
+                param => ExecuteCheckoutProduct(new CheckoutRequest { BulletType = 10, ProductName = "308XM" }),
+                param => CanExecuteCheckoutProduct(new CheckoutRequest { BulletType = 10, ProductName = "308XM" }));
+            Checkout762xProductCommand = new RelayCommand(
+                param => ExecuteCheckoutProduct(new CheckoutRequest { BulletType = 11, ProductName = "7.62X" }),
+                param => CanExecuteCheckoutProduct(new CheckoutRequest { BulletType = 11, ProductName = "7.62X" }));
+            CheckoutM80ProductCommand = new RelayCommand(
+                param => ExecuteCheckoutProduct(new CheckoutRequest { BulletType = 12, ProductName = "M80" }),
+                param => CanExecuteCheckoutProduct(new CheckoutRequest { BulletType = 12, ProductName = "M80" }));
             // 하나의 공통 명령으로 묶는 경우 (XAML에서 CommandParameter를 사용)
             // CheckoutProductCommand = new RelayCommand(ExecuteCheckoutProduct, CanExecuteCheckoutProduct);
             // 이 경우 XAML 버튼에서 CommandParameter="{Binding Source={StaticResource CheckoutRequest223}}" 와 같이 바인딩해야 합니다.
@@ -457,12 +477,19 @@ namespace WPF_WMS01.ViewModels
         }
 
         public ICommand InboundProductCommand { get; private set; } // '입고' 버튼 명령
-        public ICommand Checkout223ProductCommand { get; private set; } // '232 출고' 버튼 명령
-        public ICommand Checkout308ProductCommand { get; private set; } // '308 출고' 버튼 명령
-        public ICommand Checkout556xProductCommand { get; private set; } // '308 출고' 버튼 명령
-        public ICommand Checkout556kProductCommand { get; private set; } // '308 출고' 버튼 명령
-        public ICommand Checkout762xProductCommand { get; private set; } // '308 출고' 버튼 명령
-        public ICommand CheckoutPsdProductCommand { get; private set; } // '308 출고' 버튼 명령
+        public ICommand FakeInboundProductCommand { get; private set; } // '가입고' 버튼 명령
+        public ICommand Checkout223aProductCommand { get; private set; } // '223A 출고' 버튼 명령
+        public ICommand Checkout223spProductCommand { get; private set; } // '223SP 출고' 버튼 명령
+        public ICommand Checkout223xmProductCommand { get; private set; } // '223XM 출고' 버튼 명령
+        public ICommand Checkout556xProductCommand { get; private set; } // '5.56X 출고' 버튼 명령
+        public ICommand Checkout556kProductCommand { get; private set; } // '5.56K 출고' 버튼 명령
+        public ICommand CheckoutM855tProductCommand { get; private set; } // 'M855T 출고' 버튼 명령
+        public ICommand CheckoutM193ProductCommand { get; private set; } // 'M193 출고' 버튼 명령
+        public ICommand Checkout308bProductCommand { get; private set; } // '308B 출고' 버튼 명령
+        public ICommand Checkout308spProductCommand { get; private set; } // '30SP8 출고' 버튼 명령
+        public ICommand Checkout308xmProductCommand { get; private set; } // '308XM 출고' 버튼 명령
+        public ICommand Checkout762xProductCommand { get; private set; } // '7.62X 출고' 버튼 명령
+        public ICommand CheckoutM80ProductCommand { get; private set; } // 'M80 출고' 버튼 명령
         //public ICommand CheckoutProductCommand { get; private set; } // 필요하다면 하나의 공통 명령으로 묶을 수도 있음.
 
         // Grid>Row="1"에 새로 추가된 명령 구현 ---
@@ -519,25 +546,57 @@ namespace WPF_WMS01.ViewModels
                             {
                                 newBulletType = 1;
                             }
-                            else if (InputStringForButton.Contains("5.56X"))
+                            else if (InputStringForButton.Contains("223SP"))
                             {
                                 newBulletType = 2;
                             }
-                            else if (InputStringForButton.Contains("5.56K"))
+                            else if (InputStringForButton.Contains("223XM"))
                             {
                                 newBulletType = 3;
                             }
-                            else if (InputStringForButton.Contains("308B"))
+                            else if (InputStringForButton.Contains("5.56X"))
                             {
                                 newBulletType = 4;
                             }
-                            else if (InputStringForButton.Contains("7.62X"))
+                            else if (InputStringForButton.Contains("5.56K"))
                             {
                                 newBulletType = 5;
                             }
                             else if (InputStringForButton.Contains("PSD"))
                             {
-                                newBulletType = 6;
+                                if(InputStringForButton.Contains(" a"))   // M885T
+                                {
+                                    newBulletType = 6;
+                                }
+                                else if(InputStringForButton.Contains(" b"))  // M193
+                                {
+                                    newBulletType = 7;
+                                }
+                                else if (InputStringForButton.Contains(" c"))  // M80
+                                {
+                                    newBulletType = 12;
+                                }
+                                else
+                                {
+                                    newBulletType = 6;   // M885T (default)
+                                }
+
+                            }
+                            else if (InputStringForButton.Contains("308B"))
+                            {
+                                newBulletType = 8;
+                            }
+                            else if (InputStringForButton.Contains("308SP"))
+                            {
+                                newBulletType = 9;
+                            }
+                            else if (InputStringForButton.Contains("308XM"))
+                            {
+                                newBulletType = 10;
+                            }
+                            else if (InputStringForButton.Contains("7.62X"))
+                            {
+                                newBulletType = 11;
                             }
                             else
                             {
@@ -565,7 +624,9 @@ namespace WPF_WMS01.ViewModels
                                 newBulletType,
                                 false // 입고 후 타겟 랙만 잠금 해제
                             );
-                            await _databaseService.UpdateLotNumberAsync(selectedRack.Id, InputStringForButton.TrimStart()); // Register lot number
+
+                            await _databaseService.UpdateLotNumberAsync(selectedRack.Id,
+                                InputStringForButton.TrimStart().TrimEnd(_militaryCharacter)); // Register lot number
 
                             Application.Current.Dispatcher.Invoke(() =>
                             {
@@ -616,11 +677,15 @@ namespace WPF_WMS01.ViewModels
             // 1) InputStringForButton이 '223' 또는 '308'을 포함하는지 확인
             bool inputContainsValidProduct = !string.IsNullOrWhiteSpace(_inputStringForButton) &&
                                              (_inputStringForButton.Contains("223A")
-                                             || _inputStringForButton.Contains("308B")
-                                              || _inputStringForButton.Contains("5.56X")
-                                               || _inputStringForButton.Contains("5.56K")
-                                                || _inputStringForButton.Contains("7.62X")
+                                             || _inputStringForButton.Contains("223SP")
+                                              || _inputStringForButton.Contains("223XM")
+                                               || _inputStringForButton.Contains("5.56X")
+                                                || _inputStringForButton.Contains("5.56K")
                                                  || _inputStringForButton.Contains("PSD")
+                                                  || _inputStringForButton.Contains("308B")
+                                                   || _inputStringForButton.Contains("308SP")
+                                                    || _inputStringForButton.Contains("308XM")
+                                                     || _inputStringForButton.Contains("7.62X")
                                              );
 
             // 2) ImageIndex가 0 (빈 랙)이고 IsVisible이 True인 랙이 존재하는지 확인
@@ -645,25 +710,49 @@ namespace WPF_WMS01.ViewModels
                     {
                         newBulletTypeForWaitRack = 1;
                     }
-                    else if (_inputStringForButton.Contains("5.56X"))
+                    else if (_inputStringForButton.Contains("223SP"))
                     {
                         newBulletTypeForWaitRack = 2;
                     }
-                    else if (_inputStringForButton.Contains("5.56K"))
+                    else if (_inputStringForButton.Contains("223XM"))
                     {
                         newBulletTypeForWaitRack = 3;
                     }
-                    else if (_inputStringForButton.Contains("308B"))
+                    else if (_inputStringForButton.Contains("5.56X"))
                     {
                         newBulletTypeForWaitRack = 4;
                     }
-                    else if (_inputStringForButton.Contains("7.62X"))
+                    else if (_inputStringForButton.Contains("5.56K"))
                     {
                         newBulletTypeForWaitRack = 5;
                     }
-                    else if (_inputStringForButton.Contains("PSD"))
+                    else if (_inputStringForButton.Contains("PSD") && _inputStringForButton.Contains(" a")) // M855T
                     {
                         newBulletTypeForWaitRack = 6;
+                    }
+                    else if (_inputStringForButton.Contains("PSD") && _inputStringForButton.Contains(" b")) // M193
+                    {
+                        newBulletTypeForWaitRack = 7;
+                    }
+                    else if (_inputStringForButton.Contains("308B"))
+                    {
+                        newBulletTypeForWaitRack = 8;
+                    }
+                    else if (_inputStringForButton.Contains("308SP"))
+                    {
+                        newBulletTypeForWaitRack = 9;
+                    }
+                    else if (_inputStringForButton.Contains("308XM"))
+                    {
+                        newBulletTypeForWaitRack = 10;
+                    }
+                    else if (_inputStringForButton.Contains("7.62X"))
+                    {
+                        newBulletTypeForWaitRack = 11;
+                    }
+                    else if (_inputStringForButton.Contains("PSD") && _inputStringForButton.Contains(" c")) // M80
+                    {
+                        newBulletTypeForWaitRack = 12;
                     }
                 }
 
@@ -692,7 +781,7 @@ namespace WPF_WMS01.ViewModels
             }
 
             // 두 조건을 모두 만족할 때만 true 반환
-            return IsLoggedIn && inputContainsValidProduct && emptyAndVisibleRackExists && waitRackNotLocked;
+            return /* IsLoggedIn && */ inputContainsValidProduct && emptyAndVisibleRackExists && waitRackNotLocked;
 
         }
 
@@ -804,7 +893,7 @@ namespace WPF_WMS01.ViewModels
             if (parameter is CheckoutRequest request)
             {
                 // 잠겨있지 않은 해당 제품 랙이 하나라도 있으면 활성화
-                return IsLoggedIn && RackList?.Any(r => r.RackType == 1 && r.BulletType == request.BulletType && !r.IsLocked) == true;
+                return /* IsLoggedIn &&*/ RackList?.Any(r => r.RackType == 1 && r.BulletType == request.BulletType && !r.IsLocked) == true;
             }
             return false; // 유효하지 않은 요청이면 비활성화
         }
@@ -813,12 +902,18 @@ namespace WPF_WMS01.ViewModels
         private void RaiseAllCheckoutCanExecuteChanged()
         {
             ((RelayCommand)InboundProductCommand).RaiseCanExecuteChanged(); // 입고 버튼도 갱신하도록 추가
-            ((RelayCommand)Checkout223ProductCommand).RaiseCanExecuteChanged();
-            ((RelayCommand)Checkout308ProductCommand).RaiseCanExecuteChanged();
+            ((RelayCommand)Checkout223aProductCommand).RaiseCanExecuteChanged();
+            ((RelayCommand)Checkout223spProductCommand).RaiseCanExecuteChanged();
+            ((RelayCommand)Checkout223xmProductCommand).RaiseCanExecuteChanged();
             ((RelayCommand)Checkout556xProductCommand).RaiseCanExecuteChanged();
             ((RelayCommand)Checkout556kProductCommand).RaiseCanExecuteChanged();
+            ((RelayCommand)CheckoutM855tProductCommand).RaiseCanExecuteChanged();
+            ((RelayCommand)CheckoutM193ProductCommand).RaiseCanExecuteChanged();
+            ((RelayCommand)Checkout308bProductCommand).RaiseCanExecuteChanged();
+            ((RelayCommand)Checkout308spProductCommand).RaiseCanExecuteChanged();
+            ((RelayCommand)Checkout308xmProductCommand).RaiseCanExecuteChanged();
             ((RelayCommand)Checkout762xProductCommand).RaiseCanExecuteChanged();
-            ((RelayCommand)CheckoutPsdProductCommand).RaiseCanExecuteChanged();
+            ((RelayCommand)CheckoutM80ProductCommand).RaiseCanExecuteChanged();
             //((RelayCommand)CheckoutProductCommand).RaiseCanExecuteChanged();
             // 필요한 경우 LoginCommand도 여기서 RaiseCanExecuteChanged()를 호출하여 상태를 갱신할 수 있음
         }

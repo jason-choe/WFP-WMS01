@@ -90,8 +90,8 @@ namespace WPF_WMS01.Services
 
             var jsonContent = JsonConvert.SerializeObject(data, _jsonSettings);
 
-            Console.WriteLine($"POST 요청 전송 대상: {BaseApiUrl}{fullEndpoint}");
-            Console.WriteLine($"요청 본문 (JSON): {jsonContent}");
+            Debug.WriteLine($"POST 요청 전송 대상: {BaseApiUrl}{fullEndpoint}");
+            Debug.WriteLine($"요청 본문 (JSON): {jsonContent}");
 
             var httpContent = new StringContent(jsonContent, Encoding.UTF8, "application/json");
 

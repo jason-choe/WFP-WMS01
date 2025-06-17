@@ -252,7 +252,7 @@ namespace WPF_WMS01.ViewModels
             switch (ImageIndex)
             {
                 case 0:
-                case 7:
+                case 13:
                     // 랙 타입 변경 팝업
                     //int currentRackType = clickedRackViewModel.RackType;
                     //int newRackType = (currentRackType == 0) ? 1 : 0; // 0이면 1로, 1이면 0으로 변경
@@ -293,23 +293,56 @@ namespace WPF_WMS01.ViewModels
                 case 4:
                 case 5:
                 case 6:
-                case 15:    // WAIT rack click
-                case 16:    // WAIT rack click
-                case 17:    // WAIT rack click
-                case 18:    // WAIT rack click
-                case 19:    // WAIT rack click
-                case 20:    // WAIT rack click
-                    // ImageIndex가 1~6 또는 15~20일 때 띄울 팝업 - 이동/복사 로직
-                    await HandleRackTransfer(clickedRackViewModel); // 새로운 비동기 처리 메서드 호출
-                    break;
+                case 7:
                 case 8:
                 case 9:
                 case 10:
                 case 11:
                 case 12:
-                case 13:
+                case 27:    // WAIT rack click
+                case 28:    // WAIT rack click
+                case 29:    // WAIT rack click
+                case 30:    // WAIT rack click
+                case 31:    // WAIT rack click
+                case 32:    // WAIT rack click
+                case 33:    // WAIT rack click
+                case 34:    // WAIT rack click
+                case 35:    // WAIT rack click
+                case 36:    // WAIT rack click
+                case 37:    // WAIT rack click
+                case 38:    // WAIT rack click
+                    // ImageIndex가 1~6 또는 15~20일 때 띄울 팝업 - 이동/복사 로직
+                    await HandleRackTransfer(clickedRackViewModel); // 새로운 비동기 처리 메서드 호출
+                    break;
+                case 14:
+                case 15:
+                case 16:
+                case 17:
+                case 18:
+                case 19:
+                case 20:
+                case 21:
+                case 22:
+                case 23:
+                case 24:
+                case 25:
                     // 3) ImageIndex가 4 또는 5일 때 띄울 팝업
                     await HandleRackShipout(clickedRackViewModel);
+                    break;
+                case 40:
+                case 41:
+                case 42:
+                case 43:
+                case 44:
+                case 45:
+                case 46:
+                case 47:
+                case 48:
+                case 49:
+                case 50:
+                case 52:
+                case 53:
+                    MessageBox.Show($"랙 {Title} (ImageIndex: {ImageIndex}): 가입고 반출 : 추가 수정 필요!", "랙 상세", MessageBoxButton.OK, MessageBoxImage.Information);
                     break;
                 default:
                     // 그 외의 경우
@@ -326,7 +359,7 @@ namespace WPF_WMS01.ViewModels
             List<Rack> targetRacks = allRacks
                 .Where(r => r.Id != sourceRackViewModel.Id && // 자기 자신 제외
                             !r.IsLocked &&                     // 잠겨있지 않은 랙만
-                            r.ImageIndex == 7)                 // ImageIndex가 7인 랙만 (RackType 1, BulletType 0)
+                            r.ImageIndex == 13)                 // ImageIndex가 13인 랙만 (RackType 1, BulletType 0)
                 .ToList();
             if (!targetRacks.Any())
             {
@@ -368,7 +401,7 @@ namespace WPF_WMS01.ViewModels
                             false                                   // IsLocked 해제
                         );
                         if (sourceRackViewModel.Title.Equals(_mainViewModel._waitRackTitle))
-                            await _databaseService.UpdateLotNumberAsync(destinationRack.Id, _mainViewModel.InputStringForButton.TrimStart());
+                            await _databaseService.UpdateLotNumberAsync(destinationRack.Id, _mainViewModel.InputStringForButton.TrimStart().TrimEnd(_mainViewModel._militaryCharacter));
                         else
                             await _databaseService.UpdateLotNumberAsync(destinationRack.Id, sourceRackViewModel.LotNumber);
 
