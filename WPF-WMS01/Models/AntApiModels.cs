@@ -8,98 +8,129 @@ namespace WPF_WMS01.Models
     // ====== 1. Login (POST) - Appendix G.1 (p. 427) ======
     public class ApiVersion
     {
+        [JsonProperty("major")]
         public int Major { get; set; }
+
+        [JsonProperty("minor")]
         public int Minor { get; set; }
     }
 
     public class LoginRequest
     {
+        [JsonProperty("username")]
         public string Username { get; set; }
+
+        [JsonProperty("password")]
         public string Password { get; set; }
-        public ApiVersion ApiVersion { get; set; } // 새로 추가된 필드
+
+        [JsonProperty("apiVersion")]
+        public ApiVersion ApiVersion { get; set; } // 요청 시 보낼 apiVersion
     }
 
     public class LoginResponse
     {
-        public string FirstName { get; set; } // 새로 추가된 필드
-        public string ApiVersion { get; set; } // 새로 추가된 필드 (문자열 타입)
-        public string DisplayName { get; set; } // 새로 추가된 필드
-        public string FamilyName { get; set; } // 새로 추가된 필드
-        public List<string> Roles { get; set; }
-        public string PersonalNumber { get; set; } // 새로 추가된 필드
-        public string Token { get; set; }
+        [JsonProperty("firstName")]
+        public string FirstName { get; set; }
 
-        // 이전 응답에 있던 'validity' 필드는 현재 응답에 포함되어 있지 않습니다.
-        // 만약 토큰 유효 기간 관리가 필요하다면, 이 새 API에서는 다른 방법을 찾아야 할 수 있습니다.
-        // 현재로서는 해당 필드를 제거합니다.
-        // public long Validity { get; set; }
+        // !!! 핵심 변경: apiVersion 필드를 string 타입으로 변경 !!!
+        [JsonProperty("apiVersion")]
+        public string ApiVersionString { get; set; } // JSON 필드는 "apiVersion"이지만, C# 속성 이름은 충돌을 피하기 위해 변경
+
+        [JsonProperty("displayName")]
+        public string DisplayName { get; set; }
+
+        [JsonProperty("familyName")]
+        public string FamilyName { get; set; }
+
+        [JsonProperty("roles")]
+        public List<string> Roles { get; set; }
+
+        [JsonProperty("personalNumber")]
+        public string PersonalNumber { get; set; }
+
+        [JsonProperty("token")]
+        public string Token { get; set; }
     }
 
     // ====== 2. Create a mission (POST) - Appendix G.20 (p. 450) ======
     // 참고: 미션 생성은 복잡할 수 있으므로, PDF의 'Request Body' 섹션을 자세히 보고 필요한 모든 필드를 추가해야 합니다.
     // 여기서는 간단한 예시만 제공합니다.
-
-    public class MissionProperties
+    // Create mission Request Body
+    public class MissionParametersValue
     {
-        [JsonProperty("fleet_name")]
-        public string FleetName { get; set; }
+        [JsonProperty("payload")]
+        public string Payload { get; set; }
 
-        [JsonProperty("is_blocking")]
-        public bool IsBlocking { get; set; }
-
-        [JsonProperty("is_cancelable")]
-        public bool IsCancelable { get; set; }
-
-        [JsonProperty("is_pausable")]
-        public bool IsPausable { get; set; }
-
-        [JsonProperty("is_skippable")]
-        public bool IsSkippable { get; set; }
-
-        [JsonProperty("user_data")]
-        public string UserData { get; set; } // JSON 문자열 또는 JObject 형태로 처리될 수 있음
+        [JsonProperty("optionalinfo")]
+        public string OptionalInfo { get; set; }
     }
 
-    public class MissionParameter
+    public class MissionParameterDetails
     {
-        [JsonProperty("param_name")]
-        public string ParamName { get; set; }
+        [JsonProperty("value")]
+        public MissionParametersValue Value { get; set; }
 
-        [JsonProperty("param_value")]
-        public string ParamValue { get; set; } // 또는 object/JToken (값 타입에 따라)
-    }
-
-    public class MissionStep
-    {
-        [JsonProperty("step_name")]
-        public string StepName { get; set; }
+        [JsonProperty("desc")]
+        public string Description { get; set; } // "desc" 대신 Description 사용 (C# 명명 규칙)
 
         [JsonProperty("type")]
-        public string Type { get; set; } // 예: "GO_TO", "PICK_UP", "DROP_OFF" 등
+        public string Type { get; set; } // 예: "org.json.JSONObject"
 
-        [JsonProperty("command_name")]
-        public string CommandName { get; set; } // 예: "goToPoint", "pickUpLoad" 등
+        [JsonProperty("name")]
+        public string Name { get; set; } // 예: "parameters"
+    }
+
+    public class MissionRequestInner
+    {
+        [JsonProperty("requestor")]
+        public string Requestor { get; set; }
+
+        [JsonProperty("missiontype")]
+        public string MissionType { get; set; } // "0"과 같은 문자열 (PDF에 따라)
+
+        [JsonProperty("fromnode")]
+        public string FromNode { get; set; }
+
+        [JsonProperty("tonode")]
+        public string ToNode { get; set; }
+
+        [JsonProperty("cardinality")]
+        public string Cardinality { get; set; } // "1"과 같은 문자열
+
+        [JsonProperty("priority")]
+        public int Priority { get; set; }
 
         [JsonProperty("parameters")]
-        public List<MissionParameter> Parameters { get; set; } // 각 미션 스텝의 파라미터들
+        public MissionParameterDetails Parameters { get; set; }
     }
 
     public class CreateMissionRequest
     {
-        [JsonProperty("mission_name")]
-        public string MissionName { get; set; }
+        // 최상위 "missionrequest" 키를 위한 래퍼
+        [JsonProperty("missionrequest")]
+        public MissionRequestInner MissionRequest { get; set; }
+    }
 
-        [JsonProperty("properties")]
-        public MissionProperties Properties { get; set; }
+    // Create mission Response Body
+    public class MissionPayloadResponse
+    {
+        [JsonProperty("rejectedmissions")]
+        public List<string> RejectedMissions { get; set; } // 미션 ID가 문자열로 반환된다고 가정
 
-        [JsonProperty("steps")]
-        public List<MissionStep> Steps { get; set; }
+        [JsonProperty("pendingmissions")]
+        public List<string> PendingMissions { get; set; }
+
+        [JsonProperty("acceptedmissions")]
+        public List<string> AcceptedMissions { get; set; }
     }
 
     public class CreateMissionResponse
     {
-        [JsonProperty("mission_id")]
-        public int MissionId { get; set; } // 또는 long (API 응답에 따라)
+        [JsonProperty("payload")]
+        public MissionPayloadResponse Payload { get; set; }
+
+        [JsonProperty("retcode")]
+        public int RetCode { get; set; } // Return Code
     }
 
     // ====== 3. Get information about one mission (GET) - Appendix G.21 (p. 452) ======

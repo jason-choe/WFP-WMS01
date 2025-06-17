@@ -15,6 +15,7 @@ using System.Linq;
 using System.Configuration; // App.config 읽기를 위해 추가
 using System.Net.Http;
 using System.Text.Json;
+using System.Diagnostics;
 
 namespace WPF_WMS01.ViewModels
 {
@@ -329,28 +330,50 @@ namespace WPF_WMS01.ViewModels
                 {
                     Username = _apiUsername,
                     Password = _apiPassword,
-                    // apiVersion 필드를 추가합니다.
-                    ApiVersion = new ApiVersion { Major = 0, Minor = 0 }
+                    // 로그인 엔드포인트에서 예상하는 초기 API 버전을 보냅니다.
+                    // 이는 일반적으로 고정된 기본값이거나 클라이언트가 결정합니다.
+                    ApiVersion = new ApiVersion { Major = 0, Minor = 0 } // 로그인 요청 시 보낼 API 버전
                 };
 
-                //Console.WriteLine($"로그인 요청: {_httpService.BaseApiUrl}login (사용자: {_apiUsername})");
+                Debug.WriteLine($"로그인 요청: {_httpService.BaseApiUrl}wms/rest/login (사용자: {_apiUsername})");
                 LoginResponse loginRes = await _httpService.PostAsync<LoginRequest, LoginResponse>("wms/rest/login", loginReq);
 
                 if (!string.IsNullOrEmpty(loginRes?.Token))
                 {
-                    _httpService.SetAuthorizationHeader(loginRes.Token); // HttpService에 토큰 설정
+                    _httpService.SetAuthorizationHeader(loginRes.Token); // 향후 호출을 위해 Authorization 헤더 설정
                     AuthToken = loginRes.Token;
-                    // Validity는 Unix timestamp (초)이므로 DateTime으로 변환
-                    // 새 응답에는 'validity' 필드가 없으므로 토큰 만료 시간 처리를 제거하거나 변경해야 합니다.
-                    //TokenExpiryTime = DateTimeOffset.FromUnixTimeSeconds(loginRes.Validity).LocalDateTime;
+
+                    // !!! 핵심 변경: loginRes.ApiVersion을 loginRes.ApiVersionString으로 변경 !!!
+                    if (!string.IsNullOrEmpty(loginRes.ApiVersionString)) // <-- 여기를 ApiVersionString으로 변경
+                    {
+                        // "v0.19"와 같은 문자열에서 숫자 부분만 추출
+                        // 예: "v0.19" -> "0.19" -> Split('.') -> "0", "19"
+                        string versionNumbers = loginRes.ApiVersionString.TrimStart('v'); // "v" 제거
+                        string[] parts = versionNumbers.Split('.');
+
+                        if (parts.Length == 2 && int.TryParse(parts[0], out int major) && int.TryParse(parts[1], out int minor))
+                        {
+                            _httpService.SetCurrentApiVersion(major, minor);
+                            LoginStatusMessage = $"로그인 성공! (API v{major}.{minor})";
+                        }
+                        else
+                        {
+                            // 파싱 실패 시 기본값 설정
+                            _httpService.SetCurrentApiVersion(0, 0); // 기본 폴백
+                            LoginStatusMessage = $"로그인 성공! (API 버전 파싱 오류: {loginRes.ApiVersionString}, 기본값 v0.0 사용)";
+                            Console.WriteLine($"경고: 로그인 응답 API 버전 '{loginRes.ApiVersionString}' 파싱 오류. 기본값 v0.0 사용.");
+                        }
+                    }
+                    else
+                    {
+                        // API 버전 정보가 아예 없는 경우
+                        _httpService.SetCurrentApiVersion(0, 0); // 기본 폴백
+                        LoginStatusMessage = $"로그인 성공! (API 버전 정보 없음, 기본값 v0.0 사용)";
+                        Console.WriteLine("경고: 로그인 응답에 API 버전 정보가 없습니다. 기본값 v0.0 사용.");
+                    }
+
                     IsLoggedIn = true;
-                    LoginStatusMessage = $"로그인 성공!"; //({TokenExpiryTime?.ToString("yyyy-MM-dd HH:mm:ss")} 만료)";
-                    Console.WriteLine("ANT 서버 로그인 성공!");
-                }
-                else
-                {
-                    IsLoggedIn = false;
-                    MessageBox.Show("로그인 실패: 토큰을 받지 못함. (서버 응답 오류)", "ANT");
+                    Console.WriteLine("WMS 서버 로그인 성공!");
                 }
             }
             catch (HttpRequestException httpEx)
@@ -370,6 +393,7 @@ namespace WPF_WMS01.ViewModels
                 IsLoggedIn = false;
                 LoginStatusMessage = "로그인 실패";
                 MessageBox.Show($"로그인 실패: 예상치 못한 오류. {ex.Message}", "ANT");
+                Debug.WriteLine($"로그인 일반 오류: {ex.Message}");
             }
             finally
             {
@@ -380,7 +404,7 @@ namespace WPF_WMS01.ViewModels
         private bool CanExecuteLogin(object parameter)
         {
             // 이미 로그인 상태이거나 로그인 시도 중이면 로그인 버튼 비활성화
-            return !IsLoggedIn && !IsLoginAttempting;
+            return !IsLoginAttempting; // return !IsLoggedIn && !IsLoginAttempting;
         }
 
         // ViewModel이 소멸될 때 타이머를 멈추는 것이 좋습니다. (Window.Closed 이벤트 등에서 호출)

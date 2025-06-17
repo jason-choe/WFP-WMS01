@@ -91,8 +91,7 @@
                                 <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="DarkGreen"/>
                                 <Setter TargetName="StatusIcon" Property="Text" Value="✓"/>
                                 <Setter TargetName="StatusIcon" Property="Foreground" Value="White"/>
-                                <Setter Property="IsEnabled" Value="False"/>
-                                <!-- 로그인 성공 시에는 클릭 불가능 -->
+                                <Setter Property="IsEnabled" Value="True"/>   <!-- 로그인 성공 시에도 클릭 가능하도록 -->
                             </DataTrigger>
 
                             <!-- 상태: 로그인 실패/로그인 안 됨 (빨간색) - 로그인 시도 중이 아니고 로그인되지 않았을 때 -->
