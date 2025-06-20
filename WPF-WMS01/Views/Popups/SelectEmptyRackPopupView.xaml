@@ -7,42 +7,38 @@
         xmlns:viewmodels="clr-namespace:WPF_WMS01.ViewModels.Popups"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=viewmodels:SelectEmptyRackPopupViewModel}"
-        Title="빈 랙 선택" Height="600" Width="800"
+        Title="빈 랙 선택" Height="700" Width="600"
         WindowStartupLocation="CenterScreen">
-    <Grid Margin="10">
+    <Grid Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0" Text="제품을 입고할 빈 랙을 선택하십시오:"
-                   FontSize="20" FontWeight="Bold" Margin="0,0,0,10"/>
+        <TextBlock Grid.Row="0"
+                   FontSize="22" FontWeight="Bold" Margin="10,0,0,10">
+            <Run Text="Lot No. : "/>
+            <Run Text="{Binding LotNo}"/> <Run Text="{Binding FirstMessage}"/>
+            <LineBreak/> <LineBreak/> <Run Text="아래 리스트에서"/>
+            <LineBreak/> <Run Text="{Binding SecondMessage}"/> <Run Text="이 적재될 랙을 선택해 주세요."/>
+        </TextBlock>
 
-        <ListBox Grid.Row="1" ItemsSource="{Binding Racks}"
-                 SelectedItem="{Binding SelectedRack}"
-                 SelectionMode="Single"
-                 Margin="0,0,0,10"
-                 BorderBrush="LightGray" BorderThickness="1">
-            <ListBox.ItemTemplate>
-                <DataTemplate>
-                    <StackPanel Orientation="Horizontal" Margin="5">
-                        <TextBlock Text="{Binding Title}" FontSize="40" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                        <TextBlock Text="{Binding ImageIndex, StringFormat=' (빈 임시 보관 랙)'}" FontSize="24" VerticalAlignment="Center" Margin="5,0,0,0"/>
-                    </StackPanel>
-                </DataTemplate>
-            </ListBox.ItemTemplate>
-        </ListBox>
+        <ListView Grid.Row="1" ItemsSource="{Binding Racks}"
+                  SelectedItem="{Binding SelectedRack}"
+                  DisplayMemberPath="Title"
+                  SelectionMode="Single"
+                  Margin="5,5,5,35"
+                  FontSize="40" FontWeight="SemiBold">
+        </ListView>
 
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
-            <Button Content="확인"
-                    Command="{Binding ConfirmCommand}"
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="확인" Command="{Binding ConfirmCommand}"
                     CommandParameter="{Binding RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
-                    Width="120" Height="64" FontSize="24" Margin="0,0,20,0"/>
-            <Button Content="취소"
-                    Command="{Binding CancelCommand}"
+                    Width="150" Height="50" FontSize="20" Margin="0,0,20,0"/>
+            <Button Content="취소" Command="{Binding CancelCommand}"
                     CommandParameter="{Binding RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
-                    Width="120" Height="64" FontSize="24"/>
+                    Width="150" Height="50" FontSize="20"/>
         </StackPanel>
     </Grid>
 </Window>

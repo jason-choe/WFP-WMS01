@@ -178,13 +178,13 @@
                        VerticalContentAlignment="Center"
                        TextAlignment="Center" />
 
-            <Button Grid.Column="1" Content="입고"
+            <Button Grid.Column="1" Content="미포장 입고"
                     Command="{Binding InboundProductCommand}"
                     Width="120" Height="64" FontSize="20" FontWeight="Bold"
                     VerticalAlignment="Center" HorizontalAlignment="Left" Margin="0,0,20,0"/>
 
-            <Button Grid.Column="2" Content="가 입고"
-                    Command="{Binding InboundProductCommand}"
+            <Button Grid.Column="2" Content="재공품 입고"
+                    Command="{Binding FakeInboundProductCommand}"
                     Width="120" Height="64" FontSize="20" FontWeight="Bold"
                     VerticalAlignment="Center" HorizontalAlignment="Left"/>
 

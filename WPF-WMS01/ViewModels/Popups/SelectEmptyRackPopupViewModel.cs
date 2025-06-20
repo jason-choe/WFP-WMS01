@@ -59,14 +59,49 @@ namespace WPF_WMS01.ViewModels.Popups
             }
         }
 
+        private string _lotNo; // LotNo 속성
+        public string LotNo
+        {
+            get => _lotNo;
+            set
+            {
+                _lotNo = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private string _firstMessage;
+        public string FirstMessage
+        {
+            get => _firstMessage;
+            set
+            {
+                _firstMessage = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private string _secondMessage;
+        public string SecondMessage
+        {
+            get => _secondMessage;
+            set
+            {
+                _secondMessage = value;
+                OnPropertyChanged();
+            }
+        }
         public ICommand ConfirmCommand { get; private set; }
         public ICommand CancelCommand { get; private set; }
 
-        public SelectEmptyRackPopupViewModel(List<Rack> emptyRacks)
+        public SelectEmptyRackPopupViewModel(List<Rack> emptyRacks, string lotNo, string sentenceOne, string sentenceTwo)
         {
             Racks = new ObservableCollection<Rack>(emptyRacks);
             ConfirmCommand = new RelayCommand(ExecuteConfirm, CanExecuteConfirm);
             CancelCommand = new RelayCommand(ExecuteCancel);
+            FirstMessage = $" / {sentenceOne}";
+            SecondMessage = $"'{sentenceTwo}'";
+            LotNo = lotNo;
         }
 
         private void ExecuteConfirm(object parameter)

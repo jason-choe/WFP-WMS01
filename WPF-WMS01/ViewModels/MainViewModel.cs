@@ -125,7 +125,7 @@ namespace WPF_WMS01.ViewModels
             // 기존 Command 초기화
             // --- Grid>Row="1"에 새로 추가된 명령 초기화 ---
             InboundProductCommand = new RelayCommand(ExecuteInboundProduct, CanExecuteInboundProduct);
-            FakeInboundProductCommand = new RelayCommand(ExecuteInboundProduct, CanExecuteInboundProduct);
+            FakeInboundProductCommand = new RelayCommand(FakeExecuteInboundProduct, CanExecuteInboundProduct);
             Checkout223aProductCommand = new RelayCommand(
                 param => ExecuteCheckoutProduct(new CheckoutRequest { BulletType = 1, ProductName = "233A" }),
                 param => CanExecuteCheckoutProduct(new CheckoutRequest { BulletType = 1, ProductName = "233A" }));
@@ -134,7 +134,7 @@ namespace WPF_WMS01.ViewModels
                 param => CanExecuteCheckoutProduct(new CheckoutRequest { BulletType = 2, ProductName = "223SP" }));
             Checkout223xmProductCommand = new RelayCommand(
                 param => ExecuteCheckoutProduct(new CheckoutRequest { BulletType = 3, ProductName = "223XM" }),
-                param => CanExecuteCheckoutProduct(new CheckoutRequest { BulletType = 4, ProductName = "223XM" }));
+                param => CanExecuteCheckoutProduct(new CheckoutRequest { BulletType = 3, ProductName = "223XM" }));
             Checkout556xProductCommand = new RelayCommand(
                 param => ExecuteCheckoutProduct(new CheckoutRequest { BulletType = 4, ProductName = "5.56X" }),
                 param => CanExecuteCheckoutProduct(new CheckoutRequest { BulletType = 4, ProductName = "5.56K" }));
@@ -507,9 +507,10 @@ namespace WPF_WMS01.ViewModels
                 return;
             }
 
-            var selectEmptyRackViewModel = new SelectEmptyRackPopupViewModel(emptyRacks.Select(r => r.RackModel).ToList());
+            var selectEmptyRackViewModel = new SelectEmptyRackPopupViewModel(emptyRacks.Select(r => r.RackModel).ToList(),
+                _inputStringForButton.TrimStart().TrimEnd(_militaryCharacter), "미 포장 적재", "포장 전 제품");
             var selectEmptyRackView = new SelectEmptyRackPopupView { DataContext = selectEmptyRackViewModel };
-            selectEmptyRackView.Title = $"{InputStringForButton} 제품 입고할 랙 선택";
+            selectEmptyRackView.Title = $"{InputStringForButton.TrimStart().TrimEnd(this._militaryCharacter)} 제품 입고할 랙 선택";
 
             if (selectEmptyRackView.ShowDialog() == true && selectEmptyRackViewModel.DialogResult == true)
             {
@@ -783,6 +784,296 @@ namespace WPF_WMS01.ViewModels
             // 두 조건을 모두 만족할 때만 true 반환
             return /* IsLoggedIn && */ inputContainsValidProduct && emptyAndVisibleRackExists && waitRackNotLocked;
 
+        }
+
+        private async void FakeExecuteInboundProduct(object parameter)
+        {
+            // 이 시점에서는 CanExecute에서 이미 빈 랙 존재 여부를 확인했으나, 한 번 더 확인하여 안전성을 높입니다.
+            var emptyRacks = RackList?.Where(r => r.ImageIndex == 13 && r.IsVisible).ToList();
+
+            if (emptyRacks == null || !emptyRacks.Any())
+            {
+                MessageBox.Show("현재 반팔렛 입고 가능한 빈 랙이 없습니다.", "가입고 불가", MessageBoxButton.OK, MessageBoxImage.Warning);
+                // CanExecute에서 이미 막았지만, 혹시 모를 상황 대비 (경쟁 조건 등)
+                return;
+            }
+
+            var selectEmptyRackViewModel = new SelectEmptyRackPopupViewModel(emptyRacks.Select(r => r.RackModel).ToList(),
+                _inputStringForButton.TrimStart().TrimEnd(_militaryCharacter),"재공품 적재", "반팔렛 재공품");
+            var selectEmptyRackView = new SelectEmptyRackPopupView { DataContext = selectEmptyRackViewModel };
+            selectEmptyRackView.Title = $"{InputStringForButton.TrimStart().TrimEnd(this._militaryCharacter)} 반팔렛 제품 입고할 랙 선택";
+
+            if (selectEmptyRackView.ShowDialog() == true && selectEmptyRackViewModel.DialogResult == true)
+            {
+                var selectedRack = selectEmptyRackViewModel.SelectedRack;
+                if (selectedRack != null)
+                {
+                    var targetRackVm = RackList?.FirstOrDefault(r => r.Id == selectedRack.Id);
+                    var waitRackVm = RackList?.FirstOrDefault(r => r.Title == _waitRackTitle);
+
+                    if (targetRackVm == null) return;
+                    // WAIT 랙이 없으면 잠금 처리할 대상이 없으므로 null 체크
+                    // 만약 WAIT 랙이 필수라면 여기서 오류 메시지 표시
+                    //MessageBox.Show($"랙 {selectedRack.Title} 에 {InputStringForButton} 제품 입고 작업을 시작합니다. 10초 대기...", "입고 작업 시작", MessageBoxButton.OK, MessageBoxImage.Information);
+                    ShowAutoClosingMessage($"랙 {selectedRack.Title} 에 {InputStringForButton} 제품 입고 작업을 시작합니다. 10초 대기...");
+
+                    // **타겟 랙과 WAIT 랙 잠금**
+                    await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, true);
+                    Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = true);
+
+                    if (waitRackVm != null)
+                    {
+                        await _databaseService.UpdateRackStateAsync(waitRackVm.Id, waitRackVm.RackType, waitRackVm.BulletType, true);
+                        Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = true);
+                    }
+
+                    await Task.Run(async () =>
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(10)); // 10초 지연 시뮬레이션
+
+                        try
+                        {
+                            int newBulletType = 0;
+                            if (InputStringForButton.Contains("223A"))
+                            {
+                                newBulletType = 1;
+                            }
+                            else if (InputStringForButton.Contains("223SP"))
+                            {
+                                newBulletType = 2;
+                            }
+                            else if (InputStringForButton.Contains("223XM"))
+                            {
+                                newBulletType = 3;
+                            }
+                            else if (InputStringForButton.Contains("5.56X"))
+                            {
+                                newBulletType = 4;
+                            }
+                            else if (InputStringForButton.Contains("5.56K"))
+                            {
+                                newBulletType = 5;
+                            }
+                            else if (InputStringForButton.Contains("PSD"))
+                            {
+                                if (InputStringForButton.Contains(" a"))   // M885T
+                                {
+                                    newBulletType = 6;
+                                }
+                                else if (InputStringForButton.Contains(" b"))  // M193
+                                {
+                                    newBulletType = 7;
+                                }
+                                else if (InputStringForButton.Contains(" c"))  // M80
+                                {
+                                    newBulletType = 12;
+                                }
+                                else
+                                {
+                                    newBulletType = 6;   // M885T (default)
+                                }
+
+                            }
+                            else if (InputStringForButton.Contains("308B"))
+                            {
+                                newBulletType = 8;
+                            }
+                            else if (InputStringForButton.Contains("308SP"))
+                            {
+                                newBulletType = 9;
+                            }
+                            else if (InputStringForButton.Contains("308XM"))
+                            {
+                                newBulletType = 10;
+                            }
+                            else if (InputStringForButton.Contains("7.62X"))
+                            {
+                                newBulletType = 11;
+                            }
+                            else
+                            {
+                                //Application.Current.Dispatcher.Invoke(() =>   // ToDo Check
+                                //{
+                                //MessageBox.Show("입력된 문자열에서 유효한 제품 유형을 찾을 수 없습니다.", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                                ShowAutoClosingMessage("입력된 문자열에서 유효한 제품 유형을 찾을 수 없습니다."); // 오류 메시지도 자동 닫힘
+
+                                //});
+                                // 오류 발생 시 타겟 랙과 WAIT 랙 모두 잠금 해제
+                                await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, false);
+                                Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
+                                if (waitRackVm != null)
+                                {
+                                    await _databaseService.UpdateRackStateAsync(waitRackVm.Id, waitRackVm.RackType, waitRackVm.BulletType, false);
+                                    Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = false);
+                                }
+                                return;
+                            }
+
+                            // **입고: 타겟 랙만 잠금 해제 (IsLocked = false) 및 BulletType 변경**
+                            await _databaseService.UpdateRackStateAsync(
+                                selectedRack.Id,
+                                3, //selectedRack.RackType,
+                                newBulletType,
+                                false // 입고 후 타겟 랙만 잠금 해제
+                            );
+
+                            await _databaseService.UpdateLotNumberAsync(selectedRack.Id,
+                                InputStringForButton.TrimStart().TrimEnd(_militaryCharacter)); // Register lot number
+
+                            Application.Current.Dispatcher.Invoke(() =>
+                            {
+                                targetRackVm.BulletType = newBulletType;
+                                targetRackVm.IsLocked = false; // UI 업데이트 (잠금 해제)
+
+                                if (waitRackVm != null)
+                                {
+                                    // WAIT 랙 잠금 해제 (BulletType은 CanExecute에서 이미 관리됨)
+                                    waitRackVm.IsLocked = false;
+                                    // WAIT 랙의 BulletType은 CanExecuteInboundProduct에서 이미 관리되므로
+                                    // 여기서 BulletType을 다시 설정할 필요는 없습니다.
+                                }
+
+                                // WAIT 랙은 계속 잠금 상태를 유지 (CanExecute에서 제어됨)
+                                //MessageBox.Show($"랙 {selectedRack.Title} 에 제품 입고 완료.", "입고 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                                ShowAutoClosingMessage($"랙 {selectedRack.Title} 에 제품 입고 완료.");
+                                InputStringForButton = string.Empty;
+                            });
+                        }
+                        catch (Exception ex)
+                        {
+                            Application.Current.Dispatcher.Invoke(() =>
+                            {
+                                MessageBox.Show($"입고 작업 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                            });
+                            // 예외 발생 시 타겟 랙과 WAIT 랙 잠금 해제
+                            await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, false);
+                            Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
+                            if (waitRackVm != null)
+                            {
+                                await _databaseService.UpdateRackStateAsync(waitRackVm.Id, waitRackVm.RackType, waitRackVm.BulletType, false);
+                                Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = false);
+                            }
+                        }
+                    });
+                }
+            }
+            else
+            {
+                //MessageBox.Show("입고 작업이 취소되었습니다.", "취소", MessageBoxButton.OK, MessageBoxImage.Information);
+                ShowAutoClosingMessage("입고 작업이 취소되었습니다.");
+            }
+        }
+
+        private bool CanFakeExecuteInboundProduct(object parameter)
+        {
+            // 1) InputStringForButton이 '223' 또는 '308'을 포함하는지 확인
+            bool inputContainsValidProduct = !string.IsNullOrWhiteSpace(_inputStringForButton) &&
+                                             (_inputStringForButton.Contains("223A")
+                                             || _inputStringForButton.Contains("223SP")
+                                              || _inputStringForButton.Contains("223XM")
+                                               || _inputStringForButton.Contains("5.56X")
+                                                || _inputStringForButton.Contains("5.56K")
+                                                 || _inputStringForButton.Contains("PSD")
+                                                  || _inputStringForButton.Contains("308B")
+                                                   || _inputStringForButton.Contains("308SP")
+                                                    || _inputStringForButton.Contains("308XM")
+                                                     || _inputStringForButton.Contains("7.62X")
+                                             );
+
+            // 2) ImageIndex가 13 (빈 랙)이고 IsVisible이 True인 랙이 존재하는지 확인
+            bool emptyAndVisibleRackExists = RackList?.Any(r => (r.ImageIndex == 13 && r.IsVisible)) == true;
+
+            // 특정 Title을 갖는 WAIT 랙을 찾습니다.
+            var waitRackVm = RackList?.FirstOrDefault(r => r.Title == _waitRackTitle);
+
+            // 추가된 조건: WAIT 랙이 잠겨 있지 않아야 함
+            bool waitRackNotLocked = (waitRackVm?.IsLocked == false) || (waitRackVm == null); // WAIT 랙이 없거나 잠겨있지 않아야 함
+
+            // 중요: CanExecute에서 데이터 변경은 MVVM 패턴에 위배될 수 있습니다.
+            // 하지만 요청에 따라 여기에 로직을 추가합니다.
+            if (waitRackVm != null)
+            {
+                int newBulletTypeForWaitRack = 0; // 기본은 0 (비활성화 상태)
+
+                if (inputContainsValidProduct && emptyAndVisibleRackExists)
+                {
+                    // 활성화 조건 충족 시
+                    if (_inputStringForButton.Contains("223A"))
+                    {
+                        newBulletTypeForWaitRack = 1;
+                    }
+                    else if (_inputStringForButton.Contains("223SP"))
+                    {
+                        newBulletTypeForWaitRack = 2;
+                    }
+                    else if (_inputStringForButton.Contains("223XM"))
+                    {
+                        newBulletTypeForWaitRack = 3;
+                    }
+                    else if (_inputStringForButton.Contains("5.56X"))
+                    {
+                        newBulletTypeForWaitRack = 4;
+                    }
+                    else if (_inputStringForButton.Contains("5.56K"))
+                    {
+                        newBulletTypeForWaitRack = 5;
+                    }
+                    else if (_inputStringForButton.Contains("PSD") && _inputStringForButton.Contains(" a")) // M855T
+                    {
+                        newBulletTypeForWaitRack = 6;
+                    }
+                    else if (_inputStringForButton.Contains("PSD") && _inputStringForButton.Contains(" b")) // M193
+                    {
+                        newBulletTypeForWaitRack = 7;
+                    }
+                    else if (_inputStringForButton.Contains("308B"))
+                    {
+                        newBulletTypeForWaitRack = 8;
+                    }
+                    else if (_inputStringForButton.Contains("308SP"))
+                    {
+                        newBulletTypeForWaitRack = 9;
+                    }
+                    else if (_inputStringForButton.Contains("308XM"))
+                    {
+                        newBulletTypeForWaitRack = 10;
+                    }
+                    else if (_inputStringForButton.Contains("7.62X"))
+                    {
+                        newBulletTypeForWaitRack = 11;
+                    }
+                    else if (_inputStringForButton.Contains("PSD") && _inputStringForButton.Contains(" c")) // M80
+                    {
+                        newBulletTypeForWaitRack = 12;
+                    }
+                }
+
+                // WAIT 랙의 BulletType을 업데이트 (비동기 처리)
+                // UI 스레드에서 직접 데이터베이스 호출을 피하기 위해 Task.Run 사용
+                Task.Run(async () =>
+                {
+                    // 실제 DB 업데이트는 비동기로 이루어지므로,
+                    // CanExecute가 반환되기 전에 완료되지 않을 수 있습니다.
+                    // UI 스레드에 RackViewModel의 속성을 업데이트하도록 Dispatcher.Invoke 사용
+                    await _databaseService.UpdateRackStateAsync(
+                        waitRackVm.Id,
+                        waitRackVm.RackType,
+                        newBulletTypeForWaitRack,
+                        waitRackVm.IsLocked // IsLocked는 변경하지 않음
+                    );
+
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        // UI 업데이트를 위해 RackViewModel의 속성도 수동으로 업데이트합니다.
+                        // 이 부분은 _databaseService.UpdateRackStateAsync가 자동으로 갱신하는 로직이 없다고 가정할 때 필요합니다.
+                        // 만약 DB 업데이트 후 LoadRacks를 다시 호출하는 등의 로직이 있다면 이 부분은 생략 가능합니다.
+                        waitRackVm.BulletType = newBulletTypeForWaitRack;
+                    });
+                });
+            }
+
+            // 두 조건을 모두 만족할 때만 true 반환
+            return /* IsLoggedIn && */ inputContainsValidProduct && emptyAndVisibleRackExists && waitRackNotLocked;
         }
 
         private async void ExecuteCheckoutProduct(object parameter)

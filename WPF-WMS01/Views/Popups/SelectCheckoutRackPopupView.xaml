@@ -7,7 +7,7 @@
         xmlns:viewmodels="clr-namespace:WPF_WMS01.ViewModels.Popups"
         xmlns:sys="clr-namespace:System;assembly=mscorlib"
         mc:Ignorable="d"
-        Title="출고할 랙 선택" Height="600" Width="600"
+        Title="출고할 랙 선택" Height="600" Width="650"
         WindowStartupLocation="CenterScreen"
         d:DataContext="{d:DesignInstance Type=viewmodels:SelectCheckoutRackPopupViewModel, IsDesignTimeCreatable=True}"
         DataContextChanged="Window_DataContextChanged">

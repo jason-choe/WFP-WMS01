@@ -17,6 +17,7 @@
     <None Remove="images\rack_state_11.png" />
     <None Remove="images\rack_state_12.png" />
     <None Remove="images\rack_state_13.png" />
+    <None Remove="images\rack_state_139.png" />
     <None Remove="images\rack_state_14.png" />
     <None Remove="images\rack_state_15.png" />
     <None Remove="images\rack_state_16.png" />
@@ -84,6 +85,7 @@
     <Resource Include="images\rack_state_11.png" />
     <Resource Include="images\rack_state_12.png" />
     <Resource Include="images\rack_state_13.png" />
+    <Resource Include="images\rack_state_139.png" />
     <Resource Include="images\rack_state_14.png" />
     <Resource Include="images\rack_state_15.png" />
     <Resource Include="images\rack_state_16.png" />

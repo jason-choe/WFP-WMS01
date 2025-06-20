@@ -56,7 +56,17 @@ namespace WPF_WMS01.ViewModels.Popups
 
         public ConfirmShipoutPopupViewModel(string rackTitle, int bulletType, string LotNo)
         {
-            string product = bulletType == 1 ? "223A" : bulletType == 2 ? "5.56X" : bulletType == 3 ? "5.56K" : bulletType == 4 ? "308B" : bulletType == 5 ? "7.62X" : "M855T";
+            string product = bulletType == 1 ? "223A"
+                : bulletType == 2 ? "223SP"
+                : bulletType == 3 ? "223XM"
+                : bulletType == 4 ? "5.56X"
+                : bulletType == 5 ? "5.56K"
+                : bulletType == 6 ? "M855T"
+                : bulletType == 7 ? "M193"
+                : bulletType == 8 ? "308B"
+                : bulletType == 9 ? "308SP"
+                : bulletType == 10 ? "308XM"
+                : bulletType == 11 ? "7.62X" : "M855T";
             LotNoMessage = $"Lot No. :  {LotNo}";
             ConfirmationMessage = $"랙 {rackTitle}의 {product} 제품을 출고할까요?";
             ConfirmCommand = new RelayCommand(ExecuteConfirm);
