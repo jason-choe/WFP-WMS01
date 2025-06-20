@@ -62,8 +62,28 @@ namespace WPF_WMS01.ViewModels.Popups
         {
             // 🚨 수정할 부분: AvailableRacks를 설정하기 전에 Title(랙 번호) 기준으로 정렬
             AvailableRacks = new ObservableCollection<Rack>(
-                racks.OrderBy(r => r.Title) // Title 속성으로 오름차순 정렬
+                racks.OrderBy(rack =>
+                {
+                    // 첫 번째 숫자 부분 추출
+                    string[] parts = rack.Title.Split('-');
+                    if (parts.Length > 0 && int.TryParse(parts[0], out int num))
+                    {
+                        return num;
+                    }
+                    return int.MaxValue; // 파싱 실패 시 가장 뒤로 보내기
+                })
+                .ThenBy(rack =>
+                {
+                    // 두 번째 숫자 부분 추출 (있을 경우)
+                    string[] parts = rack.Title.Split('-');
+                    if (parts.Length > 1 && int.TryParse(parts[1], out int num))
+                    {
+                        return num;
+                    }
+                    return int.MaxValue; // 파싱 실패 시 가장 뒤로 보내기
+                })
             );
+
             LotNo = lotNo;
             // 🚨 수정할 부분: Title을 숫자로 파싱하여 정렬
             //AvailableRacks = new ObservableCollection<Rack>(

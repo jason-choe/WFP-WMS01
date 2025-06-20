@@ -96,7 +96,29 @@ namespace WPF_WMS01.ViewModels.Popups
 
         public SelectEmptyRackPopupViewModel(List<Rack> emptyRacks, string lotNo, string sentenceOne, string sentenceTwo)
         {
-            Racks = new ObservableCollection<Rack>(emptyRacks);
+            Racks = new ObservableCollection<Rack>(
+                emptyRacks.OrderBy(rack =>
+                {
+                    // 첫 번째 숫자 부분 추출
+                    string[] parts = rack.Title.Split('-');
+                    if (parts.Length > 0 && int.TryParse(parts[0], out int num))
+                    {
+                        return num;
+                    }
+                    return int.MaxValue; // 파싱 실패 시 가장 뒤로 보내기
+                })
+                .ThenBy(rack =>
+                {
+                    // 두 번째 숫자 부분 추출 (있을 경우)
+                    string[] parts = rack.Title.Split('-');
+                    if (parts.Length > 1 && int.TryParse(parts[1], out int num))
+                    {
+                        return num;
+                    }
+                    return int.MaxValue; // 파싱 실패 시 가장 뒤로 보내기
+                })
+            );
+
             ConfirmCommand = new RelayCommand(ExecuteConfirm, CanExecuteConfirm);
             CancelCommand = new RelayCommand(ExecuteCancel);
             FirstMessage = $" / {sentenceOne}";

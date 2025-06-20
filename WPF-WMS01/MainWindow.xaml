@@ -131,17 +131,12 @@
 
         <Border Grid.Row="0" Background="#34495e" Padding="10">
             <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-
-                <TextBlock Grid.Column="0"
+                <TextBlock 
                            Text="풍산 스포츠 탄 랙 관리 시스템"
                            FontSize="28" FontWeight="Bold" Foreground="White"
                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
 
-                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                <StackPanel  Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                     <TextBlock Text="{Binding LoginStatusMessage}"
                                Foreground="{Binding IsLoggedIn, Converter={StaticResource LoginStatusToColorConverter}}"
                                Margin="0,0,10,0" VerticalAlignment="Center" FontWeight="Bold" FontSize="18"/>
@@ -187,6 +182,12 @@
                     Command="{Binding FakeInboundProductCommand}"
                     Width="120" Height="64" FontSize="20" FontWeight="Bold"
                     VerticalAlignment="Center" HorizontalAlignment="Left"/>
+
+            <Separator Grid.Column="3">
+                <Separator.LayoutTransform>
+                    <RotateTransform Angle="90"/>
+                </Separator.LayoutTransform>
+            </Separator>
 
             <TextBox Grid.Column="4"
                      Name="ProductCodeTextBox"
