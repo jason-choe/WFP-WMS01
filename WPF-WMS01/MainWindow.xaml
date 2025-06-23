@@ -8,12 +8,12 @@
         xmlns:cnv="clr-namespace:WPF_WMS01.Converters"
         mc:Ignorable="d"
         Title="랙 관리 시스템" Height="1040" Width="1920" Left="0" Top="0" >
-        <!-- Height="768" Width="1024" WindowState="Maximized" -->
+    <!-- Height="768" Width="1024" WindowState="Maximized" -->
 
     <Window.DataContext>
         <vm:MainViewModel/>
     </Window.DataContext>
-    
+
     <Window.Resources>
         <cnv:BackgroundColorConverter x:Key="BackgroundColorConverter" />
         <cnv:ImageIndexToImagePathConverter x:Key="ImageIndexToImagePathConverter"/>
@@ -91,7 +91,8 @@
                                 <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="DarkGreen"/>
                                 <Setter TargetName="StatusIcon" Property="Text" Value="✓"/>
                                 <Setter TargetName="StatusIcon" Property="Foreground" Value="White"/>
-                                <Setter Property="IsEnabled" Value="True"/>   <!-- 로그인 성공 시에도 클릭 가능하도록 -->
+                                <Setter Property="IsEnabled" Value="True"/>
+                                <!-- 로그인 성공 시에도 클릭 가능하도록 -->
                             </DataTrigger>
 
                             <!-- 상태: 로그인 실패/로그인 안 됨 (빨간색) - 로그인 시도 중이 아니고 로그인되지 않았을 때 -->
@@ -119,6 +120,13 @@
             <!-- 기본적으로 버튼은 비활성화 상태로 시작하며, 위의 트리거에 의해 활성화됩니다. -->
             <Setter Property="IsEnabled" Value="False"/>
         </Style>
+        <Style x:Key="WmsButtonStyle" TargetType="Button">
+            <Style.Resources>
+                <Style TargetType="Border">
+                    <Setter Property="CornerRadius" Value="5"/>
+                </Style>
+            </Style.Resources>
+        </Style>
     </Window.Resources>
 
     <Grid>
@@ -131,10 +139,10 @@
 
         <Border Grid.Row="0" Background="#34495e" Padding="10">
             <Grid>
-                <TextBlock 
-                           Text="풍산 스포츠 탄 랙 관리 시스템"
-                           FontSize="28" FontWeight="Bold" Foreground="White"
-                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                <TextBlock             
+                    Text="풍산 스포츠 탄 랙 관리 시스템"
+                    FontSize="28" FontWeight="Bold" Foreground="White"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
 
                 <StackPanel  Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                     <TextBlock Text="{Binding LoginStatusMessage}"
@@ -147,31 +155,26 @@
             </Grid>
         </Border>
 
-        <Grid Grid.Row="1" Margin="40,20,20,0">
+        <Grid Grid.Row="1" Margin="40,10,20,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
+                <!-- 기존 Grid.Column="4"부터 Grid.Column="10"까지의 영역을 TabControl이 차지하도록 변경 -->
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
             <TextBox Grid.Column="0"
-                       Text="{Binding InputStringForButton, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                       MaxLength="15" Width="300" Height="80" Background="LightSeaGreen"
-                       VerticalAlignment="Center" HorizontalAlignment="Left"
-                       Margin="0,0,20,0"
-                       BorderThickness="3" 
-                       BorderBrush="Black"
-                       FontSize="28" Foreground="White"
-                       VerticalContentAlignment="Center"
-                       TextAlignment="Center" />
+                     Text="{Binding InputStringForButton, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                     MaxLength="15" Width="300" Height="80" Background="LightSeaGreen"
+                     VerticalAlignment="Center" HorizontalAlignment="Left"
+                     Margin="0,0,20,0"
+                     BorderThickness="3" 
+                     BorderBrush="Black"
+                     FontSize="28" Foreground="White"
+                     VerticalContentAlignment="Center"
+                     TextAlignment="Center" />
 
             <Button Grid.Column="1" Content="미포장 입고"
                     Command="{Binding InboundProductCommand}"
@@ -182,124 +185,252 @@
                     Command="{Binding FakeInboundProductCommand}"
                     Width="120" Height="64" FontSize="20" FontWeight="Bold"
                     VerticalAlignment="Center" HorizontalAlignment="Left"/>
-
             <Separator Grid.Column="3">
                 <Separator.LayoutTransform>
                     <RotateTransform Angle="90"/>
                 </Separator.LayoutTransform>
             </Separator>
 
-            <TextBox Grid.Column="4"
-                     Name="ProductCodeTextBox"
-                       Text="{Binding InputStringForShipOut, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                       PreviewTextInput="ProductCodeTextBox_PreviewTextInput"
-                       GotFocus="ProductCodeTextBox_GotFocus"
-                       LostFocus="ProductCodeTextBox_LostFocus"
-                       MaxLength="4" Width="200" Height="80" Background="LightSeaGreen"
-                       VerticalAlignment="Center" HorizontalAlignment="Left"
-                       Margin="0,0,20,0"
-                       BorderThickness="3" 
-                       BorderBrush="Black"
-                       FontSize="28" Foreground="White"
-                       VerticalContentAlignment="Center"
-                       TextAlignment="Center" />
+            <TabControl Grid.Column="4" Grid.ColumnSpan="7" HorizontalAlignment="Right" VerticalAlignment="Stretch"
+                        Margin="0,0,0,0">
 
-            <Grid Grid.Column="5">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="AUTO"/>
-                    <RowDefinition Height="AUTO"/>
-                </Grid.RowDefinitions>
-                <Button Grid.Row="0" Content="223A"
-                    Command="{Binding Checkout223aProductCommand}"
-                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
-                    VerticalAlignment="Center" HorizontalAlignment="Right"
-                    Margin="0,0,20,20"/>
-                <Button Grid.Row="1" Content="223SP"
-                    Command="{Binding Checkout223spProductCommand}"
-                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
-                    VerticalAlignment="Center" HorizontalAlignment="Right"
-                    Margin="0,0,20,0"/>
-            </Grid>
-            <Grid Grid.Column="6">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="AUTO"/>
-                    <RowDefinition Height="AUTO"/>
-                </Grid.RowDefinitions>
-                <Button Grid.Row="0" Content="223XM"
-                    Command="{Binding Checkout223xmProductCommand}"
-                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
-                    VerticalAlignment="Center" HorizontalAlignment="Right"
-                    Margin="0,0,20,20"/>
-                <Button Grid.Row="1" Content="5.56X"
-                    Command="{Binding Checkout556xProductCommand}"
-                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
-                    VerticalAlignment="Center" HorizontalAlignment="Right"
-                    Margin="0,0,20,0"/>
-            </Grid>
-            <Grid Grid.Column="7">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="AUTO"/>
-                    <RowDefinition Height="AUTO"/>
-                </Grid.RowDefinitions>
-                <Button Grid.Row="0" Content="5.56K"
-                    Command="{Binding Checkout556kProductCommand}"
-                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
-                    VerticalAlignment="Center" HorizontalAlignment="Right"
-                    Margin="0,0,20,20"/>
-                <Button Grid.Row="1" Content="M855T"
-                    Command="{Binding CheckoutM855tProductCommand}"
-                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
-                    VerticalAlignment="Center" HorizontalAlignment="Right"
-                    Margin="0,0,20,0"/>
-            </Grid>
-            <Grid Grid.Column="8">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="AUTO"/>
-                    <RowDefinition Height="AUTO"/>
-                </Grid.RowDefinitions>
-                <Button Grid.Row="0" Content="M193"
-                    Command="{Binding CheckoutM193ProductCommand}"
-                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
-                    VerticalAlignment="Center" HorizontalAlignment="Right"
-                    Margin="0,0,20,20"/>
-                <Button Grid.Row="1" Content="308B"
-                    Command="{Binding Checkout308bProductCommand}"
-                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
-                    VerticalAlignment="Center" HorizontalAlignment="Right"
-                    Margin="0,0,20,0"/>
-            </Grid>
-            <Grid Grid.Column="9">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="AUTO"/>
-                    <RowDefinition Height="AUTO"/>
-                </Grid.RowDefinitions>
-                <Button Grid.Row="0" Content="308SP"
-                    Command="{Binding Checkout308spProductCommand}"
-                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
-                    VerticalAlignment="Center" HorizontalAlignment="Right"
-                    Margin="0,0,20,20"/>
-                <Button Grid.Row="1" Content="308XM"
-                    Command="{Binding Checkout308xmProductCommand}"
-                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
-                    VerticalAlignment="Center" HorizontalAlignment="Right"
-                    Margin="0,0,20,0"/>
-            </Grid>
-            <Grid Grid.Column="10">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="AUTO"/>
-                    <RowDefinition Height="AUTO"/>
-                </Grid.RowDefinitions>
-                <Button Grid.Row="0" Content="7.62X"
-                    Command="{Binding Checkout762xProductCommand}"
-                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
-                    VerticalAlignment="Center" HorizontalAlignment="Right"
-                    Margin="0,0,20,20"/>
-                <Button Grid.Row="1" Content="M80"
-                    Command="{Binding CheckoutM80ProductCommand}"
-                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
-                    VerticalAlignment="Center" HorizontalAlignment="Right"
-                    Margin="0,0,20,0"/>
-            </Grid>
+                <TabItem Header="포장실 상황" Width ="150" FontSize="20" FontWeight="Bold">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Modbus 콜버튼 12개 상태 표시 (버튼 레이아웃에 맞춰 Grid로 묶음) -->
+                        <Grid Grid.Column="1">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="AUTO"/>
+                                <RowDefinition Height="AUTO"/>
+                            </Grid.RowDefinitions>
+                            <Button Grid.Row="0" Content="팔레트"
+                                    Command="{Binding ModbusCallButtonStatus[0]}"
+                                    Width="135" Height="64" FontSize="20" FontWeight="Bold"
+                                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                                    Margin="12,5,20,15"/>
+                            <Button Grid.Row="1" Content="5.56[4]"
+                                    Command="{Binding ModbusCallButtonStatus[6]}"
+                                    Width="135" Height="64" FontSize="20" FontWeight="Bold"
+                                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                                    Margin="0,0,20,0"/>
+                        </Grid>
+                        <Grid Grid.Column="2">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="AUTO"/>
+                                <RowDefinition Height="AUTO"/>
+                            </Grid.RowDefinitions>
+                            <Button Grid.Row="0" Content="단프라"
+                                    Command="{Binding ModbusCallButtonStatus[1]}"
+                                    Width="135" Height="64" FontSize="20" FontWeight="Bold"
+                                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                                    Margin="0,5,20,15"/>
+                            <Button Grid.Row="1" Content="5.56mm[5]"
+                                    Command="{Binding ModbusCallButtonStatus[7]}"
+                                    Width="135" Height="64" FontSize="20" FontWeight="Bold"
+                                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                                    Margin="0,0,20,0"/>
+                        </Grid>
+                        <Grid Grid.Column="3">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="AUTO"/>
+                                <RowDefinition Height="AUTO"/>
+                            </Grid.RowDefinitions>
+                            <Button Grid.Row="0" Content="7.62mm"
+                                    Command="{Binding ModbusCallButtonStatus[2]}"
+                                    Width="135" Height="64" FontSize="20" FontWeight="Bold"
+                                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                                    Margin="0,5,20,15"/>
+                            <Button Grid.Row="1" Content="5.56mm[6]"
+                                    Command="{Binding ModbusCallButtonStatus[8]}"
+                                    Width="135" Height="64" FontSize="20" FontWeight="Bold"
+                                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                                    Margin="0,0,20,0"/>
+                        </Grid>
+                        <Grid Grid.Column="4">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="AUTO"/>
+                                <RowDefinition Height="AUTO"/>
+                            </Grid.RowDefinitions>
+                            <Button Grid.Row="0" Content="5.56mm[1]"
+                                    Command="{Binding ModbusCallButtonStatus[3]}"
+                                    Width="135" Height="64" FontSize="20" FontWeight="Bold"
+                                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                                    Margin="0,5,20,15"/>
+                            <Button Grid.Row="1" Content="수작업[1]"
+                                    Command="{Binding ModbusCallButtonStatus[9]}"
+                                    Width="135" Height="64" FontSize="20" FontWeight="Bold"
+                                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                                    Margin="0,0,20,0"/>
+                        </Grid>
+                        <Grid Grid.Column="5">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="AUTO"/>
+                                <RowDefinition Height="AUTO"/>
+                            </Grid.RowDefinitions>
+                            <Button Grid.Row="0" Content="5.56mm[2]"
+                                    Command="{Binding ModbusCallButtonStatus[4]}"
+                                    Width="135" Height="64" FontSize="20" FontWeight="Bold"
+                                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                                    Margin="0,5,20,15"/>
+                            <Button Grid.Row="1" Content="수작업[2]"
+                                    Command="{Binding ModbusCallButtonStatus[10]}"
+                                    Width="135" Height="64" FontSize="20" FontWeight="Bold"
+                                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                                    Margin="0,0,20,0"/>
+                        </Grid>
+                        <Grid Grid.Column="6">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="AUTO"/>
+                                <RowDefinition Height="AUTO"/>
+                            </Grid.RowDefinitions>
+                            <Button Grid.Row="0" Content="5.56mm[3]"
+                                    Command="{Binding ModbusCallButtonStatus[5]}"
+                                    Width="135" Height="64" FontSize="20" FontWeight="Bold"
+                                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                                    Margin="0,5,20,15"/>
+                            <Button Grid.Row="1" Content="반팔렛 적치"
+                                    Command="{Binding ModbusCallButtonStatus[11]}"
+                                    Width="135" Height="64" FontSize="20" FontWeight="Bold"
+                                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                                    Margin="0,0,20,0"/>
+                        </Grid>
+                    </Grid>
+                </TabItem>
+                <TabItem Header="출고 관리" Width ="150" FontSize="20" FontWeight="Bold">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBox Grid.Column="0" Grid.Row="0"
+                                 Name="ProductCodeTextBox"
+                                 Text="{Binding InputStringForShipOut, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 PreviewTextInput="ProductCodeTextBox_PreviewTextInput"
+                                 GotFocus="ProductCodeTextBox_GotFocus"
+                                 LostFocus="ProductCodeTextBox_LostFocus"
+                                 MaxLength="4" Width="200" Height="80" Background="LightSeaGreen"
+                                 VerticalAlignment="Center" HorizontalAlignment="Left"
+                                 Margin="0,0,20,0"
+                                 BorderThickness="3" 
+                                 BorderBrush="Black"
+                                 FontSize="28" Foreground="White"
+                                 VerticalContentAlignment="Center"
+                                 TextAlignment="Center" />
+
+                        <Grid Grid.Column="1">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="AUTO"/>
+                                <RowDefinition Height="AUTO"/>
+                            </Grid.RowDefinitions>
+                            <Button Grid.Row="0" Content="223A"
+                                    Command="{Binding Checkout223aProductCommand}"
+                                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
+                                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                                    Margin="0,5,20,15"/>
+                            <Button Grid.Row="1" Content="223SP"
+                                    Command="{Binding Checkout223spProductCommand}"
+                                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
+                                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                                    Margin="0,0,20,0"/>
+                        </Grid>
+                        <Grid Grid.Column="2">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="AUTO"/>
+                                <RowDefinition Height="AUTO"/>
+                            </Grid.RowDefinitions>
+                            <Button Grid.Row="0" Content="223XM"
+                                    Command="{Binding Checkout223xmProductCommand}"
+                                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
+                                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                                    Margin="0,5,20,15"/>
+                            <Button Grid.Row="1" Content="5.56X"
+                                    Command="{Binding Checkout556xProductCommand}"
+                                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
+                                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                                    Margin="0,0,20,0"/>
+                        </Grid>
+                        <Grid Grid.Column="3">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="AUTO"/>
+                                <RowDefinition Height="AUTO"/>
+                            </Grid.RowDefinitions>
+                            <Button Grid.Row="0" Content="5.56K"
+                                    Command="{Binding Checkout556kProductCommand}"
+                                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
+                                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                                    Margin="0,5,20,15"/>
+                            <Button Grid.Row="1" Content="M855T"
+                                    Command="{Binding CheckoutM855tProductCommand}"
+                                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
+                                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                                    Margin="0,0,20,0"/>
+                        </Grid>
+                        <Grid Grid.Column="4">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="AUTO"/>
+                                <RowDefinition Height="AUTO"/>
+                            </Grid.RowDefinitions>
+                            <Button Grid.Row="0" Content="M193"
+                                    Command="{Binding CheckoutM193ProductCommand}"
+                                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
+                                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                                    Margin="0,5,20,15"/>
+                            <Button Grid.Row="1" Content="308B"
+                                    Command="{Binding Checkout308bProductCommand}"
+                                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
+                                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                                    Margin="0,0,20,0"/>
+                        </Grid>
+                        <Grid Grid.Column="5">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="AUTO"/>
+                                <RowDefinition Height="AUTO"/>
+                            </Grid.RowDefinitions>
+                            <Button Grid.Row="0" Content="308SP"
+                                    Command="{Binding Checkout308spProductCommand}"
+                                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
+                                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                                    Margin="0,5,20,15"/>
+                            <Button Grid.Row="1" Content="308XM"
+                                    Command="{Binding Checkout308xmProductCommand}"
+                                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
+                                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                                    Margin="0,0,20,0"/>
+                        </Grid>
+                        <Grid Grid.Column="6">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="AUTO"/>
+                                <RowDefinition Height="AUTO"/>
+                            </Grid.RowDefinitions>
+                            <Button Grid.Row="0" Content="7.62X"
+                                    Command="{Binding Checkout762xProductCommand}"
+                                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
+                                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                                    Margin="0,5,20,15"/>
+                            <Button Grid.Row="1" Content="M80"
+                                    Command="{Binding CheckoutM80ProductCommand}"
+                                    Width="100" Height="64" FontSize="20" FontWeight="Bold"
+                                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                                    Margin="0,0,20,0"/>
+                        </Grid>
+                    </Grid>
+                </TabItem>
+            </TabControl>
         </Grid>
 
         <ScrollViewer Grid.Row="2"  Margin="20,20,20,10" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
@@ -324,9 +455,9 @@
                                 <StackPanel Orientation="Vertical"
                                             Background="{Binding IsLocked, Converter={StaticResource BackgroundColorConverter}}">
                                     <Image Width="64" Height="64"  HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                Source="{Binding ImageIndex, Converter={StaticResource ImageIndexToImagePathConverter}}" />
+                                           Source="{Binding ImageIndex, Converter={StaticResource ImageIndexToImagePathConverter}}" />
                                     <TextBlock Text="{Binding Title}" FontWeight="Bold" HorizontalAlignment="Center"
-                                                Foreground="White" FontFamily="Times New Roman" Margin="0,4,0,0" FontSize="20"/>
+                                               Foreground="White" FontFamily="Times New Roman" Margin="0,4,0,0" FontSize="20"/>
                                 </StackPanel>
                             </Border>
                         </Button>
@@ -335,7 +466,7 @@
             </ItemsControl>
         </ScrollViewer>
 
-        <Grid Grid.Row="3" Margin="40,10,40,10">
+        <Grid Grid.Row="3" Margin="40,0,40,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
