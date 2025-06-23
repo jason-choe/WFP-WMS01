@@ -200,8 +200,8 @@ namespace WPF_WMS01.ViewModels
         }
         private async Task LoadRacks()
         {
-            /*try
-            {*/
+            try
+            {
                 // 실제 데이터 로딩 로직
                 var racks = await _databaseService.GetRackStatesAsync();
 
@@ -226,15 +226,15 @@ namespace WPF_WMS01.ViewModels
 
                 App.Current.Dispatcher.Invoke(() =>
                 {
-                    // 기존 데이터와 새 데이터를 비교하여 변경된 부분만 업데이트
-                    // 불필요한 UI 깜빡임을 줄일 수 있습니다.
-                    UpdateRackList(racks);
+                        // 기존 데이터와 새 데이터를 비교하여 변경된 부분만 업데이트
+                        // 불필요한 UI 깜빡임을 줄일 수 있습니다.
+                        UpdateRackList(racks);
                 });
-            /*}
+            }
             catch (Exception ex)
             {
                 MessageBox.Show($"데이터 로드 중 오류 발생: {ex.Message}");
-            }*/
+            }
         }
 
         // 예시: 랙 상태를 업데이트하는 명령 (버튼 등에 바인딩 가능)
@@ -565,11 +565,11 @@ namespace WPF_WMS01.ViewModels
                             }
                             else if (InputStringForButton.Contains("PSD"))
                             {
-                                if(InputStringForButton.Contains(" a"))   // M885T
+                                if (InputStringForButton.Contains(" a"))   // M885T
                                 {
                                     newBulletType = 6;
                                 }
-                                else if(InputStringForButton.Contains(" b"))  // M193
+                                else if (InputStringForButton.Contains(" b"))  // M193
                                 {
                                     newBulletType = 7;
                                 }
@@ -682,7 +682,9 @@ namespace WPF_WMS01.ViewModels
                                               || _inputStringForButton.Contains("223XM")
                                                || _inputStringForButton.Contains("5.56X")
                                                 || _inputStringForButton.Contains("5.56K")
-                                                 || _inputStringForButton.Contains("PSD")
+                                                 || (_inputStringForButton.Contains("PSD") && _inputStringForButton.Contains(" a"))
+                                                 || (_inputStringForButton.Contains("PSD") && _inputStringForButton.Contains(" b"))
+                                                 || (_inputStringForButton.Contains("PSD") && _inputStringForButton.Contains(" c"))
                                                   || _inputStringForButton.Contains("308B")
                                                    || _inputStringForButton.Contains("308SP")
                                                     || _inputStringForButton.Contains("308XM")
@@ -973,7 +975,9 @@ namespace WPF_WMS01.ViewModels
                                               || _inputStringForButton.Contains("223XM")
                                                || _inputStringForButton.Contains("5.56X")
                                                 || _inputStringForButton.Contains("5.56K")
-                                                 || _inputStringForButton.Contains("PSD")
+                                                 || (_inputStringForButton.Contains("PSD") && _inputStringForButton.Contains(" a"))
+                                                 || (_inputStringForButton.Contains("PSD") && _inputStringForButton.Contains(" b"))
+                                                 || (_inputStringForButton.Contains("PSD") && _inputStringForButton.Contains(" c"))
                                                   || _inputStringForButton.Contains("308B")
                                                    || _inputStringForButton.Contains("308SP")
                                                     || _inputStringForButton.Contains("308XM")

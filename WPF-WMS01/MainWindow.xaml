@@ -41,15 +41,135 @@
                         </Setter.Value>
                     </Setter>
                 </Trigger>
-                <Trigger Property="IsPressed" Value="True">
-                    <Setter Property="RenderTransform">
-                        <Setter.Value>
-                            <ScaleTransform ScaleX="0.95" ScaleY="0.95"/>
-                        </Setter.Value>
-                    </Setter>
-                </Trigger>
             </Style.Triggers>
         </Style>
+
+        <!-- 새로운 현대적인 버튼 스타일 (입고/출고 버튼용) -->
+        <Style x:Key="ModernButtonStyle" TargetType="Button">
+            <Setter Property="Background">
+                <Setter.Value>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                        <GradientStop Color="#4CAF50" Offset="0.0"/>
+                        <GradientStop Color="#388E3C" Offset="1.0"/>
+                    </LinearGradientBrush>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontSize" Value="20"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="BorderBrush" Value="#2E7D32"/>
+            <Setter Property="BorderThickness" Value="2"/>
+            <Setter Property="Padding" Value="10,5"/>
+            <Setter Property="Margin" Value="5"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" CornerRadius="8" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background">
+                                    <Setter.Value>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                            <GradientStop Color="#66BB6A" Offset="0.0"/>
+                                            <GradientStop Color="#43A047" Offset="1.0"/>
+                                        </LinearGradientBrush>
+                                    </Setter.Value>
+                                </Setter>
+                                <Setter TargetName="border" Property="Effect">
+                                    <Setter.Value>
+                                        <DropShadowEffect ShadowDepth="2" Direction="270" Color="Black" Opacity="0.3" BlurRadius="5"/>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Background">
+                                    <Setter.Value>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                            <GradientStop Color="#388E3C" Offset="0.0"/>
+                                            <GradientStop Color="#2E7D32" Offset="1.0"/>
+                                        </LinearGradientBrush>
+                                    </Setter.Value>
+                                </Setter>
+                                <Setter TargetName="border" Property="Effect">
+                                    <Setter.Value>
+                                        <DropShadowEffect ShadowDepth="1" Direction="270" Color="Black" Opacity="0.5" BlurRadius="2"/>
+                                    </Setter.Value>
+                                </Setter>
+                                <Setter Property="RenderTransform">
+                                    <Setter.Value>
+                                        <ScaleTransform ScaleX="0.98" ScaleY="0.98"/>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="border" Property="Opacity" Value="0.5"/>
+                                <Setter TargetName="border" Property="Background">
+                                    <Setter.Value>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                            <GradientStop Color="#AAAAAA" Offset="0.0"/>
+                                            <GradientStop Color="#777777" Offset="1.0"/>
+                                        </LinearGradientBrush>
+                                    </Setter.Value>
+                                </Setter>
+                                <Setter Property="Cursor" Value="Arrow"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
+        </Style>
+
+        <!-- Modbus 콜버튼 상태 표시를 위한 버튼 스타일 (Beautified) -->
+        <Style x:Key="ModbusStatusDisplayButton" TargetType="Button">
+            <Setter Property="Background" Value="#ADD8E6"/>
+            <!-- Light Blue for status -->
+            <Setter Property="Foreground" Value="#333333"/>
+            <Setter Property="FontSize" Value="18"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="BorderBrush" Value="#87CEEB"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="10"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" CornerRadius="8" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#B0E0E6"/>
+                                <!-- Slightly lighter on hover -->
+                                <Setter TargetName="border" Property="Effect">
+                                    <Setter.Value>
+                                        <DropShadowEffect ShadowDepth="1" Direction="270" Color="Black" Opacity="0.1" BlurRadius="2"/>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#87CEEB"/>
+                                <!-- Original color on press -->
+                                <Setter TargetName="border" Property="Effect">
+                                    <Setter.Value>
+                                        <DropShadowEffect ShadowDepth="0.5" Direction="270" Color="Black" Opacity="0.2" BlurRadius="1"/>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Cursor" Value="Arrow"/>
+            <!-- Not a clickable action button -->
+            <Setter Property="IsEnabled" Value="False"/>
+            <!-- Status display, not interactive by default -->
+        </Style>
+
         <!-- 새로 추가된 컨버터들 (App.xaml에도 등록 필요) -->
         <cnv:InvertBooleanConverter x:Key="InvertBooleanConverter"/>
         <cnv:LoginStatusToColorConverter x:Key="LoginStatusToColorConverter"/>
@@ -120,13 +240,6 @@
             <!-- 기본적으로 버튼은 비활성화 상태로 시작하며, 위의 트리거에 의해 활성화됩니다. -->
             <Setter Property="IsEnabled" Value="False"/>
         </Style>
-        <Style x:Key="WmsButtonStyle" TargetType="Button">
-            <Style.Resources>
-                <Style TargetType="Border">
-                    <Setter Property="CornerRadius" Value="5"/>
-                </Style>
-            </Style.Resources>
-        </Style>
     </Window.Resources>
 
     <Grid>
@@ -179,12 +292,14 @@
             <Button Grid.Column="1" Content="미포장 입고"
                     Command="{Binding InboundProductCommand}"
                     Width="120" Height="64" FontSize="20" FontWeight="Bold"
-                    VerticalAlignment="Center" HorizontalAlignment="Left" Margin="0,0,20,0"/>
+                    VerticalAlignment="Center" HorizontalAlignment="Left" Margin="0,0,20,0"
+                    Style="{StaticResource ModernButtonStyle}"/>
 
             <Button Grid.Column="2" Content="재공품 입고"
                     Command="{Binding FakeInboundProductCommand}"
                     Width="120" Height="64" FontSize="20" FontWeight="Bold"
-                    VerticalAlignment="Center" HorizontalAlignment="Left"/>
+                    VerticalAlignment="Center" HorizontalAlignment="Left"
+                    Style="{StaticResource ModernButtonStyle}"/>
             <Separator Grid.Column="3">
                 <Separator.LayoutTransform>
                     <RotateTransform Angle="90"/>
@@ -212,32 +327,32 @@
                                 <RowDefinition Height="AUTO"/>
                                 <RowDefinition Height="AUTO"/>
                             </Grid.RowDefinitions>
-                            <Button Grid.Row="0" Content="팔레트"
+                            <Button Grid.Row="0" Content="팔레트 공급"
                                     Command="{Binding ModbusCallButtonStatus[0]}"
                                     Width="135" Height="64" FontSize="20" FontWeight="Bold"
                                     VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="12,5,20,15"/>
+                                    Margin="12,5,20,15" Style="{StaticResource ModbusStatusDisplayButton}"/>
                             <Button Grid.Row="1" Content="5.56[4]"
                                     Command="{Binding ModbusCallButtonStatus[6]}"
                                     Width="135" Height="64" FontSize="20" FontWeight="Bold"
                                     VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="0,0,20,0"/>
+                                    Margin="0,0,20,0" Style="{StaticResource ModbusStatusDisplayButton}"/>
                         </Grid>
                         <Grid Grid.Column="2">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="AUTO"/>
                                 <RowDefinition Height="AUTO"/>
                             </Grid.RowDefinitions>
-                            <Button Grid.Row="0" Content="단프라"
+                            <Button Grid.Row="0" Content="단프라 공급"
                                     Command="{Binding ModbusCallButtonStatus[1]}"
                                     Width="135" Height="64" FontSize="20" FontWeight="Bold"
                                     VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="0,5,20,15"/>
+                                    Margin="0,5,20,15" Style="{StaticResource ModbusStatusDisplayButton}"/>
                             <Button Grid.Row="1" Content="5.56mm[5]"
                                     Command="{Binding ModbusCallButtonStatus[7]}"
                                     Width="135" Height="64" FontSize="20" FontWeight="Bold"
                                     VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="0,0,20,0"/>
+                                    Margin="0,0,20,0" Style="{StaticResource ModbusStatusDisplayButton}"/>
                         </Grid>
                         <Grid Grid.Column="3">
                             <Grid.RowDefinitions>
@@ -248,12 +363,12 @@
                                     Command="{Binding ModbusCallButtonStatus[2]}"
                                     Width="135" Height="64" FontSize="20" FontWeight="Bold"
                                     VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="0,5,20,15"/>
+                                    Margin="0,5,20,15" Style="{StaticResource ModbusStatusDisplayButton}"/>
                             <Button Grid.Row="1" Content="5.56mm[6]"
                                     Command="{Binding ModbusCallButtonStatus[8]}"
                                     Width="135" Height="64" FontSize="20" FontWeight="Bold"
                                     VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="0,0,20,0"/>
+                                    Margin="0,0,20,0" Style="{StaticResource ModbusStatusDisplayButton}"/>
                         </Grid>
                         <Grid Grid.Column="4">
                             <Grid.RowDefinitions>
@@ -264,12 +379,12 @@
                                     Command="{Binding ModbusCallButtonStatus[3]}"
                                     Width="135" Height="64" FontSize="20" FontWeight="Bold"
                                     VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="0,5,20,15"/>
+                                    Margin="0,5,20,15" Style="{StaticResource ModbusStatusDisplayButton}"/>
                             <Button Grid.Row="1" Content="수작업[1]"
                                     Command="{Binding ModbusCallButtonStatus[9]}"
                                     Width="135" Height="64" FontSize="20" FontWeight="Bold"
                                     VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="0,0,20,0"/>
+                                    Margin="0,0,20,0" Style="{StaticResource ModbusStatusDisplayButton}"/>
                         </Grid>
                         <Grid Grid.Column="5">
                             <Grid.RowDefinitions>
@@ -280,12 +395,12 @@
                                     Command="{Binding ModbusCallButtonStatus[4]}"
                                     Width="135" Height="64" FontSize="20" FontWeight="Bold"
                                     VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="0,5,20,15"/>
+                                    Margin="0,5,20,15" Style="{StaticResource ModbusStatusDisplayButton}"/>
                             <Button Grid.Row="1" Content="수작업[2]"
                                     Command="{Binding ModbusCallButtonStatus[10]}"
                                     Width="135" Height="64" FontSize="20" FontWeight="Bold"
                                     VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="0,0,20,0"/>
+                                    Margin="0,0,20,0" Style="{StaticResource ModbusStatusDisplayButton}"/>
                         </Grid>
                         <Grid Grid.Column="6">
                             <Grid.RowDefinitions>
@@ -296,12 +411,12 @@
                                     Command="{Binding ModbusCallButtonStatus[5]}"
                                     Width="135" Height="64" FontSize="20" FontWeight="Bold"
                                     VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="0,5,20,15"/>
+                                    Margin="0,5,20,15" Style="{StaticResource ModbusStatusDisplayButton}"/>
                             <Button Grid.Row="1" Content="반팔렛 적치"
                                     Command="{Binding ModbusCallButtonStatus[11]}"
                                     Width="135" Height="64" FontSize="20" FontWeight="Bold"
                                     VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="0,0,20,0"/>
+                                    Margin="0,0,20,0" Style="{StaticResource ModbusStatusDisplayButton}"/>
                         </Grid>
                     </Grid>
                 </TabItem>
@@ -341,12 +456,12 @@
                                     Command="{Binding Checkout223aProductCommand}"
                                     Width="100" Height="64" FontSize="20" FontWeight="Bold"
                                     VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="0,5,20,15"/>
+                                    Margin="0,5,20,15" Style="{StaticResource ModernButtonStyle}"/>
                             <Button Grid.Row="1" Content="223SP"
                                     Command="{Binding Checkout223spProductCommand}"
                                     Width="100" Height="64" FontSize="20" FontWeight="Bold"
                                     VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="0,0,20,0"/>
+                                    Margin="0,0,20,0" Style="{StaticResource ModernButtonStyle}"/>
                         </Grid>
                         <Grid Grid.Column="2">
                             <Grid.RowDefinitions>
@@ -357,12 +472,12 @@
                                     Command="{Binding Checkout223xmProductCommand}"
                                     Width="100" Height="64" FontSize="20" FontWeight="Bold"
                                     VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="0,5,20,15"/>
+                                    Margin="0,5,20,15" Style="{StaticResource ModernButtonStyle}"/>
                             <Button Grid.Row="1" Content="5.56X"
                                     Command="{Binding Checkout556xProductCommand}"
                                     Width="100" Height="64" FontSize="20" FontWeight="Bold"
                                     VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="0,0,20,0"/>
+                                    Margin="0,0,20,0" Style="{StaticResource ModernButtonStyle}"/>
                         </Grid>
                         <Grid Grid.Column="3">
                             <Grid.RowDefinitions>
@@ -373,12 +488,12 @@
                                     Command="{Binding Checkout556kProductCommand}"
                                     Width="100" Height="64" FontSize="20" FontWeight="Bold"
                                     VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="0,5,20,15"/>
+                                    Margin="0,5,20,15" Style="{StaticResource ModernButtonStyle}"/>
                             <Button Grid.Row="1" Content="M855T"
                                     Command="{Binding CheckoutM855tProductCommand}"
                                     Width="100" Height="64" FontSize="20" FontWeight="Bold"
                                     VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="0,0,20,0"/>
+                                    Margin="0,0,20,0" Style="{StaticResource ModernButtonStyle}"/>
                         </Grid>
                         <Grid Grid.Column="4">
                             <Grid.RowDefinitions>
@@ -389,12 +504,12 @@
                                     Command="{Binding CheckoutM193ProductCommand}"
                                     Width="100" Height="64" FontSize="20" FontWeight="Bold"
                                     VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="0,5,20,15"/>
+                                    Margin="0,5,20,15" Style="{StaticResource ModernButtonStyle}"/>
                             <Button Grid.Row="1" Content="308B"
                                     Command="{Binding Checkout308bProductCommand}"
                                     Width="100" Height="64" FontSize="20" FontWeight="Bold"
                                     VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="0,0,20,0"/>
+                                    Margin="0,0,20,0" Style="{StaticResource ModernButtonStyle}"/>
                         </Grid>
                         <Grid Grid.Column="5">
                             <Grid.RowDefinitions>
@@ -405,12 +520,12 @@
                                     Command="{Binding Checkout308spProductCommand}"
                                     Width="100" Height="64" FontSize="20" FontWeight="Bold"
                                     VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="0,5,20,15"/>
+                                    Margin="0,5,20,15" Style="{StaticResource ModernButtonStyle}"/>
                             <Button Grid.Row="1" Content="308XM"
                                     Command="{Binding Checkout308xmProductCommand}"
                                     Width="100" Height="64" FontSize="20" FontWeight="Bold"
                                     VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="0,0,20,0"/>
+                                    Margin="0,0,20,0" Style="{StaticResource ModernButtonStyle}"/>
                         </Grid>
                         <Grid Grid.Column="6">
                             <Grid.RowDefinitions>
@@ -421,12 +536,12 @@
                                     Command="{Binding Checkout762xProductCommand}"
                                     Width="100" Height="64" FontSize="20" FontWeight="Bold"
                                     VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="0,5,20,15"/>
+                                    Margin="0,5,20,15" Style="{StaticResource ModernButtonStyle}"/>
                             <Button Grid.Row="1" Content="M80"
                                     Command="{Binding CheckoutM80ProductCommand}"
                                     Width="100" Height="64" FontSize="20" FontWeight="Bold"
                                     VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="0,0,20,0"/>
+                                    Margin="0,0,20,0" Style="{StaticResource ModernButtonStyle}"/>
                         </Grid>
                     </Grid>
                 </TabItem>
