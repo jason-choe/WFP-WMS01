@@ -15,7 +15,7 @@ namespace WPF_WMS01
         public MainWindow()
         {
             InitializeComponent();
-            this.DataContext = new ViewModels.MainViewModel();
+            //this.DataContext = new ViewModels.MainViewModel();
         }
 
         private void ProductCodeTextBox_PreviewTextInput(object sender, TextCompositionEventArgs e)

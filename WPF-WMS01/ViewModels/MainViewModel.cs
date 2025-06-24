@@ -16,6 +16,8 @@ using System.Configuration; // App.config 읽기를 위해 추가
 using System.Net.Http;
 using System.Text.Json;
 using System.Diagnostics;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
 
 namespace WPF_WMS01.ViewModels
 {
@@ -88,8 +90,35 @@ namespace WPF_WMS01.ViewModels
             }
         }
 
+        private bool _isMenuOpen;
+        public bool IsMenuOpen
+        {
+            get => _isMenuOpen;
+            set
+            {
+                if (_isMenuOpen != value)
+                {
+                    _isMenuOpen = value;
+                    OnPropertyChanged(nameof(IsMenuOpen)); // 반드시 호출되어야 합니다.
+                }
+            }
+        }
+        // INotifyPropertyChanged 구현 (예: ObservableObject 상속 또는 수동 구현)
+        public event PropertyChangedEventHandler PropertyChanged;
+        protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+
         public ICommand LoginCommand { get; private set; }
         // === 로그인 관련 속성 및 Command 끝 ===
+        // 햄버거 메뉴를 열고 닫는 커맨드
+        public ICommand OpenMenuCommand { get; }
+        public ICommand CloseMenuCommand { get; }
+        // 메뉴 아이템 커맨드 (예시)
+        public ICommand MenuItem1Command { get; }
+        public ICommand MenuItem2Command { get; }
+        public ICommand MenuItem3Command { get; }
 
         public MainViewModel() // 디자인 타임용 또는 DI가 없는 경우를 위한 기본 생성자
         {
@@ -97,9 +126,30 @@ namespace WPF_WMS01.ViewModels
             _waitRackTitle = ConfigurationManager.AppSettings["WaitRackTitle"] ?? "WAIT";
             _httpService = new HttpService("http://localhost:8080/"); // 기본 URL, 실제 App.config에서 가져와야 함
 
+            //OpenMenuCommand = new RelayCommand(p => IsMenuOpen = !IsMenuOpen);
+            OpenMenuCommand = new RelayCommand(p => ExecuteOpenMenuCommand());
+            MenuItem1Command = new RelayCommand(p => OnMenuItem1Executed(p));
+            MenuItem2Command = new RelayCommand(p => OnMenuItem2Executed(p));
+            MenuItem3Command = new RelayCommand(p => OnMenuItem3Executed(p));
+            CloseMenuCommand = new RelayCommand(p => ExecuteCloseMenuCommand());
+
             InitializeCommands();
             SetupRefreshTimer();
             _ = LoadRacksAsync();
+        }
+
+        private string _popupDebugMessage;
+        public string PopupDebugMessage
+        {
+            get => _popupDebugMessage;
+            set
+            {
+                if (_popupDebugMessage != value)
+                {
+                    _popupDebugMessage = value;
+                    OnPropertyChanged();
+                }
+            }
         }
 
         // DI를 통해 HttpService와 로그인 정보를 주입받는 주 생성자
@@ -112,12 +162,53 @@ namespace WPF_WMS01.ViewModels
             _apiUsername = username;
             _apiPassword = password;
 
+           // OpenMenuCommand = new RelayCommand(p => IsMenuOpen = !IsMenuOpen);
+            //OpenMenuCommand = new RelayCommand(p => ExecuteOpenMenuCommand());
+            // 다른 메뉴 아이템 커맨드 초기화 (예시)
+            //MenuItem1Command = new RelayCommand(p => OnMenuItem1Executed(p));
+            //MenuItem2Command = new RelayCommand(p => OnMenuItem2Executed(p));
+            //MenuItem3Command = new RelayCommand(p => OnMenuItem3Executed(p));
+            //CloseMenuCommand = new RelayCommand(p => ExecuteCloseMenuCommand());
             InitializeCommands();
             SetupRefreshTimer();
             _ = LoadRacksAsync();
 
             // 애플리케이션 시작 시 자동 로그인 시도
             _ = AutoLoginOnStartup(); // Fire and forget. 비동기 메서드를 호출하고 반환 값을 기다리지 않음.
+        }
+
+        private void ExecuteOpenMenuCommand()
+        {
+            IsMenuOpen = !IsMenuOpen; // 햄버거 버튼 클릭 시 팝업 상태 토글
+            Debug.WriteLine($"햄버거 버튼 클릭됨. IsMenuOpen: {IsMenuOpen}"); // 디버깅을 위한 출력
+        }
+
+        private void ExecuteCloseMenuCommand()
+        {
+            IsMenuOpen = false; // 메뉴 닫기 버튼 클릭 시 팝업 닫기
+            Debug.WriteLine("메뉴 닫기 버튼 클릭됨. IsMenuOpen: False");
+        }
+
+        // 메뉴 아이템 실행 로직 (예시)
+        private void OnMenuItem1Executed(object parameter)
+        {
+            // "옵션 1" 클릭 시 실행될 로직
+            System.Diagnostics.Debug.WriteLine($"옵션 1이 클릭되었습니다. 파라미터: {parameter}");
+            IsMenuOpen = false; // 메뉴 닫기
+        }
+
+        private void OnMenuItem2Executed(object parameter)
+        {
+            // "옵션 2" 클릭 시 실행될 로직
+            System.Diagnostics.Debug.WriteLine($"옵션 2가 클릭되었습니다. 파라미터: {parameter}");
+            IsMenuOpen = false; // 메뉴 닫기
+        }
+
+        private void OnMenuItem3Executed(object parameter)
+        {
+            // "옵션 3" 클릭 시 실행될 로직
+            System.Diagnostics.Debug.WriteLine($"옵션 3이 클릭되었습니다. 파라미터: {parameter}");
+            IsMenuOpen = false; // 메뉴 닫기
         }
 
         private void InitializeCommands()

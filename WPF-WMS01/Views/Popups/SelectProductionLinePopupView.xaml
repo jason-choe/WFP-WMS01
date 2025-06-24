@@ -31,7 +31,7 @@
                   SelectedItem="{Binding SelectedLocation, Mode=TwoWay}"
                   DisplayMemberPath="Name"
                   SelectionMode="Single"
-                  Margin="5,5,5,35"
+                  Margin="5,5,5,30"
                   FontSize="40" FontWeight="SemiBold">
         </ListView>
 

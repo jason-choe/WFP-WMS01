@@ -170,6 +170,71 @@
             <!-- Status display, not interactive by default -->
         </Style>
 
+        <!-- 햄버거 버튼 스타일 -->
+        <Style x:Key="HamburgerButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="40"/>
+            <Setter Property="Height" Value="40"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}">
+                            <Grid>
+                                <Path Fill="{TemplateBinding Foreground}" Data="M0,8 L24,8 M0,16 L24,16 M0,24 L24,24"
+                                      Stretch="Uniform" Width="24" Height="24" Stroke="{TemplateBinding Foreground}" StrokeThickness="2"
+                                      VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Opacity" Value="0.7"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Foreground" Value="White"/>
+            <!-- 햄버거 아이콘 색상 -->
+        </Style>
+        
+        <!-- 메뉴 아이템 버튼 스타일 -->
+        <Style x:Key="MenuItemButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontSize" Value="18"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Padding" Value="10,8"/> <!-- 패딩 조정 -->
+            <Setter Property="Margin" Value="0,1"/> <!-- 마진 조정 -->
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#607D8B"/> <!-- Darker shade for hover -->
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#37474F"/> <!-- Even darker for pressed -->
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- 공통 그림자 효과 리소스 -->
+        <DropShadowEffect x:Key="DefaultShadow" ShadowDepth="2" Direction="270" Color="Black" Opacity="0.3" BlurRadius="5"/>
+        
         <!-- 새로 추가된 컨버터들 (App.xaml에도 등록 필요) -->
         <cnv:InvertBooleanConverter x:Key="InvertBooleanConverter"/>
         <cnv:LoginStatusToColorConverter x:Key="LoginStatusToColorConverter"/>
@@ -252,12 +317,22 @@
 
         <Border Grid.Row="0" Background="#34495e" Padding="10">
             <Grid>
-                <TextBlock             
+
+
+                <Button 
+                        Style="{StaticResource HamburgerButtonStyle}"
+                        HorizontalAlignment="Left" VerticalAlignment="Center"
+                        Margin="10,0,0,0"
+                        Command="{Binding OpenMenuCommand}"
+                        x:Name="HamburgerButton"/>
+
+                <TextBlock
                     Text="풍산 스포츠 탄 랙 관리 시스템"
                     FontSize="28" FontWeight="Bold" Foreground="White"
                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
 
-                <StackPanel  Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                <StackPanel 
+                    Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                     <TextBlock Text="{Binding LoginStatusMessage}"
                                Foreground="{Binding IsLoggedIn, Converter={StaticResource LoginStatusToColorConverter}}"
                                Margin="0,0,10,0" VerticalAlignment="Center" FontWeight="Bold" FontSize="18"/>
@@ -265,53 +340,86 @@
                     <Button Command="{Binding LoginCommand}"
                             Style="{StaticResource LoginStatusButtonStyle}"/>
                 </StackPanel>
+
+                <!-- 햄버거 버튼 클릭 시 나타날 팝업 메뉴 -->
+                <Popup x:Name="MenuPopup"
+                       IsOpen="{Binding IsMenuOpen, Mode=TwoWay}"
+                       PlacementTarget="{Binding ElementName=HamburgerButton}"
+                       Placement="Bottom"
+                       AllowsTransparency="True"
+                       StaysOpen="False"
+                       Width="200"
+                       PopupAnimation="Slide">
+                    <Border Background="#455A64" CornerRadius="5" BorderThickness="1" BorderBrush="#263238" Padding="5"
+                            Effect="{StaticResource DefaultShadow}">
+                        <StackPanel>
+                            <Button Content="옵션 1" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding MenuItem1Command}"/>
+                            <Button Content="옵션 2" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding MenuItem2Command}"/>
+                            <Button Content="옵션 3" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding MenuItem3Command}"/>
+                            <!-- 팝업이 닫힐 때 IsMenuOpen을 False로 설정하는 버튼 추가 -->
+                            <Button Content="메뉴 닫기" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding CloseMenuCommand}" Margin="0,10,0,0"/>
+                        </StackPanel>
+                    </Border>
+                </Popup>
             </Grid>
         </Border>
 
         <Grid Grid.Row="1" Margin="40,10,20,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
-                <!-- 기존 Grid.Column="4"부터 Grid.Column="10"까지의 영역을 TabControl이 차지하도록 변경 -->
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
+            
+            <TabControl Grid.Column="0" HorizontalAlignment="Left" VerticalAlignment="Stretch"
+                        Margin="0,0,0,0" BorderThickness="0">
 
-            <TextBlock Grid.Column="0" Margin="5,25,0,0"
-                     Text="Lot 번호:"
-                     FontSize="20" Foreground="Black"
-                     VerticalAlignment="Top"/>
-            <TextBox Grid.Column="0"
-                     Text="{Binding InputStringForButton, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                     MaxLength="15" Width="300" Height="80" Background="LightSeaGreen"
-                     VerticalAlignment="Center" HorizontalAlignment="Left"
-                     Margin="0,0,20,0"
-                     BorderThickness="3" 
-                     BorderBrush="Black"
-                     FontSize="28" Foreground="White"
-                     VerticalContentAlignment="Center"
-                     TextAlignment="Center" />
+                <TabItem Header="입고 관리" Width ="150" FontSize="20" FontWeight="Bold">
+                    <Grid>
+                            <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0"
+                             Margin="5,10,0,0"
+                             Text="Lot 번호:"
+                             FontSize="18" Foreground="Black" FontWeight="Light"
+                             VerticalAlignment="Top"/>
+                        <TextBox  Grid.Column="0"                     
+                             Text="{Binding InputStringForButton, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             MaxLength="15" Width="300" Height="80" Background="LightSeaGreen"
+                             VerticalAlignment="Center" HorizontalAlignment="Left"
+                             Margin="0,0,20,0"
+                             BorderThickness="3" 
+                             BorderBrush="Black"
+                             FontSize="28" Foreground="White"
+                             VerticalContentAlignment="Center"
+                             TextAlignment="Center" />
+                        
+                        <Button Grid.Column="1" Content="미포장 입고"
+                             Command="{Binding InboundProductCommand}"
+                             Width="120" Height="64" FontSize="20" FontWeight="Bold"
+                             VerticalAlignment="Center" HorizontalAlignment="Left" Margin="0,0,20,0"
+                             Style="{StaticResource ModernButtonStyle}"/>
 
-            <Button Grid.Column="1" Content="미포장 입고"
-                    Command="{Binding InboundProductCommand}"
-                    Width="120" Height="64" FontSize="20" FontWeight="Bold"
-                    VerticalAlignment="Center" HorizontalAlignment="Left" Margin="0,0,20,0"
-                    Style="{StaticResource ModernButtonStyle}"/>
-
-            <Button Grid.Column="2" Content="재공품 입고"
-                    Command="{Binding FakeInboundProductCommand}"
-                    Width="120" Height="64" FontSize="20" FontWeight="Bold"
-                    VerticalAlignment="Center" HorizontalAlignment="Left"
-                    Style="{StaticResource ModernButtonStyle}"/>
-            <Separator Grid.Column="3">
+                        <Button Grid.Column="2" Content="재공품 입고"
+                             Command="{Binding FakeInboundProductCommand}"
+                             Width="120" Height="64" FontSize="20" FontWeight="Bold"
+                             VerticalAlignment="Center" HorizontalAlignment="Left"
+                             Style="{StaticResource ModernButtonStyle}"/>
+                    </Grid>
+                </TabItem>
+            </TabControl>
+    
+            <Separator Grid.Column="1">
                 <Separator.LayoutTransform>
                     <RotateTransform Angle="90"/>
                 </Separator.LayoutTransform>
             </Separator>
 
-            <TabControl Grid.Column="4" Grid.ColumnSpan="7" HorizontalAlignment="Right" VerticalAlignment="Stretch"
-                        Margin="0,0,0,0">
+            <TabControl Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Stretch"
+                        Margin="0,0,0,0" BorderThickness="0">
 
                 <TabItem Header="포장실 상황" Width ="150" FontSize="20" FontWeight="Bold">
                     <Grid>
