@@ -1188,7 +1188,7 @@ namespace WPF_WMS01.ViewModels
             if (parameter is CheckoutRequest request)
             {
                 // 잠겨있지 않은 해당 제품 랙이 하나라도 있으면 활성화
-                return /* IsLoggedIn &&*/ RackList?.Any(r => r.RackType == 1 && r.BulletType == request.BulletType && !r.IsLocked) == true;
+                return /* IsLoggedIn &&*/ RackList?.Any(r => r.RackType == 1 && r.BulletType == request.BulletType && !r.IsLocked && r.LotNumber.Contains((InputStringForShipOut == null || InputStringForShipOut == "") ? "" : "-" + InputStringForShipOut)) == true;
             }
             return false; // 유효하지 않은 요청이면 비활성화
         }

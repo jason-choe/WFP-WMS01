@@ -278,6 +278,10 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
+            <TextBlock Grid.Column="0" Margin="5,25,0,0"
+                     Text="Lot 번호:"
+                     FontSize="20" Foreground="Black"
+                     VerticalAlignment="Top"/>
             <TextBox Grid.Column="0"
                      Text="{Binding InputStringForButton, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      MaxLength="15" Width="300" Height="80" Background="LightSeaGreen"
@@ -332,7 +336,7 @@
                                     Width="135" Height="64" FontSize="20" FontWeight="Bold"
                                     VerticalAlignment="Center" HorizontalAlignment="Right"
                                     Margin="12,5,20,15" Style="{StaticResource ModbusStatusDisplayButton}"/>
-                            <Button Grid.Row="1" Content="5.56[4]"
+                            <Button Grid.Row="1" Content="5.56mm[4]"
                                     Command="{Binding ModbusCallButtonStatus[6]}"
                                     Width="135" Height="64" FontSize="20" FontWeight="Bold"
                                     VerticalAlignment="Center" HorizontalAlignment="Right"
@@ -431,7 +435,11 @@
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-
+                         <TextBlock Grid.Column="0" Margin="5,10,0,0"
+                                 Text="Lot 일련번호:"
+                                 FontWeight="Light"
+                                 FontSize="18" Foreground="Black"
+                                 VerticalAlignment="Top"/>
                         <TextBox Grid.Column="0" Grid.Row="0"
                                  Name="ProductCodeTextBox"
                                  Text="{Binding InputStringForShipOut, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
