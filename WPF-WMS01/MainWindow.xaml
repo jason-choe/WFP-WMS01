@@ -127,7 +127,6 @@
         <!-- Modbus 콜버튼 상태 표시를 위한 버튼 스타일 (Beautified) -->
         <Style x:Key="ModbusStatusDisplayButton" TargetType="Button">
             <Setter Property="Background" Value="#ADD8E6"/>
-            <!-- Light Blue for status -->
             <Setter Property="Foreground" Value="#333333"/>
             <Setter Property="FontSize" Value="18"/>
             <Setter Property="FontWeight" Value="Bold"/>
@@ -139,12 +138,45 @@
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="border" CornerRadius="8" Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <Grid>
+                                <!-- ContentPresenter는 기본 버튼 텍스트를 표시 -->
+                                <ContentPresenter x:Name="ButtonContent" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                  Visibility="{Binding IsProcessing, Converter={StaticResource BooleanToVisibilityConverterForHidden}}"/>
+
+                                <!-- 진행 중일 때만 보이는 ProgressBar -->
+                                <ProgressBar x:Name="TaskProgressBar"
+                                             Minimum="0" Maximum="100"
+                                             Value="{Binding CurrentProgress}"
+                                             Height="20"
+                                             HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                                             Margin="5"
+                                             Visibility="{Binding IsProcessing, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <ProgressBar.Template>
+                                        <ControlTemplate TargetType="ProgressBar">
+                                            <Grid>
+                                                <Border CornerRadius="4" BorderBrush="#007ACC" BorderThickness="1" Background="#E0E0E0"/>
+                                                <Border CornerRadius="4" Background="#007ACC" HorizontalAlignment="Left"
+                                                        Width="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=ActualWidth, Converter={StaticResource ProgressToWidthConverter}, ConverterParameter={RelativeSource TemplatedParent}}">
+                                                    <!-- ProgressToWidthConverter는 ProgressBar의 Width를 진행률에 따라 조절 -->
+                                                    <TextBlock Text="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Value, StringFormat={}{0:F0}%}"
+                                                               Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                </Border>
+                                            </Grid>
+                                        </ControlTemplate>
+                                    </ProgressBar.Template>
+                                </ProgressBar>
+
+                                <!-- 진행 중일 때 보이는 메시지 (선택 사항, ProgressBar 위에 오버레이) -->
+                                <TextBlock x:Name="ProcessingTextBlock"
+                                           Text="{Binding CurrentProgress, StringFormat={}진행 중: {0:F0}%}"
+                                           Foreground="Black" FontWeight="Bold" FontSize="14"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Visibility="{Binding IsProcessing, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                            </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="border" Property="Background" Value="#B0E0E6"/>
-                                <!-- Slightly lighter on hover -->
                                 <Setter TargetName="border" Property="Effect">
                                     <Setter.Value>
                                         <DropShadowEffect ShadowDepth="1" Direction="270" Color="Black" Opacity="0.1" BlurRadius="2"/>
@@ -153,22 +185,40 @@
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="border" Property="Background" Value="#87CEEB"/>
-                                <!-- Original color on press -->
                                 <Setter TargetName="border" Property="Effect">
                                     <Setter.Value>
                                         <DropShadowEffect ShadowDepth="0.5" Direction="270" Color="Black" Opacity="0.2" BlurRadius="1"/>
                                     </Setter.Value>
                                 </Setter>
                             </Trigger>
+                            <!-- IsEnabled는 ViewModel의 IsEnabled에 바인딩되므로 여기서는 제거 -->
+                            <!-- <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="border" Property="Opacity" Value="0.6"/>
+                            </Trigger> -->
+                            <!-- IsProcessing 상태에 따른 배경색 변경 -->
+                            <DataTrigger Binding="{Binding IsProcessing}" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#FFD700"/>
+                                <!-- Gold color for processing -->
+                                <Setter Property="Cursor" Value="Wait"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsEnabled}" Value="False">
+                                <Setter TargetName="border" Property="Opacity" Value="0.6"/>
+                                <Setter Property="Cursor" Value="Arrow"/>
+                            </DataTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
-            <Setter Property="Cursor" Value="Arrow"/>
-            <!-- Not a clickable action button -->
-            <Setter Property="IsEnabled" Value="False"/>
-            <!-- Status display, not interactive by default -->
         </Style>
+
+        <!-- BooleanToVisibilityConverter (Visible/Collapsed) -->
+        <!-- BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/ -->
+        <!-- Inverted BooleanToVisibilityConverter (Hidden/Visible) -->
+        <!-- cnv:InvertBooleanConverter x:Key="InvertBooleanConverter"/ -->
+        <cnv:LoginStatusToColorConverter x:Key="LoginStatusToColorConverter"/>
+
+        <!-- ProgressToWidthConverter: ProgressBar의 너비를 진행률에 맞춰 조절하는 컨버터 -->
+        <cnv:ProgressToWidthConverter x:Key="ProgressToWidthConverter"/>
 
         <!-- 햄버거 버튼 스타일 -->
         <Style x:Key="HamburgerButtonStyle" TargetType="Button">
@@ -202,7 +252,6 @@
                 </Setter.Value>
             </Setter>
             <Setter Property="Foreground" Value="White"/>
-            <!-- 햄버거 아이콘 색상 -->
         </Style>
         
         <!-- 메뉴 아이템 버튼 스타일 -->
@@ -211,8 +260,8 @@
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="FontSize" Value="18"/>
             <Setter Property="HorizontalContentAlignment" Value="Left"/>
-            <Setter Property="Padding" Value="10,8"/> <!-- 패딩 조정 -->
-            <Setter Property="Margin" Value="0,1"/> <!-- 마진 조정 -->
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="Margin" Value="0,1"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -222,22 +271,17 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#607D8B"/> <!-- Darker shade for hover -->
+                                <Setter TargetName="border" Property="Background" Value="#607D8B"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#37474F"/> <!-- Even darker for pressed -->
+                                <Setter TargetName="border" Property="Background" Value="#37474F"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
-        <!-- 공통 그림자 효과 리소스 -->
         <DropShadowEffect x:Key="DefaultShadow" ShadowDepth="2" Direction="270" Color="Black" Opacity="0.3" BlurRadius="5"/>
-        
-        <!-- 새로 추가된 컨버터들 (App.xaml에도 등록 필요) -->
-        <cnv:InvertBooleanConverter x:Key="InvertBooleanConverter"/>
-        <cnv:LoginStatusToColorConverter x:Key="LoginStatusToColorConverter"/>
 
         <!-- 원형 로그인 상태 버튼 스타일 -->
         <Style x:Key="LoginStatusButtonStyle" TargetType="Button">
@@ -317,8 +361,6 @@
 
         <Border Grid.Row="0" Background="#34495e" Padding="10">
             <Grid>
-
-
                 <Button 
                         Style="{StaticResource HamburgerButtonStyle}"
                         HorizontalAlignment="Left" VerticalAlignment="Center"
@@ -424,7 +466,7 @@
                 <TabItem Header="포장실 상황" Width ="150" FontSize="20" FontWeight="Bold">
                     <Grid>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="10"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
@@ -433,103 +475,25 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
-                        <!-- Modbus 콜버튼 12개 상태 표시 (버튼 레이아웃에 맞춰 Grid로 묶음) -->
-                        <Grid Grid.Column="1">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="AUTO"/>
-                                <RowDefinition Height="AUTO"/>
-                            </Grid.RowDefinitions>
-                            <Button Grid.Row="0" Content="팔레트 공급"
-                                    Command="{Binding ModbusCallButtonStatus[0]}"
-                                    Width="135" Height="64" FontSize="20" FontWeight="Bold"
-                                    VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="12,5,20,15" Style="{StaticResource ModbusStatusDisplayButton}"/>
-                            <Button Grid.Row="1" Content="5.56mm[4]"
-                                    Command="{Binding ModbusCallButtonStatus[6]}"
-                                    Width="135" Height="64" FontSize="20" FontWeight="Bold"
-                                    VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="0,0,20,0" Style="{StaticResource ModbusStatusDisplayButton}"/>
-                        </Grid>
-                        <Grid Grid.Column="2">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="AUTO"/>
-                                <RowDefinition Height="AUTO"/>
-                            </Grid.RowDefinitions>
-                            <Button Grid.Row="0" Content="단프라 공급"
-                                    Command="{Binding ModbusCallButtonStatus[1]}"
-                                    Width="135" Height="64" FontSize="20" FontWeight="Bold"
-                                    VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="0,5,20,15" Style="{StaticResource ModbusStatusDisplayButton}"/>
-                            <Button Grid.Row="1" Content="5.56mm[5]"
-                                    Command="{Binding ModbusCallButtonStatus[7]}"
-                                    Width="135" Height="64" FontSize="20" FontWeight="Bold"
-                                    VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="0,0,20,0" Style="{StaticResource ModbusStatusDisplayButton}"/>
-                        </Grid>
-                        <Grid Grid.Column="3">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="AUTO"/>
-                                <RowDefinition Height="AUTO"/>
-                            </Grid.RowDefinitions>
-                            <Button Grid.Row="0" Content="7.62mm"
-                                    Command="{Binding ModbusCallButtonStatus[2]}"
-                                    Width="135" Height="64" FontSize="20" FontWeight="Bold"
-                                    VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="0,5,20,15" Style="{StaticResource ModbusStatusDisplayButton}"/>
-                            <Button Grid.Row="1" Content="5.56mm[6]"
-                                    Command="{Binding ModbusCallButtonStatus[8]}"
-                                    Width="135" Height="64" FontSize="20" FontWeight="Bold"
-                                    VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="0,0,20,0" Style="{StaticResource ModbusStatusDisplayButton}"/>
-                        </Grid>
-                        <Grid Grid.Column="4">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="AUTO"/>
-                                <RowDefinition Height="AUTO"/>
-                            </Grid.RowDefinitions>
-                            <Button Grid.Row="0" Content="5.56mm[1]"
-                                    Command="{Binding ModbusCallButtonStatus[3]}"
-                                    Width="135" Height="64" FontSize="20" FontWeight="Bold"
-                                    VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="0,5,20,15" Style="{StaticResource ModbusStatusDisplayButton}"/>
-                            <Button Grid.Row="1" Content="수작업[1]"
-                                    Command="{Binding ModbusCallButtonStatus[9]}"
-                                    Width="135" Height="64" FontSize="20" FontWeight="Bold"
-                                    VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="0,0,20,0" Style="{StaticResource ModbusStatusDisplayButton}"/>
-                        </Grid>
-                        <Grid Grid.Column="5">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="AUTO"/>
-                                <RowDefinition Height="AUTO"/>
-                            </Grid.RowDefinitions>
-                            <Button Grid.Row="0" Content="5.56mm[2]"
-                                    Command="{Binding ModbusCallButtonStatus[4]}"
-                                    Width="135" Height="64" FontSize="20" FontWeight="Bold"
-                                    VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="0,5,20,15" Style="{StaticResource ModbusStatusDisplayButton}"/>
-                            <Button Grid.Row="1" Content="수작업[2]"
-                                    Command="{Binding ModbusCallButtonStatus[10]}"
-                                    Width="135" Height="64" FontSize="20" FontWeight="Bold"
-                                    VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="0,0,20,0" Style="{StaticResource ModbusStatusDisplayButton}"/>
-                        </Grid>
-                        <Grid Grid.Column="6">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="AUTO"/>
-                                <RowDefinition Height="AUTO"/>
-                            </Grid.RowDefinitions>
-                            <Button Grid.Row="0" Content="5.56mm[3]"
-                                    Command="{Binding ModbusCallButtonStatus[5]}"
-                                    Width="135" Height="64" FontSize="20" FontWeight="Bold"
-                                    VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="0,5,20,15" Style="{StaticResource ModbusStatusDisplayButton}"/>
-                            <Button Grid.Row="1" Content="반팔렛 적치"
-                                    Command="{Binding ModbusCallButtonStatus[11]}"
-                                    Width="135" Height="64" FontSize="20" FontWeight="Bold"
-                                    VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="0,0,20,0" Style="{StaticResource ModbusStatusDisplayButton}"/>
-                        </Grid>
+                        <!-- Modbus 콜버튼 12개 상태 표시 (버튼 레이아웃에 맞춰 ItemsControl로 변경) -->
+                        <ItemsControl Grid.Column="1" Grid.ColumnSpan="6" ItemsSource="{Binding ModbusButtons}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <UniformGrid Columns="6"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Content="{Binding Content}"
+                                            Command="{Binding ExecuteButtonCommand}"
+                                            IsEnabled="{Binding IsEnabled}"
+                                            Width="135" Height="64" FontSize="20" FontWeight="Bold"
+                                            Margin="0,5,20,5"
+                                            Style="{StaticResource ModbusStatusDisplayButton}">
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                     </Grid>
                 </TabItem>
                 <TabItem Header="출고 관리" Width ="150" FontSize="20" FontWeight="Bold">

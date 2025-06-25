@@ -19,6 +19,73 @@ using WPF_WMS01.Views.Popups;
 
 namespace WPF_WMS01.ViewModels
 {
+    // Modbus 버튼의 상태를 나타내는 ViewModel (각 버튼에 바인딩될 개별 항목)
+    public class ModbusButtonViewModel : ViewModelBase
+    {
+        private bool _isEnabled; // 버튼의 활성화 상태 (Coil 1일 때 true, 그리고 작업 중이 아닐 때)
+        private string _content; // 버튼에 표시될 텍스트 (예: "팔레트 공급")
+        private ushort _modbusAddress; // 해당 버튼이 관여하는 Modbus Coil 주소
+        private bool _isProcessing; // 비동기 작업 진행 중 여부
+        private int _currentProgress; // 진행률 (0-100)
+        private bool _isCoilTaskStarted; // 이 Coil 활성화에 대한 비동기 작업이 이미 스케줄링되었는지 여부
+
+        public bool IsEnabled
+        {
+            get => _isEnabled;
+            set => SetProperty(ref _isEnabled, value);
+        }
+
+        public string Content
+        {
+            get => _content;
+            set => SetProperty(ref _content, value);
+        }
+
+        public ushort ModbusAddress
+        {
+            get => _modbusAddress;
+            set => SetProperty(ref _modbusAddress, value);
+        }
+
+        public bool IsProcessing // 작업 진행 중 여부
+        {
+            get => _isProcessing;
+            set
+            {
+                if (SetProperty(ref _isProcessing, value))
+                {
+                    // IsProcessing이 변경되면 Command의 CanExecute를 재평가하여 버튼 상태 갱신
+                    ((RelayCommand)ExecuteButtonCommand)?.RaiseCanExecuteChanged();
+                }
+            }
+        }
+
+        public int CurrentProgress // 현재 진행률 (0-100)
+        {
+            get => _currentProgress;
+            set => SetProperty(ref _currentProgress, value);
+        }
+
+        public bool IsCoilTaskStarted // 비동기 작업이 스케줄링/시작되었는지 여부 (중복 트리거 방지용)
+        {
+            get => _isCoilTaskStarted;
+            set => SetProperty(ref _isCoilTaskStarted, value);
+        }
+
+        // 이 Command는 MainViewModel에서 초기화될 것입니다.
+        public ICommand ExecuteButtonCommand { get; set; }
+
+        public ModbusButtonViewModel(string content, ushort address)
+        {
+            Content = content;
+            ModbusAddress = address;
+            IsEnabled = false; // 초기에는 비활성화
+            IsProcessing = false; // 초기에는 작업 중 아님
+            CurrentProgress = 0; // 초기 진행률 0
+            IsCoilTaskStarted = false; // 초기 상태
+        }
+    }
+
     public class CheckoutRequest
     {
         public int BulletType { get; set; } // 제품 유형 (예: 1 for 223A, 4 for 308B, etc.)
@@ -31,11 +98,16 @@ namespace WPF_WMS01.ViewModels
         private readonly HttpService _httpService; // HttpService 필드 추가
         private readonly string _apiUsername; // App.config에서 읽어올 사용자 이름
         private readonly string _apiPassword; // App.config에서 읽어올 비밀번호
+        private readonly ModbusClientService _modbusService; // ModbusClientService 인스턴스 추가
 
         private ObservableCollection<RackViewModel> _rackList;
         private DispatcherTimer _refreshTimer; // 타이머 선언
+        private DispatcherTimer _modbusReadTimer; // Modbus Coil 상태 읽기용 타이머
         public readonly string _waitRackTitle; // App.config에서 읽어올 WAIT 랙 타이틀
         public readonly char[] _militaryCharacter = { 'a', 'b', 'c', ' ' };
+
+        // Modbus Coil 상태를 저장할 ObservableCollection
+        public ObservableCollection<ModbusButtonViewModel> ModbusButtons { get; set; }
 
         // === 로그인 관련 속성 및 Command 추가 ===
         private string _loginStatusMessage;
@@ -124,16 +196,49 @@ namespace WPF_WMS01.ViewModels
             _apiUsername = ConfigurationManager.AppSettings["ApiUsername"] ?? "admon";
             _apiPassword = ConfigurationManager.AppSettings["ApiPassword"] ?? "123456";
 
+            // ModbusClientService 초기화(TCP 모드 예시)
+            // 실제 PLC의 IP 주소와 포트, 슬레이브 ID로 변경하세요.
+            // RTU 모드를 사용하려면 ModbusClientService("COM1", 9600, Parity.None, StopBits.One, 8, 1) 와 같이 변경
+            _modbusService = new ModbusClientService("localhost", 502, 1);
+
+            // ModbusButtons 컬렉션 초기화 (XAML의 버튼 순서 및 내용에 맞춰)
+            // Modbus Coil Address는 임의로 0부터 순차적으로 부여했습니다. 실제 PLC 주소에 맞춰 변경해야 합니다.
+            ModbusButtons = new ObservableCollection<ModbusButtonViewModel>
+            {
+                new ModbusButtonViewModel("팔레트 공급", 0), // Coil Address 0
+                new ModbusButtonViewModel("단프라 공급", 1), // Coil Address 1
+                new ModbusButtonViewModel("7.62mm", 2),    // Coil Address 2
+                new ModbusButtonViewModel("5.56mm[1]", 3), // Coil Address 3
+                new ModbusButtonViewModel("5.56mm[2]", 4), // Coil Address 4
+                new ModbusButtonViewModel("5.56mm[3]", 5), // Coil Address 5
+                new ModbusButtonViewModel("5.56mm[4]", 6), // Coil Address 6
+                new ModbusButtonViewModel("5.56mm[5]", 7), // Coil Address 7
+                new ModbusButtonViewModel("5.56mm[6]", 8), // Coil Address 8
+                new ModbusButtonViewModel("카타르[1]", 9), // Coil Address 9
+                new ModbusButtonViewModel("카타르[2]", 10),// Coil Address 10
+                new ModbusButtonViewModel("특수 포장", 11) // Coil Address 11
+            };
+
+            // 각 ModbusButtonViewModel에 Command 할당
+            foreach (var buttonVm in ModbusButtons)
+            {
+                buttonVm.ExecuteButtonCommand = new RelayCommand(
+                    async p => await ExecuteModbusButtonCommand(p as ModbusButtonViewModel),
+                    p => CanExecuteModbusButtonCommand(p as ModbusButtonViewModel)
+                );
+            }
+
             // --- ALL essential commands and properties MUST be initialized here ---
             OpenMenuCommand = new RelayCommand(p => ExecuteOpenMenuCommand());
+            CloseMenuCommand = new RelayCommand(p => ExecuteCloseMenuCommand());
             MenuItem1Command = new RelayCommand(p => OnMenuItem1Executed(p));
             MenuItem2Command = new RelayCommand(p => OnMenuItem2Executed(p));
             MenuItem3Command = new RelayCommand(p => OnMenuItem3Executed(p));
-            CloseMenuCommand = new RelayCommand(p => ExecuteCloseMenuCommand());
 
             // Call other initialization methods here
             InitializeCommands();
-            SetupRefreshTimer();
+            SetupRefreshTimer(); // RackList 갱신 타이머
+            SetupModbusReadTimer(); // Modbus Coil 상태 읽기 타이머 설정
             _ = LoadRacksAsync();
             //_ = AutoLoginOnStartup(); // Fire and forget. Calls async method without waiting for return.
 
@@ -149,6 +254,16 @@ namespace WPF_WMS01.ViewModels
             //    int index = i; // Local variable to prevent closure issues
             //    ModbusCallButtonStatus[i] = new RelayCommand(() => ExecuteModbusCallButtonCommand(index));
             //}
+        }
+
+        // Modbus Coil 상태 읽기 타이머 설정
+        private void SetupModbusReadTimer()
+        {
+            _modbusReadTimer = new DispatcherTimer();
+            _modbusReadTimer.Interval = TimeSpan.FromMilliseconds(500); // 0.5초마다 읽기 (조정 가능)
+            _modbusReadTimer.Tick += ModbusReadTimer_Tick;
+            _modbusReadTimer.Start();
+            Debug.WriteLine("[ModbusService] Modbus Read Timer Started.");
         }
 
         // Main constructor for Dependency Injection
@@ -168,6 +283,185 @@ namespace WPF_WMS01.ViewModels
             // Example: If you initialize _httpService here, the one from :this() will be overwritten.
             // Consider if this constructor is truly necessary or if DI can configure via the parameterless one.
             _ = AutoLoginOnStartup(); // Fire and forget. Calls async method without waiting for return.
+        }
+
+        // Modbus Coil 상태 주기적 읽기
+        private async void ModbusReadTimer_Tick(object sender, EventArgs e)
+        {
+            if (!_modbusService.IsConnected)
+            {
+                _modbusService.Connect(); // 연결 끊겼으면 재연결 시도
+                if (!_modbusService.IsConnected)
+                {
+                    Debug.WriteLine("[ModbusService] Connection failed. Skipping coil read.");
+                    return;
+                }
+            }
+
+            try
+            {
+                // PLC에서 12개 Coil의 상태를 한 번에 읽어옵니다. (주소 0부터 12개)
+                ushort startAddress = 0; // Modbus Coil 시작 주소
+                ushort numberOfCoils = (ushort)ModbusButtons.Count; // 12개
+
+                bool[] coilStates = await _modbusService.ReadCallButtonStatesAsync(startAddress, numberOfCoils);
+
+                if (coilStates != null && coilStates.Length >= numberOfCoils)
+                {
+                    Application.Current.Dispatcher.Invoke(async () => // Make this async to await Task.Delay
+                    {
+                        for (int i = 0; i < numberOfCoils; i++)
+                        {
+                            var buttonVm = ModbusButtons[i];
+                            bool currentCoilState = coilStates[i];
+
+                            // PLC 신호 (Coil 0->1)가 들어왔을 때 버튼 활성화
+                            // 이 시점에서는 작업이 아직 시작되지 않았으므로 IsProcessing은 고려하지 않음.
+                            // 버튼이 클릭 가능하도록 IsEnabled를 currentCoilState에 바인딩
+                            buttonVm.IsEnabled = currentCoilState;
+
+                            // Coil이 0에서 1로 활성화되었고, 현재 작업 중이 아니며, 아직 이 Coil에 대한 작업이 스케줄링되지 않았다면
+                            if (currentCoilState && !buttonVm.IsProcessing && !buttonVm.IsCoilTaskStarted)
+                            {
+                                buttonVm.IsCoilTaskStarted = true; // 작업 스케줄링 플래그 설정
+                                Debug.WriteLine($"[Modbus] Coil {buttonVm.ModbusAddress} activated (0->1). Scheduling task start in 10 seconds.");
+                                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} Coil 신호 감지! 10초 후 작업 자동 시작됩니다.");
+
+                                // 10초 지연 후 자동 작업 시작
+                                await Task.Delay(TimeSpan.FromSeconds(10));
+
+                                // 지연 후, 버튼 상태를 다시 확인하고 작업 시작
+                                // Coil이 여전히 1이고 작업 중이 아니라면
+                                if (buttonVm.IsEnabled && !buttonVm.IsProcessing)
+                                {
+                                    _ = HandleCoilActivatedTask(buttonVm); // 메인 비동기 작업 시작 (fire-and-forget)
+                                }
+                                else
+                                {
+                                    // 10초 지연 중에 Coil이 다시 0으로 바뀌었거나, 이미 작업이 시작된 경우
+                                    Debug.WriteLine($"[Modbus] Coil {buttonVm.ModbusAddress} task not started after delay. State changed or already processing.");
+                                    buttonVm.IsCoilTaskStarted = false; // 플래그 리셋
+                                }
+                            }
+                            else if (!currentCoilState && buttonVm.IsCoilTaskStarted)
+                            {
+                                // Coil이 0으로 돌아갔고 작업이 스케줄링된 상태였다면, 스케줄링 취소
+                                Debug.WriteLine($"[Modbus] Coil {buttonVm.ModbusAddress} went low, cancelling scheduled task initiation.");
+                                buttonVm.IsCoilTaskStarted = false;
+                            }
+
+                            // 버튼의 CanExecute 상태를 갱신하여 UI가 IsEnabled와 IsProcessing의 변화에 반응하도록 함.
+                            ((RelayCommand)buttonVm.ExecuteButtonCommand)?.RaiseCanExecuteChanged();
+                        }
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[ModbusService] Error reading Modbus coils: {ex.Message}");
+                _modbusService.Dispose(); // 통신 오류 발생 시 연결 끊고 재연결 준비
+            }
+        }
+
+        // Modbus 버튼 클릭 시 실행될 Command (HMI에서 작업 진행 상황 확인)
+        private async Task ExecuteModbusButtonCommand(ModbusButtonViewModel buttonVm)
+        {
+            if (buttonVm == null) return;
+            // CanExecute에 의해 클릭 가능 여부가 이미 제어되지만, 안전을 위해 추가적인 확인은 하지 않음.
+            // 이 버튼은 작업을 시작하는 것이 아니라, 진행 상황을 사용자에게 보여주는 역할만 함.
+
+            if (buttonVm.IsProcessing)
+            {
+                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 작업 진행 중: {buttonVm.CurrentProgress}% (주소: {buttonVm.ModbusAddress}).");
+                Debug.WriteLine($"[Modbus] Button clicked for {buttonVm.Content}. Task is already processing. Displaying current progress.");
+            }
+            else if (buttonVm.IsEnabled) // Coil이 1이지만 아직 작업이 시작되지 않은 경우 (예: 10초 지연 중)
+            {
+                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 작업 대기 중. 10초 지연 후 자동 시작됩니다. (주소: {buttonVm.ModbusAddress}).");
+                Debug.WriteLine($"[Modbus] Button clicked for {buttonVm.Content}. Coil is active, task should start automatically soon.");
+            }
+            else // 버튼이 비활성화된 경우 (Coil이 0)
+            {
+                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 작업 비활성화됨. (주소: {buttonVm.ModbusAddress}).");
+                Debug.WriteLine($"[Modbus] Button clicked for {buttonVm.Content}. Coil is not active.");
+            }
+        }
+
+        // 비동기 작업 수행 및 진행률 업데이트, 작업 완료 후 Coil 0으로 초기화
+        private async Task HandleCoilActivatedTask(ModbusButtonViewModel buttonVm)
+        {
+            if (buttonVm == null) return;
+
+            // 작업이 이미 진행 중인 경우 중복 실행 방지 (안전을 위해)
+            if (buttonVm.IsProcessing)
+            {
+                Debug.WriteLine($"[Modbus] Task for {buttonVm.Content} is already processing. Skipping new initiation.");
+                return;
+            }
+
+            // UI 스레드에서 IsProcessing 및 CurrentProgress 업데이트
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                buttonVm.IsProcessing = true; // 작업 진행 중 상태로 변경
+                buttonVm.CurrentProgress = 0; // 진행률 초기화
+            });
+            Debug.WriteLine($"[Modbus] Async task started for {buttonVm.Content} (Address: {buttonVm.ModbusAddress}).");
+
+            const int totalDurationSeconds = 45; // 45초 (30초 ~ 1분 사이)
+            const int updateIntervalMs = 500; // 0.5초마다 진행률 업데이트
+            int totalSteps = totalDurationSeconds * 1000 / updateIntervalMs;
+
+            try
+            {
+                for (int i = 0; i <= totalSteps; i++)
+                {
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        buttonVm.CurrentProgress = (int)((double)i / totalSteps * 100);
+                        // Debug.WriteLine($"Progress for {buttonVm.Content}: {buttonVm.CurrentProgress}%"); // 너무 많은 로그가 찍힐 수 있음
+                    });
+
+                    await Task.Delay(updateIntervalMs);
+                }
+
+                // 작업 완료 후 Coil 0으로 쓰기 (HMI 작업 완료 신호)
+                bool writeSuccess = await _modbusService.WriteSingleCoilAsync(buttonVm.ModbusAddress, false);
+                if (!writeSuccess)
+                {
+                    ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} Coil 0 쓰기 실패!");
+                    Debug.WriteLine($"[Modbus] Failed to write Coil {buttonVm.ModbusAddress} to false after task completion.");
+                }
+                else
+                {
+                    Debug.WriteLine($"[Modbus] Coil {buttonVm.ModbusAddress} set to False after task completion.");
+                }
+
+                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 작업 완료! (주소: {buttonVm.ModbusAddress})");
+            }
+            catch (Exception ex)
+            {
+                // 작업 중 오류 발생 시 메시지 팝업
+                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 작업 중 오류 발생: {ex.Message}");
+                Debug.WriteLine($"[Modbus] Error during {buttonVm.Content} task: {ex.Message}");
+            }
+            finally
+            {
+                // 작업 완료 (성공/실패 무관)
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    buttonVm.IsProcessing = false; // 작업 완료 상태로 변경
+                    buttonVm.CurrentProgress = 0; // 진행률 초기화
+                    buttonVm.IsCoilTaskStarted = false; // 다음 PLC 신호를 위해 플래그 리셋
+                });
+            }
+        }
+
+        // Modbus 버튼 활성화 여부를 결정하는 CanExecute 로직
+        private bool CanExecuteModbusButtonCommand(ModbusButtonViewModel buttonVm)
+        {
+            // 버튼은 코일이 1(활성화 상태)이고, 현재 비동기 작업이 진행 중이 아닐 때만 클릭 가능합니다.
+            // 클릭은 작업 시작이 아닌, 진행 상황 확인/정보 표시용입니다.
+            return buttonVm?.IsEnabled == true && !buttonVm.IsProcessing;
         }
 
         private void ExecuteOpenMenuCommand()
@@ -621,72 +915,11 @@ namespace WPF_WMS01.ViewModels
 
                         try
                         {
-                            int newBulletType = 0;
-                            if (InputStringForButton.Contains("223A"))
+                            int newBulletType = GetBulletTypeFromInputString(_inputStringForButton); // Helper method
+                            if(newBulletType == 0)
                             {
-                                newBulletType = 1;
-                            }
-                            else if (InputStringForButton.Contains("223SP"))
-                            {
-                                newBulletType = 2;
-                            }
-                            else if (InputStringForButton.Contains("223XM"))
-                            {
-                                newBulletType = 3;
-                            }
-                            else if (InputStringForButton.Contains("5.56X"))
-                            {
-                                newBulletType = 4;
-                            }
-                            else if (InputStringForButton.Contains("5.56K"))
-                            {
-                                newBulletType = 5;
-                            }
-                            else if (InputStringForButton.Contains("PSD"))
-                            {
-                                if (InputStringForButton.Contains(" a"))   // M885T
-                                {
-                                    newBulletType = 6;
-                                }
-                                else if (InputStringForButton.Contains(" b"))  // M193
-                                {
-                                    newBulletType = 7;
-                                }
-                                else if (InputStringForButton.Contains(" c"))  // M80
-                                {
-                                    newBulletType = 12;
-                                }
-                                else
-                                {
-                                    newBulletType = 6;   // M885T (default)
-                                }
-
-                            }
-                            else if (InputStringForButton.Contains("308B"))
-                            {
-                                newBulletType = 8;
-                            }
-                            else if (InputStringForButton.Contains("308SP"))
-                            {
-                                newBulletType = 9;
-                            }
-                            else if (InputStringForButton.Contains("308XM"))
-                            {
-                                newBulletType = 10;
-                            }
-                            else if (InputStringForButton.Contains("7.62X"))
-                            {
-                                newBulletType = 11;
-                            }
-                            else
-                            {
-                                //Application.Current.Dispatcher.Invoke(() =>   // ToDo Check
-                                //{
-                                //MessageBox.Show("입력된 문자열에서 유효한 제품 유형을 찾을 수 없습니다.", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
                                 ShowAutoClosingMessage("입력된 문자열에서 유효한 제품 유형을 찾을 수 없습니다."); // 오류 메시지도 자동 닫힘
 
-                                //});
-                                // 오류 발생 시 타겟 랙과 WAIT 랙 모두 잠금 해제
                                 await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, false);
                                 Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
                                 if (waitRackVm != null)
@@ -787,55 +1020,7 @@ namespace WPF_WMS01.ViewModels
 
                 if (inputContainsValidProduct && emptyAndVisibleRackExists)
                 {
-                    // 활성화 조건 충족 시
-                    if (_inputStringForButton.Contains("223A"))
-                    {
-                        newBulletTypeForWaitRack = 1;
-                    }
-                    else if (_inputStringForButton.Contains("223SP"))
-                    {
-                        newBulletTypeForWaitRack = 2;
-                    }
-                    else if (_inputStringForButton.Contains("223XM"))
-                    {
-                        newBulletTypeForWaitRack = 3;
-                    }
-                    else if (_inputStringForButton.Contains("5.56X"))
-                    {
-                        newBulletTypeForWaitRack = 4;
-                    }
-                    else if (_inputStringForButton.Contains("5.56K"))
-                    {
-                        newBulletTypeForWaitRack = 5;
-                    }
-                    else if (_inputStringForButton.Contains("PSD") && _inputStringForButton.Contains(" a")) // M855T
-                    {
-                        newBulletTypeForWaitRack = 6;
-                    }
-                    else if (_inputStringForButton.Contains("PSD") && _inputStringForButton.Contains(" b")) // M193
-                    {
-                        newBulletTypeForWaitRack = 7;
-                    }
-                    else if (_inputStringForButton.Contains("308B"))
-                    {
-                        newBulletTypeForWaitRack = 8;
-                    }
-                    else if (_inputStringForButton.Contains("308SP"))
-                    {
-                        newBulletTypeForWaitRack = 9;
-                    }
-                    else if (_inputStringForButton.Contains("308XM"))
-                    {
-                        newBulletTypeForWaitRack = 10;
-                    }
-                    else if (_inputStringForButton.Contains("7.62X"))
-                    {
-                        newBulletTypeForWaitRack = 11;
-                    }
-                    else if (_inputStringForButton.Contains("PSD") && _inputStringForButton.Contains(" c")) // M80
-                    {
-                        newBulletTypeForWaitRack = 12;
-                    }
+                    newBulletTypeForWaitRack = GetBulletTypeFromInputString(_inputStringForButton);
                 }
 
                 // WAIT 랙의 BulletType을 업데이트 (비동기 처리)
@@ -914,71 +1099,11 @@ namespace WPF_WMS01.ViewModels
 
                         try
                         {
-                            int newBulletType = 0;
-                            if (InputStringForButton.Contains("223A"))
+                            int newBulletType = GetBulletTypeFromInputString(_inputStringForButton); // Helper method
+                            if (newBulletType == 0)
                             {
-                                newBulletType = 1;
-                            }
-                            else if (InputStringForButton.Contains("223SP"))
-                            {
-                                newBulletType = 2;
-                            }
-                            else if (InputStringForButton.Contains("223XM"))
-                            {
-                                newBulletType = 3;
-                            }
-                            else if (InputStringForButton.Contains("5.56X"))
-                            {
-                                newBulletType = 4;
-                            }
-                            else if (InputStringForButton.Contains("5.56K"))
-                            {
-                                newBulletType = 5;
-                            }
-                            else if (InputStringForButton.Contains("PSD"))
-                            {
-                                if (InputStringForButton.Contains(" a"))   // M885T
-                                {
-                                    newBulletType = 6;
-                                }
-                                else if (InputStringForButton.Contains(" b"))  // M193
-                                {
-                                    newBulletType = 7;
-                                }
-                                else if (InputStringForButton.Contains(" c"))  // M80
-                                {
-                                    newBulletType = 12;
-                                }
-                                else
-                                {
-                                    newBulletType = 6;   // M885T (default)
-                                }
-
-                            }
-                            else if (InputStringForButton.Contains("308B"))
-                            {
-                                newBulletType = 8;
-                            }
-                            else if (InputStringForButton.Contains("308SP"))
-                            {
-                                newBulletType = 9;
-                            }
-                            else if (InputStringForButton.Contains("308XM"))
-                            {
-                                newBulletType = 10;
-                            }
-                            else if (InputStringForButton.Contains("7.62X"))
-                            {
-                                newBulletType = 11;
-                            }
-                            else
-                            {
-                                //Application.Current.Dispatcher.Invoke(() =>   // ToDo Check
-                                //{
-                                //MessageBox.Show("입력된 문자열에서 유효한 제품 유형을 찾을 수 없습니다.", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
                                 ShowAutoClosingMessage("입력된 문자열에서 유효한 제품 유형을 찾을 수 없습니다."); // 오류 메시지도 자동 닫힘
 
-                                //});
                                 // 오류 발생 시 타겟 랙과 WAIT 랙 모두 잠금 해제
                                 await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, false);
                                 Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
@@ -1080,55 +1205,7 @@ namespace WPF_WMS01.ViewModels
 
                 if (inputContainsValidProduct && emptyAndVisibleRackExists)
                 {
-                    // 활성화 조건 충족 시
-                    if (_inputStringForButton.Contains("223A"))
-                    {
-                        newBulletTypeForWaitRack = 1;
-                    }
-                    else if (_inputStringForButton.Contains("223SP"))
-                    {
-                        newBulletTypeForWaitRack = 2;
-                    }
-                    else if (_inputStringForButton.Contains("223XM"))
-                    {
-                        newBulletTypeForWaitRack = 3;
-                    }
-                    else if (_inputStringForButton.Contains("5.56X"))
-                    {
-                        newBulletTypeForWaitRack = 4;
-                    }
-                    else if (_inputStringForButton.Contains("5.56K"))
-                    {
-                        newBulletTypeForWaitRack = 5;
-                    }
-                    else if (_inputStringForButton.Contains("PSD") && _inputStringForButton.Contains(" a")) // M855T
-                    {
-                        newBulletTypeForWaitRack = 6;
-                    }
-                    else if (_inputStringForButton.Contains("PSD") && _inputStringForButton.Contains(" b")) // M193
-                    {
-                        newBulletTypeForWaitRack = 7;
-                    }
-                    else if (_inputStringForButton.Contains("308B"))
-                    {
-                        newBulletTypeForWaitRack = 8;
-                    }
-                    else if (_inputStringForButton.Contains("308SP"))
-                    {
-                        newBulletTypeForWaitRack = 9;
-                    }
-                    else if (_inputStringForButton.Contains("308XM"))
-                    {
-                        newBulletTypeForWaitRack = 10;
-                    }
-                    else if (_inputStringForButton.Contains("7.62X"))
-                    {
-                        newBulletTypeForWaitRack = 11;
-                    }
-                    else if (_inputStringForButton.Contains("PSD") && _inputStringForButton.Contains(" c")) // M80
-                    {
-                        newBulletTypeForWaitRack = 12;
-                    }
+                    newBulletTypeForWaitRack = GetBulletTypeFromInputString(_inputStringForButton);
                 }
 
                 // WAIT 랙의 BulletType을 업데이트 (비동기 처리)
@@ -1292,5 +1369,22 @@ namespace WPF_WMS01.ViewModels
             // 필요한 경우 LoginCommand도 여기서 RaiseCanExecuteChanged()를 호출하여 상태를 갱신할 수 있음
         }
 
+        // Helper method to get BulletType from input string (copied from CanExecuteInboundProduct)
+        private int GetBulletTypeFromInputString(string inputString)
+        {
+            if (inputString.Contains("223A")) return 1;
+            if (inputString.Contains("223SP")) return 2;
+            if (inputString.Contains("223XM")) return 3;
+            if (inputString.Contains("5.56X")) return 4;
+            if (inputString.Contains("5.56K")) return 5;
+            if (inputString.Contains("PSD") && inputString.Contains(" a")) return 6; // M855T
+            if (inputString.Contains("PSD") && inputString.Contains(" b")) return 7; // M193
+            if (inputString.Contains("308B")) return 8;
+            if (inputString.Contains("308SP")) return 9;
+            if (inputString.Contains("308XM")) return 10;
+            if (inputString.Contains("7.62X")) return 11;
+            if (inputString.Contains("PSD") && inputString.Contains(" c")) return 12; // M80
+            return 0; // Default or invalid
+        }
     }
 }
