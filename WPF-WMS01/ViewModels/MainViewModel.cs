@@ -4,11 +4,6 @@ using System.Windows.Input;
 using System.Threading.Tasks; // 비동기 작업용 Task.Run, Task.Delay 사용을 위해 추가
 using System.Windows.Threading; // DispatcherTimer 사용을 위해 추가
 using System;
-using WPF_WMS01.Commands; // ICommand 구현 클래스를 필요로 합니다.
-using WPF_WMS01.Services;
-using WPF_WMS01.Models;
-using WPF_WMS01.ViewModels.Popups;
-using WPF_WMS01.Views.Popups;
 using System.Windows;
 using System.Collections.Generic;
 using System.Linq;
@@ -16,8 +11,11 @@ using System.Configuration; // App.config 읽기를 위해 추가
 using System.Net.Http;
 using System.Text.Json;
 using System.Diagnostics;
-using System.ComponentModel;
-using System.Runtime.CompilerServices;
+using WPF_WMS01.Commands; // ICommand 구현 클래스를 필요로 합니다.
+using WPF_WMS01.Services;
+using WPF_WMS01.Models;
+using WPF_WMS01.ViewModels.Popups;
+using WPF_WMS01.Views.Popups;
 
 namespace WPF_WMS01.ViewModels
 {
@@ -96,22 +94,16 @@ namespace WPF_WMS01.ViewModels
             get => _isMenuOpen;
             set
             {
-                if (_isMenuOpen != value)
+                // IsMenuOpen도 SetProperty를 사용하여 일관성 있게 PropertyChanged 이벤트를 발생시킵니다.
+                if (SetProperty(ref _isMenuOpen, value))
                 {
-                    _isMenuOpen = value;
-                    OnPropertyChanged(nameof(IsMenuOpen)); // 반드시 호출되어야 합니다.
+                    // SetProperty가 이미 PropertyChanged를 호출하므로, 여기서는 추가 호출이 필요 없습니다.
                 }
             }
         }
-        // INotifyPropertyChanged 구현 (예: ObservableObject 상속 또는 수동 구현)
-        public event PropertyChangedEventHandler PropertyChanged;
-        protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-        }
 
         public ICommand LoginCommand { get; private set; }
-        // === 로그인 관련 속성 및 Command 끝 ===
+
         // 햄버거 메뉴를 열고 닫는 커맨드
         public ICommand OpenMenuCommand { get; }
         public ICommand CloseMenuCommand { get; }
@@ -120,94 +112,90 @@ namespace WPF_WMS01.ViewModels
         public ICommand MenuItem2Command { get; }
         public ICommand MenuItem3Command { get; }
 
-        public MainViewModel() // 디자인 타임용 또는 DI가 없는 경우를 위한 기본 생성자
+        // Default constructor for design-time or when Dependency Injection is not used
+        public MainViewModel()
         {
+            // Initialize services (adjust paths/URLs as needed for your setup)
             _databaseService = new DatabaseService();
             _waitRackTitle = ConfigurationManager.AppSettings["WaitRackTitle"] ?? "WAIT";
-            _httpService = new HttpService("http://localhost:8080/"); // 기본 URL, 실제 App.config에서 가져와야 함
+            // Initialize HttpService here for the parameterless constructor.
+            // Ensure your HttpService has a constructor that takes a base URL, or use a default one.
+            _httpService = new HttpService(ConfigurationManager.AppSettings["ApiBaseUrl"] ?? "http://localhost:8080/");
+            _apiUsername = ConfigurationManager.AppSettings["ApiUsername"] ?? "admon";
+            _apiPassword = ConfigurationManager.AppSettings["ApiPassword"] ?? "123456";
 
-            //OpenMenuCommand = new RelayCommand(p => IsMenuOpen = !IsMenuOpen);
+            // --- ALL essential commands and properties MUST be initialized here ---
             OpenMenuCommand = new RelayCommand(p => ExecuteOpenMenuCommand());
             MenuItem1Command = new RelayCommand(p => OnMenuItem1Executed(p));
             MenuItem2Command = new RelayCommand(p => OnMenuItem2Executed(p));
             MenuItem3Command = new RelayCommand(p => OnMenuItem3Executed(p));
             CloseMenuCommand = new RelayCommand(p => ExecuteCloseMenuCommand());
 
+            // Call other initialization methods here
             InitializeCommands();
             SetupRefreshTimer();
             _ = LoadRacksAsync();
+            //_ = AutoLoginOnStartup(); // Fire and forget. Calls async method without waiting for return.
+
+            IsMenuOpen = false; // Initial state for the popup
+            IsLoggedIn = false;
+            IsLoginAttempting = false;
+            LoginStatusMessage = "로그인 필요";
+
+            // ModbusCallButtonStatus array initialization (12 items)
+            //ModbusCallButtonStatus = new ICommand[12];
+            //for (int i = 0; i < ModbusCallButtonStatus.Length; i++)
+            //{
+            //    int index = i; // Local variable to prevent closure issues
+            //    ModbusCallButtonStatus[i] = new RelayCommand(() => ExecuteModbusCallButtonCommand(index));
+            //}
         }
 
-        private string _popupDebugMessage;
-        public string PopupDebugMessage
+        // Main constructor for Dependency Injection
+        // This constructor might not be called directly by XAML's DataContext.
+        // If it is, ensure OpenMenuCommand and other necessary properties are initialized here as well,
+        // or chain to the parameterless constructor: public MainViewModel(...) : this()
+        public MainViewModel(HttpService httpService, string username, string password) : this() // Chain to parameterless constructor
         {
-            get => _popupDebugMessage;
-            set
-            {
-                if (_popupDebugMessage != value)
-                {
-                    _popupDebugMessage = value;
-                    OnPropertyChanged();
-                }
-            }
-        }
-
-        // DI를 통해 HttpService와 로그인 정보를 주입받는 주 생성자
-        public MainViewModel(HttpService httpService, string username, string password)
-        {
-            _databaseService = new DatabaseService();
-            _waitRackTitle = ConfigurationManager.AppSettings["WaitRackTitle"] ?? "WAIT";
-
+            // The 'this()' call initializes everything from the parameterless constructor.
+            // Any specific DI-related assignments can then override or extend.
             _httpService = httpService ?? throw new ArgumentNullException(nameof(httpService));
             _apiUsername = username;
             _apiPassword = password;
 
-           // OpenMenuCommand = new RelayCommand(p => IsMenuOpen = !IsMenuOpen);
-            //OpenMenuCommand = new RelayCommand(p => ExecuteOpenMenuCommand());
-            // 다른 메뉴 아이템 커맨드 초기화 (예시)
-            //MenuItem1Command = new RelayCommand(p => OnMenuItem1Executed(p));
-            //MenuItem2Command = new RelayCommand(p => OnMenuItem2Executed(p));
-            //MenuItem3Command = new RelayCommand(p => OnMenuItem3Executed(p));
-            //CloseMenuCommand = new RelayCommand(p => ExecuteCloseMenuCommand());
-            InitializeCommands();
-            SetupRefreshTimer();
-            _ = LoadRacksAsync();
-
-            // 애플리케이션 시작 시 자동 로그인 시도
-            _ = AutoLoginOnStartup(); // Fire and forget. 비동기 메서드를 호출하고 반환 값을 기다리지 않음.
+            // If you still have duplicate initializations here, they should be removed
+            // or handled carefully to avoid conflicts.
+            // Example: If you initialize _httpService here, the one from :this() will be overwritten.
+            // Consider if this constructor is truly necessary or if DI can configure via the parameterless one.
+            _ = AutoLoginOnStartup(); // Fire and forget. Calls async method without waiting for return.
         }
 
         private void ExecuteOpenMenuCommand()
         {
             IsMenuOpen = !IsMenuOpen; // 햄버거 버튼 클릭 시 팝업 상태 토글
-            Debug.WriteLine($"햄버거 버튼 클릭됨. IsMenuOpen: {IsMenuOpen}"); // 디버깅을 위한 출력
         }
 
         private void ExecuteCloseMenuCommand()
         {
             IsMenuOpen = false; // 메뉴 닫기 버튼 클릭 시 팝업 닫기
-            Debug.WriteLine("메뉴 닫기 버튼 클릭됨. IsMenuOpen: False");
         }
 
         // 메뉴 아이템 실행 로직 (예시)
         private void OnMenuItem1Executed(object parameter)
         {
             // "옵션 1" 클릭 시 실행될 로직
-            System.Diagnostics.Debug.WriteLine($"옵션 1이 클릭되었습니다. 파라미터: {parameter}");
             IsMenuOpen = false; // 메뉴 닫기
         }
 
         private void OnMenuItem2Executed(object parameter)
         {
             // "옵션 2" 클릭 시 실행될 로직
-            System.Diagnostics.Debug.WriteLine($"옵션 2가 클릭되었습니다. 파라미터: {parameter}");
             IsMenuOpen = false; // 메뉴 닫기
         }
 
         private void OnMenuItem3Executed(object parameter)
         {
             // "옵션 3" 클릭 시 실행될 로직
-            System.Diagnostics.Debug.WriteLine($"옵션 3이 클릭되었습니다. 파라미터: {parameter}");
             IsMenuOpen = false; // 메뉴 닫기
         }
 
