@@ -31,20 +31,19 @@ namespace WPF_WMS01
             string username = ConfigurationManager.AppSettings["AntApiUsername"];
             string password = ConfigurationManager.AppSettings["AntApiPassword"];
 
-            // HttpService를 싱글톤으로 등록
-            services.AddSingleton(new HttpService(baseApiUrl));
+            // 서비스 등록
+            services.AddSingleton<HttpService>(new HttpService(baseApiUrl));
+            services.AddSingleton<DatabaseService>(); // DatabaseService가 생성자 매개변수가 없다면
+            services.AddSingleton<ModbusClientService>(provider =>
+                new ModbusClientService("localhost", 502, 1)); // ModbusClientService 인스턴스 생성
 
-            // MainViewModel 등록 (이 부분이 변경됨)
-            services.AddSingleton(provider => new MainViewModel( // MainViewModel로 변경
-                provider.GetRequiredService<HttpService>(),
-                username,
-                password
-            ));
+            // MainViewModel 등록 (모든 종속성을 생성자 주입)
+            services.AddSingleton<MainViewModel>(); // DI 컨테이너가 MainViewModel과 그 종속성을 해결
 
             // MainWindow 등록
             services.AddSingleton(provider => new MainWindow
             {
-                DataContext = provider.GetRequiredService<MainViewModel>() // MainViewModel로 변경
+                DataContext = provider.GetRequiredService<MainViewModel>() // DataContext 설정
             });
 
             ServiceProvider = services.BuildServiceProvider();

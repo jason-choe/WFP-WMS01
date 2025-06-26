@@ -10,10 +10,6 @@
         Title="랙 관리 시스템" Height="1040" Width="1920" Left="0" Top="0" >
     <!-- Height="768" Width="1024" WindowState="Maximized" -->
 
-    <Window.DataContext>
-        <vm:MainViewModel/>
-    </Window.DataContext>
-
     <Window.Resources>
         <cnv:BackgroundColorConverter x:Key="BackgroundColorConverter" />
         <cnv:ImageIndexToImagePathConverter x:Key="ImageIndexToImagePathConverter"/>
