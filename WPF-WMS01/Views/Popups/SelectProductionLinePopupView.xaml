@@ -8,7 +8,7 @@
         xmlns:viewmodels="clr-namespace:WPF_WMS01.ViewModels.Popups"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:SelectProductionLinePopupViewModel, IsDesignTimeCreatable=True}"
-        Title="생산 라인 선택" Height="700" Width="600"
+        Title="생산 라인 선택" Height="760" Width="600"
         WindowStartupLocation="CenterScreen">
 
     <Grid Margin="20">

@@ -191,15 +191,23 @@ namespace WPF_WMS01.ViewModels
         public MainViewModel(DatabaseService databaseService, HttpService httpService, ModbusClientService modbusService)
         {
             _databaseService = databaseService;
-            _httpService = httpService;
             _waitRackTitle = ConfigurationManager.AppSettings["WaitRackTitle"] ?? "WAIT";
-            _apiUsername = ConfigurationManager.AppSettings["ApiUsername"];
-            _apiPassword = ConfigurationManager.AppSettings["ApiPassword"];
+
+            // App.config의 설정이 없는 경우를 대비하여 기본값 추가
+            _httpService = httpService;
+            _apiUsername = ConfigurationManager.AppSettings["AntApiUsername"] ?? "admin";
+            _apiPassword = ConfigurationManager.AppSettings["AntApiPassword"] ?? "123456";
 
             // ModbusClientService 초기화 (TCP 모드 예시)
             // 실제 PLC의 IP 주소와 포트, 슬레이브 ID로 변경하세요.
             // RTU 모드를 사용하려면 ModbusClientService("COM1", 9600, Parity.None, StopBits.One, 8, 1) 와 같이 변경
+            // App.config에서 IP/Port를 읽어오도록 변경 가능
             _modbusService = modbusService;
+            //_modbusService = new ModbusClientService(
+            //    ConfigurationManager.AppSettings["ModbusIpAddress"] ?? "localhost",
+            //    int.Parse(ConfigurationManager.AppSettings["ModbusPort"] ?? "502"),
+            //    byte.Parse(ConfigurationManager.AppSettings["ModbusSlaveId"] ?? "1")
+           // );
 
             // ModbusButtons 컬렉션 초기화 (XAML의 버튼 순서 및 내용에 맞춰)
             // Modbus Coil Address는 임의로 0부터 순차적으로 부여했습니다. 실제 PLC 주소에 맞춰 변경해야 합니다.
@@ -214,9 +222,9 @@ namespace WPF_WMS01.ViewModels
                 new ModbusButtonViewModel("5.56mm[4]", 6), // Coil Address 6
                 new ModbusButtonViewModel("5.56mm[5]", 7), // Coil Address 7
                 new ModbusButtonViewModel("5.56mm[6]", 8), // Coil Address 8
-                new ModbusButtonViewModel("수작업[1]", 9), // Coil Address 9
-                new ModbusButtonViewModel("수작업[2]", 10),// Coil Address 10
-                new ModbusButtonViewModel("반팔렛 적치", 11) // Coil Address 11
+                new ModbusButtonViewModel("카타르[1]", 9), // Coil Address 9
+                new ModbusButtonViewModel("카타르[2]", 10),// Coil Address 10
+                new ModbusButtonViewModel("특수 포장", 11) // Coil Address 11
             };
 
             // 각 ModbusButtonViewModel에 Command 할당
@@ -235,17 +243,17 @@ namespace WPF_WMS01.ViewModels
             MenuItem2Command = new RelayCommand(p => OnMenuItem2Executed(p));
             MenuItem3Command = new RelayCommand(p => OnMenuItem3Executed(p));
 
+            IsMenuOpen = false;
+            IsLoggedIn = false;
+            IsLoginAttempting = false;
+            LoginStatusMessage = "로그인 필요";
+
             InitializeCommands(); // 기존의 다른 명령 초기화
 
             SetupRefreshTimer(); // RackList 갱신 타이머
             SetupModbusReadTimer(); // Modbus Coil 상태 읽기 타이머 설정
             _ = LoadRacksAsync();
             _ = AutoLoginOnStartup();
-
-            IsMenuOpen = false;
-            IsLoggedIn = false;
-            IsLoginAttempting = false;
-            LoginStatusMessage = "로그인 필요";
         }
 
 
@@ -253,7 +261,7 @@ namespace WPF_WMS01.ViewModels
         private void SetupModbusReadTimer()
         {
             _modbusReadTimer = new DispatcherTimer();
-            _modbusReadTimer.Interval = TimeSpan.FromMilliseconds(500); // 0.5초마다 읽기 (조정 가능)
+            _modbusReadTimer.Interval = TimeSpan.FromMilliseconds(1000); // 1초마다 읽기 (조정 가능)
             _modbusReadTimer.Tick += ModbusReadTimer_Tick;
             _modbusReadTimer.Start();
             Debug.WriteLine("[ModbusService] Modbus Read Timer Started.");
@@ -265,11 +273,11 @@ namespace WPF_WMS01.ViewModels
             if (!_modbusService.IsConnected)
             {
                 // ConnectAsync를 await하여 연결 시도를 기다림 (UI 스레드 블로킹 방지)
-                Debug.WriteLine("[ModbusService] Not Connected. Attempting to reconnect asynchronously...");
+                Debug.WriteLine("[ModbusService] Read Timer: Not Connected. Attempting to reconnect asynchronously...");
                 await _modbusService.ConnectAsync().ConfigureAwait(false); // ConfigureAwait(false) 사용
                 if (!_modbusService.IsConnected)
                 {
-                    Debug.WriteLine("[ModbusService] Connection failed after reconnect attempt. Skipping coil read.");
+                    Debug.WriteLine("[ModbusService] Read Timer: Connection failed after reconnect attempt. Skipping coil read.");
                     return;
                 }
             }
@@ -356,7 +364,7 @@ namespace WPF_WMS01.ViewModels
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[ModbusService] Error reading Modbus coils: {ex.Message}");
+                Debug.WriteLine($"[ModbusService] Error reading Modbus coils in timer tick: {ex.GetType().Name} - {ex.Message}. StackTrace: {ex.StackTrace}");
                 _modbusService.Dispose(); // 통신 오류 발생 시 연결 끊고 재연결 준비
             }
         }
@@ -446,7 +454,7 @@ namespace WPF_WMS01.ViewModels
             {
                 // 작업 중 오류 발생 시 메시지 팝업 (UI 스레드에서)
                 ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 작업 중 오류 발생: {ex.Message}");
-                Debug.WriteLine($"[Modbus] Error during {buttonVm.Content} task: {ex.Message}");
+                Debug.WriteLine($"[Modbus] Error during {buttonVm.Content} task: {ex.GetType().Name} - {ex.Message}");
             }
             finally
             {
@@ -565,9 +573,10 @@ namespace WPF_WMS01.ViewModels
             catch (Exception ex)
             {
                 MessageBox.Show($"Error loading rack data: {ex.Message}", "Database Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                Debug.WriteLine($"[Database] Error loading rack data: {ex.GetType().Name} - {ex.Message}. StackTrace: {ex.StackTrace}");
             }
         }
-        private async Task LoadRacks()
+        private async Task LoadRacks() // 이 메서드는 LoadRacksAsync와 중복되므로 향후 하나로 통합 고려
         {
             try
             {
@@ -581,6 +590,7 @@ namespace WPF_WMS01.ViewModels
             catch (Exception ex)
             {
                 MessageBox.Show($"Error loading data: {ex.Message}");
+                Debug.WriteLine($"[Database] Error loading data in LoadRacks: {ex.GetType().Name} - {ex.Message}. StackTrace: {ex.StackTrace}");
             }
         }
 
@@ -593,12 +603,20 @@ namespace WPF_WMS01.ViewModels
                 rackViewModel.RackModel.BulletType = newImageIndex % 7;
                 rackViewModel.RackModel.RackType = newImageIndex / 7;
 
-                await _databaseService.UpdateRackStateAsync(
-                    rackViewModel.Id,
-                    rackViewModel.RackModel.RackType,
-                    rackViewModel.RackModel.BulletType,
-                    rackViewModel.RackModel.IsLocked
-                );
+                try
+                {
+                    await _databaseService.UpdateRackStateAsync(
+                        rackViewModel.Id,
+                        rackViewModel.RackModel.RackType,
+                        rackViewModel.RackModel.BulletType,
+                        rackViewModel.RackModel.IsLocked
+                    );
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Error updating rack state: {ex.Message}", "Database Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    Debug.WriteLine($"[Database] Error updating rack state: {ex.GetType().Name} - {ex.Message}. StackTrace: {ex.StackTrace}");
+                }
             }
         });
 
@@ -691,38 +709,51 @@ namespace WPF_WMS01.ViewModels
                         {
                             _httpService.SetCurrentApiVersion(0, 0);
                             LoginStatusMessage = $"로그인 성공! (API 버전 파싱 오류: {loginRes.ApiVersionString}, 기본값 v0.0 사용)";
-                            Console.WriteLine($"Warning: Login response API version '{loginRes.ApiVersionString}' parsing error. Using default v0.0.");
+                            Debug.WriteLine($"Warning: Login response API version '{loginRes.ApiVersionString}' parsing error. Using default v0.0.");
                         }
                     }
                     else
                     {
                         _httpService.SetCurrentApiVersion(0, 0);
                         LoginStatusMessage = $"로그인 성공! (API 버전 정보 없음, 기본값 v0.0 사용)";
-                        Console.WriteLine("Warning: Login response does not contain API version information. Using default v0.0.");
+                        Debug.WriteLine("Warning: Login response does not contain API version information. Using default v0.0.");
                     }
 
                     IsLoggedIn = true;
-                    Console.WriteLine("WMS server login successful!");
+                    Debug.WriteLine("WMS server login successful!");
+                }
+                else
+                {
+                    IsLoggedIn = false;
+                    LoginStatusMessage = "로그인 실패: 토큰 없음";
+                    MessageBox.Show($"Login failed: No authentication token received. Server response might be incomplete or incorrect.", "ANT Login Error");
+                    Debug.WriteLine("Login failed: No authentication token received.");
                 }
             }
             catch (HttpRequestException httpEx)
             {
                 IsLoggedIn = false;
                 LoginStatusMessage = "로그인 실패";
-                MessageBox.Show($"Login failed: Network error or no server response: {httpEx.Message}", "ANT");
+                MessageBox.Show($"Login failed: Network error or no server response: {httpEx.Message}", "ANT Login Error");
+                Debug.WriteLine($"Login HttpRequestException: {httpEx.Message}. Status Code: {httpEx.StatusCode}. StackTrace: {httpEx.StackTrace}");
+                if (httpEx.InnerException != null)
+                {
+                    Debug.WriteLine($"Inner Exception: {httpEx.InnerException.GetType().Name} - {httpEx.InnerException.Message}");
+                }
             }
             catch (JsonException jsonEx)
             {
                 IsLoggedIn = false;
                 LoginStatusMessage = "로그인 실패";
-                MessageBox.Show($"Login failed: Response data format error. {jsonEx.Message}", "ANT");
+                MessageBox.Show($"Login failed: Response data format error. {jsonEx.Message}", "ANT Login Error");
+                Debug.WriteLine($"Login JsonException: {jsonEx.Message}. StackTrace: {jsonEx.StackTrace}");
             }
             catch (Exception ex)
             {
                 IsLoggedIn = false;
                 LoginStatusMessage = "로그인 실패";
-                MessageBox.Show($"Login failed: Unexpected error. {ex.Message}", "ANT");
-                Debug.WriteLine($"Login general error: {ex.Message}");
+                MessageBox.Show($"Login failed: Unexpected error. {ex.Message}", "ANT Login Error");
+                Debug.WriteLine($"Login General Exception: {ex.Message}. StackTrace: {ex.StackTrace}");
             }
             finally
             {
@@ -818,25 +849,67 @@ namespace WPF_WMS01.ViewModels
                     if (targetRackVm == null) return;
                     ShowAutoClosingMessage($"Starting inbound operation for {InputStringForButton} product on rack {selectedRack.Title}. Waiting 10 seconds...");
 
-                    await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, true);
-                    Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = true);
-
-                    if (waitRackVm != null)
+                    try
                     {
-                        await _databaseService.UpdateRackStateAsync(waitRackVm.Id, waitRackVm.RackType, waitRackVm.BulletType, true);
-                        Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = true);
-                    }
+                        await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, true);
+                        Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = true);
 
-                    await Task.Run(async () =>
-                    {
-                        await Task.Delay(TimeSpan.FromSeconds(10));
-
-                        try
+                        if (waitRackVm != null)
                         {
-                            int newBulletType = GetBulletTypeFromInputString(_inputStringForButton); // Helper method
-                            if (newBulletType == 0)
+                            await _databaseService.UpdateRackStateAsync(waitRackVm.Id, waitRackVm.RackType, waitRackVm.BulletType, true);
+                            Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = true);
+                        }
+
+                        await Task.Run(async () =>
+                        {
+                            await Task.Delay(TimeSpan.FromSeconds(10));
+
+                            try
                             {
-                                ShowAutoClosingMessage("Could not find a valid product type in the input string.");
+                                int newBulletType = GetBulletTypeFromInputString(_inputStringForButton); // Helper method
+                                if (newBulletType == 0)
+                                {
+                                    ShowAutoClosingMessage("Could not find a valid product type in the input string.");
+                                    await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, false);
+                                    Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
+                                    if (waitRackVm != null)
+                                    {
+                                        await _databaseService.UpdateRackStateAsync(waitRackVm.Id, waitRackVm.RackType, waitRackVm.BulletType, false);
+                                        Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = false);
+                                    }
+                                    return;
+                                }
+
+                                await _databaseService.UpdateRackStateAsync(
+                                    selectedRack.Id,
+                                    selectedRack.RackType,
+                                    newBulletType,
+                                    false
+                                );
+
+                                await _databaseService.UpdateLotNumberAsync(selectedRack.Id,
+                                    InputStringForButton.TrimStart().TrimEnd(_militaryCharacter));
+
+                                Application.Current.Dispatcher.Invoke(() =>
+                                {
+                                    targetRackVm.BulletType = newBulletType;
+                                    targetRackVm.IsLocked = false;
+
+                                    if (waitRackVm != null)
+                                    {
+                                        waitRackVm.IsLocked = false;
+                                    }
+
+                                    ShowAutoClosingMessage($"Product inbound completed for rack {selectedRack.Title}.");
+                                    InputStringForButton = string.Empty;
+                                });
+                            }
+                            catch (Exception ex)
+                            {
+                                Application.Current.Dispatcher.Invoke(() =>
+                                {
+                                    MessageBox.Show($"Error during inbound operation: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                                });
                                 await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, false);
                                 Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
                                 if (waitRackVm != null)
@@ -844,48 +917,24 @@ namespace WPF_WMS01.ViewModels
                                     await _databaseService.UpdateRackStateAsync(waitRackVm.Id, waitRackVm.RackType, waitRackVm.BulletType, false);
                                     Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = false);
                                 }
-                                return;
                             }
-
-                            await _databaseService.UpdateRackStateAsync(
-                                selectedRack.Id,
-                                selectedRack.RackType,
-                                newBulletType,
-                                false
-                            );
-
-                            await _databaseService.UpdateLotNumberAsync(selectedRack.Id,
-                                InputStringForButton.TrimStart().TrimEnd(_militaryCharacter));
-
-                            Application.Current.Dispatcher.Invoke(() =>
-                            {
-                                targetRackVm.BulletType = newBulletType;
-                                targetRackVm.IsLocked = false;
-
-                                if (waitRackVm != null)
-                                {
-                                    waitRackVm.IsLocked = false;
-                                }
-
-                                ShowAutoClosingMessage($"Product inbound completed for rack {selectedRack.Title}.");
-                                InputStringForButton = string.Empty;
-                            });
-                        }
-                        catch (Exception ex)
+                        });
+                    }
+                    catch (Exception ex) // 외부 try-catch 추가 (await _databaseService.UpdateRackStateAsync 때문에)
+                    {
+                        MessageBox.Show($"Error initiating inbound operation: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        Debug.WriteLine($"[Inbound] Error initiating inbound: {ex.GetType().Name} - {ex.Message}");
+                        if (targetRackVm != null)
                         {
-                            Application.Current.Dispatcher.Invoke(() =>
-                            {
-                                MessageBox.Show($"Error during inbound operation: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                            });
                             await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, false);
                             Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
-                            if (waitRackVm != null)
-                            {
-                                await _databaseService.UpdateRackStateAsync(waitRackVm.Id, waitRackVm.RackType, waitRackVm.BulletType, false);
-                                Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = false);
-                            }
                         }
-                    });
+                        if (waitRackVm != null)
+                        {
+                            await _databaseService.UpdateRackStateAsync(waitRackVm.Id, waitRackVm.RackType, waitRackVm.BulletType, false);
+                            Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = false);
+                        }
+                    }
                 }
             }
             else
@@ -924,6 +973,8 @@ namespace WPF_WMS01.ViewModels
                     newBulletTypeForWaitRack = GetBulletTypeFromInputString(_inputStringForButton); // Helper method
                 }
 
+                // 이 Task.Run은 CanExecute 호출 시마다 실행될 수 있으므로, 과도한 DB/UI 업데이트를 피하기 위해 주의해야 함.
+                // 이 부분을 ExecuteInboundProduct 안으로 옮기는 것이 더 적절할 수 있음.
                 Task.Run(async () =>
                 {
                     await _databaseService.UpdateRackStateAsync(
@@ -969,25 +1020,67 @@ namespace WPF_WMS01.ViewModels
                     if (targetRackVm == null) return;
                     ShowAutoClosingMessage($"Starting inbound operation for {InputStringForButton} product on rack {selectedRack.Title}. Waiting 10 seconds...");
 
-                    await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, true);
-                    Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = true);
-
-                    if (waitRackVm != null)
+                    try
                     {
-                        await _databaseService.UpdateRackStateAsync(waitRackVm.Id, waitRackVm.RackType, waitRackVm.BulletType, true);
-                        Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = true);
-                    }
+                        await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, true);
+                        Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = true);
 
-                    await Task.Run(async () =>
-                    {
-                        await Task.Delay(TimeSpan.FromSeconds(10));
-
-                        try
+                        if (waitRackVm != null)
                         {
-                            int newBulletType = GetBulletTypeFromInputString(_inputStringForButton); // Helper method
-                            if (newBulletType == 0)
+                            await _databaseService.UpdateRackStateAsync(waitRackVm.Id, waitRackVm.RackType, waitRackVm.BulletType, true);
+                            Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = true);
+                        }
+
+                        await Task.Run(async () =>
+                        {
+                            await Task.Delay(TimeSpan.FromSeconds(10));
+
+                            try
                             {
-                                ShowAutoClosingMessage("Could not find a valid product type in the input string.");
+                                int newBulletType = GetBulletTypeFromInputString(_inputStringForButton); // Helper method
+                                if (newBulletType == 0)
+                                {
+                                    ShowAutoClosingMessage("Could not find a valid product type in the input string.");
+                                    await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, false);
+                                    Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
+                                    if (waitRackVm != null)
+                                    {
+                                        await _databaseService.UpdateRackStateAsync(waitRackVm.Id, waitRackVm.RackType, waitRackVm.BulletType, false);
+                                        Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = false);
+                                    }
+                                    return;
+                                }
+
+                                await _databaseService.UpdateRackStateAsync(
+                                    selectedRack.Id,
+                                    3,
+                                    newBulletType,
+                                    false
+                                );
+
+                                await _databaseService.UpdateLotNumberAsync(selectedRack.Id,
+                                    InputStringForButton.TrimStart().TrimEnd(_militaryCharacter));
+
+                                Application.Current.Dispatcher.Invoke(() =>
+                                {
+                                    targetRackVm.BulletType = newBulletType;
+                                    targetRackVm.IsLocked = false;
+
+                                    if (waitRackVm != null)
+                                    {
+                                        waitRackVm.IsLocked = false;
+                                    }
+
+                                    ShowAutoClosingMessage($"Product inbound completed for rack {selectedRack.Title}.");
+                                    InputStringForButton = string.Empty;
+                                });
+                            }
+                            catch (Exception ex)
+                            {
+                                Application.Current.Dispatcher.Invoke(() =>
+                                {
+                                    MessageBox.Show($"Error during inbound operation: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                                });
                                 await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, false);
                                 Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
                                 if (waitRackVm != null)
@@ -995,48 +1088,24 @@ namespace WPF_WMS01.ViewModels
                                     await _databaseService.UpdateRackStateAsync(waitRackVm.Id, waitRackVm.RackType, waitRackVm.BulletType, false);
                                     Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = false);
                                 }
-                                return;
                             }
-
-                            await _databaseService.UpdateRackStateAsync(
-                                selectedRack.Id,
-                                3,
-                                newBulletType,
-                                false
-                            );
-
-                            await _databaseService.UpdateLotNumberAsync(selectedRack.Id,
-                                InputStringForButton.TrimStart().TrimEnd(_militaryCharacter));
-
-                            Application.Current.Dispatcher.Invoke(() =>
-                            {
-                                targetRackVm.BulletType = newBulletType;
-                                targetRackVm.IsLocked = false;
-
-                                if (waitRackVm != null)
-                                {
-                                    waitRackVm.IsLocked = false;
-                                }
-
-                                ShowAutoClosingMessage($"Product inbound completed for rack {selectedRack.Title}.");
-                                InputStringForButton = string.Empty;
-                            });
-                        }
-                        catch (Exception ex)
+                        });
+                    }
+                    catch (Exception ex) // 외부 try-catch 추가
+                    {
+                        MessageBox.Show($"Error initiating fake inbound operation: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        Debug.WriteLine($"[Fake Inbound] Error initiating fake inbound: {ex.GetType().Name} - {ex.Message}");
+                        if (targetRackVm != null)
                         {
-                            Application.Current.Dispatcher.Invoke(() =>
-                            {
-                                MessageBox.Show($"Error during inbound operation: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                            });
                             await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, false);
                             Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
-                            if (waitRackVm != null)
-                            {
-                                await _databaseService.UpdateRackStateAsync(waitRackVm.Id, waitRackVm.RackType, waitRackVm.BulletType, false);
-                                Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = false);
-                            }
                         }
-                    });
+                        if (waitRackVm != null)
+                        {
+                            await _databaseService.UpdateRackStateAsync(waitRackVm.Id, waitRackVm.RackType, waitRackVm.BulletType, false);
+                            Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = false);
+                        }
+                    }
                 }
             }
             else
@@ -1127,50 +1196,63 @@ namespace WPF_WMS01.ViewModels
                     var targetRackVmsToLock = selectedRacksForCheckout.Select(r => RackList?.FirstOrDefault(rvm => rvm.Id == r.Id))
                                                                        .Where(rvm => rvm != null)
                                                                        .ToList();
-                    foreach (var rvm in targetRackVmsToLock)
+                    try
                     {
-                        await _databaseService.UpdateRackStateAsync(rvm.Id, rvm.RackType, rvm.BulletType, true);
-                        Application.Current.Dispatcher.Invoke(() => rvm.IsLocked = true);
-                    }
-
-                    await Task.Run(async () =>
-                    {
-                        foreach (var rackModelToCheckout in selectedRacksForCheckout)
+                        foreach (var rvm in targetRackVmsToLock)
                         {
-                            var targetRackVm = RackList?.FirstOrDefault(r => r.Id == rackModelToCheckout.Id);
-                            if (targetRackVm == null) continue;
-
-                            try
-                            {
-                                ShowAutoClosingMessage($"Processing checkout for rack {targetRackVm.Title}... (Waiting 10 seconds)");
-
-                                await Task.Delay(TimeSpan.FromSeconds(10));
-
-                                await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, 0, false);
-                                await _databaseService.UpdateLotNumberAsync(targetRackVm.Id, String.Empty);
-                                Application.Current.Dispatcher.Invoke(() =>
-                                {
-                                    targetRackVm.BulletType = 0;
-                                    targetRackVm.IsLocked = false;
-                                    ShowAutoClosingMessage($"Checkout completed for rack {targetRackVm.Title}.");
-                                });
-                            }
-                            catch (Exception ex)
-                            {
-                                Application.Current.Dispatcher.Invoke(() =>
-                                {
-                                    MessageBox.Show($"Error during checkout for rack {targetRackVm.Title}: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                                });
-                                await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, false);
-                                Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
-                            }
+                            await _databaseService.UpdateRackStateAsync(rvm.Id, rvm.RackType, rvm.BulletType, true);
+                            Application.Current.Dispatcher.Invoke(() => rvm.IsLocked = true);
                         }
 
-                        Application.Current.Dispatcher.Invoke(() =>
+                        await Task.Run(async () =>
                         {
-                            ShowAutoClosingMessage($"All {productName} product checkout operations completed.");
+                            foreach (var rackModelToCheckout in selectedRacksForCheckout)
+                            {
+                                var targetRackVm = RackList?.FirstOrDefault(r => r.Id == rackModelToCheckout.Id);
+                                if (targetRackVm == null) continue;
+
+                                try
+                                {
+                                    ShowAutoClosingMessage($"Processing checkout for rack {targetRackVm.Title}... (Waiting 10 seconds)");
+
+                                    await Task.Delay(TimeSpan.FromSeconds(10));
+
+                                    await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, 0, false);
+                                    await _databaseService.UpdateLotNumberAsync(targetRackVm.Id, String.Empty);
+                                    Application.Current.Dispatcher.Invoke(() =>
+                                    {
+                                        targetRackVm.BulletType = 0;
+                                        targetRackVm.IsLocked = false;
+                                        ShowAutoClosingMessage($"Checkout completed for rack {targetRackVm.Title}.");
+                                    });
+                                }
+                                catch (Exception ex)
+                                {
+                                    Application.Current.Dispatcher.Invoke(() =>
+                                    {
+                                        MessageBox.Show($"Error during checkout for rack {targetRackVm.Title}: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                                    });
+                                    await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, false);
+                                    Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
+                                }
+                            }
+
+                            Application.Current.Dispatcher.Invoke(() =>
+                            {
+                                ShowAutoClosingMessage($"All {productName} product checkout operations completed.");
+                            });
                         });
-                    });
+                    }
+                    catch (Exception ex) // 외부 try-catch 추가
+                    {
+                        MessageBox.Show($"Error initiating checkout operation: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        Debug.WriteLine($"[Checkout] Error initiating checkout: {ex.GetType().Name} - {ex.Message}");
+                        foreach (var rvm in targetRackVmsToLock)
+                        {
+                            await _databaseService.UpdateRackStateAsync(rvm.Id, rvm.RackType, rvm.BulletType, false);
+                            Application.Current.Dispatcher.Invoke(() => rvm.IsLocked = false);
+                        }
+                    }
                 }
                 else
                 {

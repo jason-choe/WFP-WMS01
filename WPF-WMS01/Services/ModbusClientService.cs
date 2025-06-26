@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using System.Threading.Tasks;
 using System;
 using System.IO.Ports; // 시리얼 포트 통신을 위해 사용
+using System.Diagnostics; // Debug.WriteLine을 위해 추가
 
 namespace WPF_WMS01.Services
 {
@@ -50,6 +51,7 @@ namespace WPF_WMS01.Services
             _ipAddress = ipAddress;
             _port = port;
             _slaveId = slaveId;
+            Debug.WriteLine($"[ModbusService] Initialized for TCP: {ipAddress}:{port}, Slave ID: {slaveId}");
         }
 
         /// <summary>
@@ -71,6 +73,7 @@ namespace WPF_WMS01.Services
             _stopBits = stopBits;
             _dataBits = dataBits;
             _slaveId = slaveId;
+            Debug.WriteLine($"[ModbusService] Initialized for RTU: {comPortName}, {baudRate}bps, Slave ID: {slaveId}");
         }
 
         /// <summary>
@@ -105,6 +108,7 @@ namespace WPF_WMS01.Services
             {
                 if (_currentMode == ModbusMode.TCP)
                 {
+                    Debug.WriteLine($"[ModbusService] Attempting to connect via TCP to {_ipAddress}:{_port}...");
                     _tcpClient = new TcpClient();
                     // ConnectAsync를 사용하여 비동기적으로 연결 시도
                     await _tcpClient.ConnectAsync(_ipAddress, _port).ConfigureAwait(false);
@@ -112,15 +116,16 @@ namespace WPF_WMS01.Services
                     if (_tcpClient.Connected)
                     {
                         _master = ModbusIpMaster.CreateIp(_tcpClient); // Modbus TCP 마스터 생성
-                        Console.WriteLine($"[ModbusService] Modbus TCP Connected to {_ipAddress}:{_port}");
+                        Debug.WriteLine($"[ModbusService] Modbus TCP Connected to {_ipAddress}:{_port}");
                     }
                     else
                     {
-                        Console.WriteLine($"[ModbusService] Failed to connect to {_ipAddress}:{_port}.");
+                        Debug.WriteLine($"[ModbusService] Failed to connect to {_ipAddress}:{_port}. TcpClient not connected.");
                     }
                 }
                 else // ModbusMode.RTU
                 {
+                    Debug.WriteLine($"[ModbusService] Attempting to connect via RTU to {_comPortName} at {_baudRate} baud...");
                     _serialPort = new SerialPort(_comPortName, _baudRate, _parity, _dataBits, _stopBits);
                     // SerialPort.Open()은 동기 메서드이므로 Task.Run을 사용하여 백그라운드 스레드에서 실행
                     await Task.Run(() => _serialPort.Open()).ConfigureAwait(false);
@@ -128,11 +133,11 @@ namespace WPF_WMS01.Services
                     if (_serialPort.IsOpen)
                     {
                         _master = ModbusSerialMaster.CreateRtu(_serialPort); // Modbus RTU 마스터 생성
-                        Console.WriteLine($"[ModbusService] Modbus RTU Connected to {_comPortName} at {_baudRate} baud.");
+                        Debug.WriteLine($"[ModbusService] Modbus RTU Connected to {_comPortName} at {_baudRate} baud.");
                     }
                     else
                     {
-                        Console.WriteLine($"[ModbusService] Failed to open serial port {_comPortName}.");
+                        Debug.WriteLine($"[ModbusService] Failed to open serial port {_comPortName}. SerialPort not open.");
                     }
                 }
 
@@ -140,11 +145,12 @@ namespace WPF_WMS01.Services
                 {
                     _master.Transport.ReadTimeout = 2000; // 응답 대기 시간 (ms)
                     _master.Transport.WriteTimeout = 2000;
+                    Debug.WriteLine("[ModbusService] Modbus master transport timeouts set.");
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[ModbusService] Connection Error: {ex.Message}");
+                Debug.WriteLine($"[ModbusService] Connection Error: {ex.GetType().Name} - {ex.Message}. StackTrace: {ex.StackTrace}");
                 Dispose(); // 오류 발생 시 자원 해제
             }
         }
@@ -169,9 +175,13 @@ namespace WPF_WMS01.Services
         {
             if (!IsConnected)
             {
-                Console.WriteLine("[ModbusService] Not Connected. Attempting to reconnect...");
+                Debug.WriteLine("[ModbusService] Read request: Not Connected. Attempting to reconnect...");
                 await ConnectAsync().ConfigureAwait(false); // ConnectAsync 호출
-                if (!IsConnected) return null; // 재연결 실패 시 null 반환
+                if (!IsConnected)
+                {
+                    Debug.WriteLine("[ModbusService] Read request: Reconnection failed. Cannot read coils.");
+                    return null; // 재연결 실패 시 null 반환
+                }
             }
 
             try
@@ -179,11 +189,12 @@ namespace WPF_WMS01.Services
                 // ReadCoils: 코일(Coils) 값을 읽어옵니다. (기능 코드 0x01)
                 // ConfigureAwait(false)를 사용하여 호출 스레드로 돌아가지 않도록 함
                 bool[] coils = await _master.ReadCoilsAsync(_slaveId, startAddress, numberOfPoints).ConfigureAwait(false);
+                // Debug.WriteLine($"[ModbusService] Read coils from {startAddress}, count {numberOfPoints}. Data: [{string.Join(", ", coils.Select(c => c ? "1" : "0"))}]");
                 return coils;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[ModbusService] Error reading coils from {startAddress}: {ex.Message}");
+                Debug.WriteLine($"[ModbusService] Error reading coils from {startAddress}: {ex.GetType().Name} - {ex.Message}. StackTrace: {ex.StackTrace}");
                 Dispose(); // 통신 오류 발생 시 연결 끊고 재연결 준비
                 return null;
             }
@@ -199,19 +210,24 @@ namespace WPF_WMS01.Services
         {
             if (!IsConnected)
             {
-                Console.WriteLine("[ModbusService] Not Connected. Attempting to reconnect...");
+                Debug.WriteLine($"[ModbusService] Read single coil request: Not Connected. Attempting to reconnect for address {address}...");
                 await ConnectAsync().ConfigureAwait(false);
-                if (!IsConnected) return false;
+                if (!IsConnected)
+                {
+                    Debug.WriteLine($"[ModbusService] Read single coil request: Reconnection failed. Cannot read coil {address}.");
+                    return false;
+                }
             }
 
             try
             {
                 bool[] coils = await _master.ReadCoilsAsync(_slaveId, address, 1).ConfigureAwait(false);
+                // Debug.WriteLine($"[ModbusService] Read single coil at address {address}. Value: {(coils != null && coils.Length > 0 ? (coils[0] ? "1" : "0") : "N/A")}");
                 return coils != null && coils.Length > 0 && coils[0];
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[ModbusService] Error reading single coil at address {address}: {ex.Message}");
+                Debug.WriteLine($"[ModbusService] Error reading single coil at address {address}: {ex.GetType().Name} - {ex.Message}. StackTrace: {ex.StackTrace}");
                 Dispose();
                 return false;
             }
@@ -229,9 +245,13 @@ namespace WPF_WMS01.Services
         {
             if (!IsConnected)
             {
-                Console.WriteLine("[ModbusService] Not Connected. Attempting to reconnect...");
+                Debug.WriteLine($"[ModbusService] Write request for address {address}: Not Connected. Attempting to reconnect...");
                 await ConnectAsync().ConfigureAwait(false); // ConnectAsync 호출
-                if (!IsConnected) return false; // 재연결 실패 시 false 반환
+                if (!IsConnected)
+                {
+                    Debug.WriteLine($"[ModbusService] Write request for address {address}: Reconnection failed. Cannot write coil.");
+                    return false; // 재연결 실패 시 false 반환
+                }
             }
 
             try
@@ -239,12 +259,12 @@ namespace WPF_WMS01.Services
                 // WriteSingleCoil: 단일 코일(Coil) 값을 씁니다. (기능 코드 0x05)
                 // ConfigureAwait(false)를 사용하여 호출 스레드로 돌아가지 않도록 함
                 await _master.WriteSingleCoilAsync(_slaveId, address, value).ConfigureAwait(false);
-                Console.WriteLine($"[ModbusService] Coil at address {address} set to {value}.");
+                Debug.WriteLine($"[ModbusService] Coil at address {address} set to {value}. Write successful.");
                 return true;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[ModbusService] Error writing coil to address {address}: {ex.Message}");
+                Debug.WriteLine($"[ModbusService] Error writing coil to address {address}: {ex.GetType().Name} - {ex.Message}. StackTrace: {ex.StackTrace}");
                 Dispose(); // 통신 오류 발생 시 연결 끊고 재연결 준비
                 return false;
             }
@@ -256,17 +276,19 @@ namespace WPF_WMS01.Services
         /// </summary>
         public void Dispose()
         {
+            Debug.WriteLine("[ModbusService] Disposing Modbus resources...");
             try
             {
                 // Dispose Modbus master first
                 if (_master != null)
                 {
                     _master.Dispose();
+                    Debug.WriteLine("[ModbusService] Modbus master disposed.");
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[ModbusService] Error disposing Modbus master: {ex.Message}");
+                Debug.WriteLine($"[ModbusService] Error disposing Modbus master: {ex.GetType().Name} - {ex.Message}");
             }
             finally
             {
@@ -281,13 +303,15 @@ namespace WPF_WMS01.Services
                     if (_tcpClient.Connected)
                     {
                         _tcpClient.Close();
+                        Debug.WriteLine("[ModbusService] TcpClient closed.");
                     }
                     _tcpClient.Dispose();
+                    Debug.WriteLine("[ModbusService] TcpClient disposed.");
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[ModbusService] Error disposing TcpClient: {ex.Message}");
+                Debug.WriteLine($"[ModbusService] Error disposing TcpClient: {ex.GetType().Name} - {ex.Message}");
             }
             finally
             {
@@ -302,19 +326,21 @@ namespace WPF_WMS01.Services
                     if (_serialPort.IsOpen)
                     {
                         _serialPort.Close();
+                        Debug.WriteLine("[ModbusService] SerialPort closed.");
                     }
                     _serialPort.Dispose();
+                    Debug.WriteLine("[ModbusService] SerialPort disposed.");
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[ModbusService] Error disposing SerialPort: {ex.Message}");
+                Debug.WriteLine($"[ModbusService] Error disposing SerialPort: {ex.GetType().Name} - {ex.Message}");
             }
             finally
             {
                 _serialPort = null;
             }
-            Console.WriteLine("[ModbusService] Modbus Disconnected.");
+            Debug.WriteLine("[ModbusService] Modbus Disconnected and all resources released.");
         }
     }
 }

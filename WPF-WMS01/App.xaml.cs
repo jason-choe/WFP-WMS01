@@ -35,7 +35,11 @@ namespace WPF_WMS01
             services.AddSingleton<HttpService>(new HttpService(baseApiUrl));
             services.AddSingleton<DatabaseService>(); // DatabaseService가 생성자 매개변수가 없다면
             services.AddSingleton<ModbusClientService>(provider =>
-                new ModbusClientService("localhost", 502, 1)); // ModbusClientService 인스턴스 생성
+                new ModbusClientService(
+                    ConfigurationManager.AppSettings["ModbusIpAddress"],
+                    int.Parse(ConfigurationManager.AppSettings["ModbusPort"]),
+                    byte.Parse(ConfigurationManager.AppSettings["ModbusSlaveId"])
+                )); // ModbusClientService 인스턴스 생성
 
             // MainViewModel 등록 (모든 종속성을 생성자 주입)
             services.AddSingleton<MainViewModel>(); // DI 컨테이너가 MainViewModel과 그 종속성을 해결
