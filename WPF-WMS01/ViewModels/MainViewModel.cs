@@ -28,6 +28,7 @@ namespace WPF_WMS01.ViewModels
         private bool _isProcessing; // 비동기 작업 진행 중 여부
         private int _currentProgress; // 진행률 (0-100)
         private bool _isCoilTaskStarted; // 이 Coil 활성화에 대한 비동기 작업이 이미 스케줄링되었는지 여부
+        private bool _isCoilTaskScheduled; // 이 Coil 활성화에 대한 비동기 작업이 이미 스케줄링되었는지 여부
 
         public bool IsEnabled
         {
@@ -66,10 +67,10 @@ namespace WPF_WMS01.ViewModels
             set => SetProperty(ref _currentProgress, value);
         }
 
-        public bool IsCoilTaskStarted // 비동기 작업이 스케줄링/시작되었는지 여부 (중복 트리거 방지용)
+        public bool IsCoilTaskScheduled // 비동기 작업이 스케줄링/시작되었는지 여부 (중복 트리거 방지용)
         {
-            get => _isCoilTaskStarted;
-            set => SetProperty(ref _isCoilTaskStarted, value);
+            get => _isCoilTaskScheduled;
+            set => SetProperty(ref _isCoilTaskScheduled, value);
         }
 
         // 이 Command는 MainViewModel에서 초기화될 것입니다.
@@ -82,7 +83,7 @@ namespace WPF_WMS01.ViewModels
             IsEnabled = false; // 초기에는 비활성화
             IsProcessing = false; // 초기에는 작업 중 아님
             CurrentProgress = 0; // 초기 진행률 0
-            IsCoilTaskStarted = false; // 초기 상태
+            IsCoilTaskScheduled = false; // 초기 상태
         }
     }
 
@@ -260,7 +261,7 @@ namespace WPF_WMS01.ViewModels
         private void SetupModbusReadTimer()
         {
             _modbusReadTimer = new DispatcherTimer();
-            _modbusReadTimer.Interval = TimeSpan.FromMilliseconds(500); // 0.5초마다 읽기 (조정 가능)
+            _modbusReadTimer.Interval = TimeSpan.FromMilliseconds(1000); // 0.5초마다 읽기 (조정 가능)
             _modbusReadTimer.Tick += ModbusReadTimer_Tick;
             _modbusReadTimer.Start();
             Debug.WriteLine("[ModbusService] Modbus Read Timer Started.");
@@ -290,10 +291,12 @@ namespace WPF_WMS01.ViewModels
         {
             if (!_modbusService.IsConnected)
             {
-                _modbusService.Connect(); // 연결 끊겼으면 재연결 시도
+                // ConnectAsync를 await하여 연결 시도를 기다림 (UI 스레드 블로킹 방지)
+                Debug.WriteLine("[ModbusService] Not Connected. Attempting to reconnect asynchronously...");
+                await _modbusService.ConnectAsync().ConfigureAwait(false); // ConfigureAwait(false) 사용
                 if (!_modbusService.IsConnected)
                 {
-                    Debug.WriteLine("[ModbusService] Connection failed. Skipping coil read.");
+                    Debug.WriteLine("[ModbusService] Connection failed after reconnect attempt. Skipping coil read.");
                     return;
                 }
             }
@@ -304,53 +307,75 @@ namespace WPF_WMS01.ViewModels
                 ushort startAddress = 0; // Modbus Coil 시작 주소
                 ushort numberOfCoils = (ushort)ModbusButtons.Count; // 12개
 
+                // ReadCallButtonStatesAsync는 내부적으로 ConfigureAwait(false)를 사용하므로 여기서는 사용하지 않아도 됨.
                 bool[] coilStates = await _modbusService.ReadCallButtonStatesAsync(startAddress, numberOfCoils);
 
                 if (coilStates != null && coilStates.Length >= numberOfCoils)
                 {
-                    Application.Current.Dispatcher.Invoke(async () => // Make this async to await Task.Delay
+                    // UI 업데이트는 UI 스레드에서 수행해야 하므로 Dispatcher.Invoke 사용
+                    // 여기서는 Task.Run으로 감싸지 않고, 내부에서 필요한 비동기 작업만 Task.Run으로 오프로드.
+                    Application.Current.Dispatcher.Invoke(() =>
                     {
                         for (int i = 0; i < numberOfCoils; i++)
                         {
                             var buttonVm = ModbusButtons[i];
                             bool currentCoilState = coilStates[i];
 
-                            // PLC 신호 (Coil 0->1)가 들어왔을 때 버튼 활성화
-                            // 이 시점에서는 작업이 아직 시작되지 않았으므로 IsProcessing은 고려하지 않음.
-                            // 버튼이 클릭 가능하도록 IsEnabled를 currentCoilState에 바인딩
-                            buttonVm.IsEnabled = currentCoilState;
-
-                            // Coil이 0에서 1로 활성화되었고, 현재 작업 중이 아니며, 아직 이 Coil에 대한 작업이 스케줄링되지 않았다면
-                            if (currentCoilState && !buttonVm.IsProcessing && !buttonVm.IsCoilTaskStarted)
+                            // Coil이 1이고, 작업 중이 아니며, 아직 이 Coil에 대한 작업이 스케줄링되지 않았다면
+                            if (currentCoilState && !buttonVm.IsProcessing && !buttonVm.IsCoilTaskScheduled)
                             {
-                                buttonVm.IsCoilTaskStarted = true; // 작업 스케줄링 플래그 설정
+                                buttonVm.IsCoilTaskScheduled = true; // 작업 스케줄링 플래그 설정
                                 Debug.WriteLine($"[Modbus] Coil {buttonVm.ModbusAddress} activated (0->1). Scheduling task start in 10 seconds.");
                                 ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} Coil 신호 감지! 10초 후 작업 자동 시작됩니다.");
 
-                                // 10초 지연 후 자동 작업 시작
-                                await Task.Delay(TimeSpan.FromSeconds(10));
+                                // 10초 지연 및 비동기 작업 시작을 백그라운드 스레드에서 처리
+                                // _ = Task.Run(...) 형태로 fire-and-forget 패턴 사용.
+                                _ = Task.Run(async () =>
+                                {
+                                    await Task.Delay(TimeSpan.FromSeconds(10)).ConfigureAwait(false); // 10초 지연 (백그라운드 스레드)
 
-                                // 지연 후, 버튼 상태를 다시 확인하고 작업 시작
-                                // Coil이 여전히 1이고 작업 중이 아니라면
-                                if (buttonVm.IsEnabled && !buttonVm.IsProcessing)
-                                {
-                                    _ = HandleCoilActivatedTask(buttonVm); // 메인 비동기 작업 시작 (fire-and-forget)
-                                }
-                                else
-                                {
-                                    // 10초 지연 중에 Coil이 다시 0으로 바뀌었거나, 이미 작업이 시작된 경우
-                                    Debug.WriteLine($"[Modbus] Coil {buttonVm.ModbusAddress} task not started after delay. State changed or already processing.");
-                                    buttonVm.IsCoilTaskStarted = false; // 플래그 리셋
-                                }
+                                    // 지연 후, 현재 코일 상태를 다시 확인하여 작업 시작 여부 결정
+                                    bool postDelayCoilState = false;
+                                    try
+                                    {
+                                        // 백그라운드 스레드에서 Modbus Read (ConfigureAwait(false) 포함)
+                                        postDelayCoilState = await _modbusService.ReadSingleCoilAsync(buttonVm.ModbusAddress).ConfigureAwait(false);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        Debug.WriteLine($"[Modbus] Error re-reading coil {buttonVm.ModbusAddress} after delay: {ex.Message}");
+                                        // 오류 발생 시 작업 스케줄링 취소 처리 (UI 스레드에서)
+                                        Application.Current.Dispatcher.Invoke(() => buttonVm.IsCoilTaskScheduled = false);
+                                        return;
+                                    }
+
+                                    // 10초 지연 후에도 Coil이 여전히 1이고, 아직 작업 중이 아니라면 메인 비동기 작업 시작
+                                    if (postDelayCoilState && !buttonVm.IsProcessing)
+                                    {
+                                        // HandleCoilActivatedTask는 UI 업데이트를 포함하므로, UI 스레드에서 호출되어야 함.
+                                        await Application.Current.Dispatcher.InvokeAsync(async () =>
+                                        {
+                                            await HandleCoilActivatedTask(buttonVm); // UI 스레드에서 작업 시작
+                                        });
+                                    }
+                                    else
+                                    {
+                                        Debug.WriteLine($"[Modbus] Coil {buttonVm.ModbusAddress} task not started after delay. State changed or already processing.");
+                                        // 작업이 시작되지 않았다면, 스케줄링 플래그 리셋 (UI 스레드에서)
+                                        Application.Current.Dispatcher.Invoke(() => buttonVm.IsCoilTaskScheduled = false);
+                                    }
+                                }).ConfigureAwait(false); // Task.Run의 Continuation도 백그라운드 스레드에서 유지
                             }
-                            else if (!currentCoilState && buttonVm.IsCoilTaskStarted)
+                            else if (!currentCoilState && buttonVm.IsCoilTaskScheduled)
                             {
                                 // Coil이 0으로 돌아갔고 작업이 스케줄링된 상태였다면, 스케줄링 취소
                                 Debug.WriteLine($"[Modbus] Coil {buttonVm.ModbusAddress} went low, cancelling scheduled task initiation.");
-                                buttonVm.IsCoilTaskStarted = false;
+                                buttonVm.IsCoilTaskScheduled = false; // 플래그 리셋
                             }
 
-                            // 버튼의 CanExecute 상태를 갱신하여 UI가 IsEnabled와 IsProcessing의 변화에 반응하도록 함.
+                            // 버튼의 IsEnabled 상태는 현재 Coil 상태와 IsProcessing 여부에 따라 즉시 업데이트
+                            buttonVm.IsEnabled = currentCoilState && !buttonVm.IsProcessing;
+                            // Command의 CanExecute 상태를 명시적으로 갱신하여 UI가 IsEnabled/IsProcessing 변화에 즉시 반응하도록 함
                             ((RelayCommand)buttonVm.ExecuteButtonCommand)?.RaiseCanExecuteChanged();
                         }
                     });
@@ -451,7 +476,7 @@ namespace WPF_WMS01.ViewModels
                 {
                     buttonVm.IsProcessing = false; // 작업 완료 상태로 변경
                     buttonVm.CurrentProgress = 0; // 진행률 초기화
-                    buttonVm.IsCoilTaskStarted = false; // 다음 PLC 신호를 위해 플래그 리셋
+                    buttonVm.IsCoilTaskScheduled = false; // 다음 PLC 신호를 위해 플래그 리셋
                 });
             }
         }
