@@ -246,15 +246,15 @@ namespace WPF_WMS01.ViewModels
             // Discrete Input은 100000번부터 시작, Coil Output은 0번부터 시작
             ModbusButtons = new ObservableCollection<ModbusButtonViewModel>
             {
-                new ModbusButtonViewModel("팔레트 공급", 0, 0),    // Discrete Input 100000 -> 0x02 Read 0 / Coil Output 0x05 Write 0
-                new ModbusButtonViewModel("단프라 공급", 1, 1),    // Discrete Input 100001 -> 0x02 Read 1 / Coil Output 0x05 Write 1
-                new ModbusButtonViewModel("7.62mm", 2, 2),        // Discrete Input 100002 -> 0x02 Read 2 / Coil Output 0x05 Write 2
-                new ModbusButtonViewModel("5.56mm[1]", 3, 3),     // Discrete Input 100003 -> 0x02 Read 3 / Coil Output 0x05 Write 3
-                new ModbusButtonViewModel("5.56mm[2]", 4, 4),     // Discrete Input 100004 -> 0x02 Read 4 / Coil Output 0x05 Write 4
-                new ModbusButtonViewModel("5.56mm[3]", 5, 5),     // Discrete Input 100005 -> 0x02 Read 5 / Coil Output 0x05 Write 5
-                new ModbusButtonViewModel("5.56mm[4]", 6, 6),     // Discrete Input 100006 -> 0x02 Read 6 / Coil Output 0x05 Write 6
-                new ModbusButtonViewModel("5.56mm[5]", 7, 7),     // Discrete Input 100007 -> 0x02 Read 7 / Coil Output 0x05 Write 7
-                new ModbusButtonViewModel("5.56mm[6]", 8, 8),     // Discrete Input 100008 -> 0x02 Read 8 / Coil Output 0x05 Write 8
+                new ModbusButtonViewModel("5.56mm[1]", 0, 0),    // Discrete Input 100000 -> 0x02 Read 0 / Coil Output 0x05 Write 0
+                new ModbusButtonViewModel("5.56mm[2]", 1, 1),    // Discrete Input 100001 -> 0x02 Read 1 / Coil Output 0x05 Write 1
+                new ModbusButtonViewModel("5.56mm[3]", 2, 2),        // Discrete Input 100002 -> 0x02 Read 2 / Coil Output 0x05 Write 2
+                new ModbusButtonViewModel("5.56mm[4]", 3, 3),     // Discrete Input 100003 -> 0x02 Read 3 / Coil Output 0x05 Write 3
+                new ModbusButtonViewModel("5.56mm[5]", 4, 4),     // Discrete Input 100004 -> 0x02 Read 4 / Coil Output 0x05 Write 4
+                new ModbusButtonViewModel("5.56mm[6]", 5, 5),     // Discrete Input 100005 -> 0x02 Read 5 / Coil Output 0x05 Write 5
+                new ModbusButtonViewModel("7.62mm", 6, 6),     // Discrete Input 100006 -> 0x02 Read 6 / Coil Output 0x05 Write 6
+                new ModbusButtonViewModel("팔레트 공급", 7, 7),     // Discrete Input 100007 -> 0x02 Read 7 / Coil Output 0x05 Write 7
+                new ModbusButtonViewModel("단프라 공급", 8, 8),     // Discrete Input 100008 -> 0x02 Read 8 / Coil Output 0x05 Write 8
                 new ModbusButtonViewModel("카타르[1]", 9, 9),     // Discrete Input 100009 -> 0x02 Read 9 / Coil Output 0x05 Write 9
                 new ModbusButtonViewModel("카타르[2]", 10, 10),   // Discrete Input 100010 -> 0x02 Read 10 / Coil Output 0x05 Write 10
                 new ModbusButtonViewModel("특수 포장", 11, 11)    // Discrete Input 100011 -> 0x02 Read 11 / Coil Output 0x05 Write 11
@@ -552,7 +552,7 @@ namespace WPF_WMS01.ViewModels
         private void InitializeCommands()
         {
             InboundProductCommand = new RelayCommand(ExecuteInboundProduct, CanExecuteInboundProduct);
-            FakeInboundProductCommand = new RelayCommand(FakeExecuteInboundProduct, CanExecuteInboundProduct);
+            FakeInboundProductCommand = new RelayCommand(FakeExecuteInboundProduct, CanFakeExecuteInboundProduct);
             Checkout223aProductCommand = new RelayCommand(
                 param => ExecuteCheckoutProduct(new CheckoutRequest { BulletType = 1, ProductName = "233A" }),
                 param => CanExecuteCheckoutProduct(new CheckoutRequest { BulletType = 1, ProductName = "233A" }));
@@ -950,7 +950,7 @@ namespace WPF_WMS01.ViewModels
                             {
                                 Application.Current.Dispatcher.Invoke(() =>
                                 {
-                                    MessageBox.Show($"Error during inbound operation: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                                    MessageBox.Show($"Error during inbound operation: {ex.Message}", "예외 발생", MessageBoxButton.OK, MessageBoxImage.Error);
                                 });
                                 await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, false);
                                 Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
@@ -964,7 +964,7 @@ namespace WPF_WMS01.ViewModels
                     }
                     catch (Exception ex) // 외부 try-catch 추가 (await _databaseService.UpdateRackStateAsync 때문에)
                     {
-                        MessageBox.Show($"Error initiating inbound operation: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        MessageBox.Show($"미포장 입고 작업을 시작하는 중 오류 발생: {ex.Message}", "예외 발생", MessageBoxButton.OK, MessageBoxImage.Error);
                         Debug.WriteLine($"[Inbound] Error initiating inbound: {ex.GetType().Name} - {ex.Message}");
                         if (targetRackVm != null)
                         {
@@ -1002,15 +1002,15 @@ namespace WPF_WMS01.ViewModels
                                                      || _inputStringForButton.Contains("7.62X")
                                              );
 
-            bool emptyAndVisibleRackExists = RackList?.Any(r => (r.ImageIndex == 0 && r.IsVisible)) == true;
+            bool emptyAndVisibleRackExists = RackList?.Any(r => (r.ImageIndex == 0 && r.IsVisible && !r.Title.Equals(_waitRackTitle))) == true;
 
             var waitRackVm = RackList?.FirstOrDefault(r => r.Title == _waitRackTitle);
-            bool waitRackNotLocked = (waitRackVm?.IsLocked == false) || (waitRackVm == null);
+           bool waitRackNotLocked = (waitRackVm?.IsLocked == false) || (waitRackVm == null);
 
             if (waitRackVm != null)
             {
                 int newBulletTypeForWaitRack = 0;
-                if (inputContainsValidProduct && emptyAndVisibleRackExists)
+                if (inputContainsValidProduct)
                 {
                     newBulletTypeForWaitRack = GetBulletTypeFromInputString(_inputStringForButton); // Helper method
                 }
@@ -1049,7 +1049,7 @@ namespace WPF_WMS01.ViewModels
             var selectEmptyRackViewModel = new SelectEmptyRackPopupViewModel(emptyRacks.Select(r => r.RackModel).ToList(),
                 _inputStringForButton.TrimStart().TrimEnd(_militaryCharacter), "재공품 적재", "재공품");
             var selectEmptyRackView = new SelectEmptyRackPopupView { DataContext = selectEmptyRackViewModel };
-            selectEmptyRackView.Title = $"Select rack for half-pallet inbound of {InputStringForButton.TrimStart().TrimEnd(this._militaryCharacter)} product";
+            selectEmptyRackView.Title = $"재공품 입고 랙 선택";
 
             if (selectEmptyRackView.ShowDialog() == true && selectEmptyRackViewModel.DialogResult == true)
             {
@@ -1060,7 +1060,7 @@ namespace WPF_WMS01.ViewModels
                     var waitRackVm = RackList?.FirstOrDefault(r => r.Title == _waitRackTitle);
 
                     if (targetRackVm == null) return;
-                    ShowAutoClosingMessage($"Starting inbound operation for {InputStringForButton} product on rack {selectedRack.Title}. Waiting 10 seconds...");
+                    ShowAutoClosingMessage($"랙 {selectedRack.Title}에 재공품 {InputStringForButton.TrimStart().TrimEnd(_militaryCharacter)}의 입고 작업을 시작합니다. 10초 동안 대기...");
 
                     try
                     {
@@ -1082,7 +1082,7 @@ namespace WPF_WMS01.ViewModels
                                 int newBulletType = GetBulletTypeFromInputString(_inputStringForButton); // Helper method
                                 if (newBulletType == 0)
                                 {
-                                    ShowAutoClosingMessage("Could not find a valid product type in the input string.");
+                                    ShowAutoClosingMessage("입력한 문자열에서 유효한 제품 유형을 찾을 수 없습니다..");
                                     await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, false);
                                     Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
                                     if (waitRackVm != null)
@@ -1113,7 +1113,7 @@ namespace WPF_WMS01.ViewModels
                                         waitRackVm.IsLocked = false;
                                     }
 
-                                    ShowAutoClosingMessage($"Product inbound completed for rack {selectedRack.Title}.");
+                                    ShowAutoClosingMessage($"랙 {selectedRack.Title}에 재공품 입고가 완료되었습니다..");
                                     InputStringForButton = string.Empty;
                                 });
                             }
@@ -1121,7 +1121,7 @@ namespace WPF_WMS01.ViewModels
                             {
                                 Application.Current.Dispatcher.Invoke(() =>
                                 {
-                                    MessageBox.Show($"Error during inbound operation: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                                    MessageBox.Show($"재공품 입고 작업 중 오류 발생: {ex.Message}", "예외 발생", MessageBoxButton.OK, MessageBoxImage.Error);
                                 });
                                 await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, false);
                                 Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
@@ -1135,7 +1135,7 @@ namespace WPF_WMS01.ViewModels
                     }
                     catch (Exception ex) // 외부 try-catch 추가
                     {
-                        MessageBox.Show($"Error initiating fake inbound operation: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        MessageBox.Show($"재공품 입고 작업을 시작하는 중 오류 발생: {ex.Message}", "예외 발생", MessageBoxButton.OK, MessageBoxImage.Error);
                         Debug.WriteLine($"[Fake Inbound] Error initiating fake inbound: {ex.GetType().Name} - {ex.Message}");
                         if (targetRackVm != null)
                         {
@@ -1179,30 +1179,6 @@ namespace WPF_WMS01.ViewModels
 
             bool waitRackNotLocked = (waitRackVm?.IsLocked == false) || (waitRackVm == null);
 
-            if (waitRackVm != null)
-            {
-                int newBulletTypeForWaitRack = 0;
-                if (inputContainsValidProduct && emptyAndVisibleRackExists)
-                {
-                    newBulletTypeForWaitRack = GetBulletTypeFromInputString(_inputStringForButton);
-                }
-
-                Task.Run(async () =>
-                {
-                    await _databaseService.UpdateRackStateAsync(
-                        waitRackVm.Id,
-                        waitRackVm.RackType,
-                        newBulletTypeForWaitRack,
-                        waitRackVm.IsLocked
-                    );
-
-                    Application.Current.Dispatcher.Invoke(() =>
-                    {
-                        waitRackVm.BulletType = newBulletTypeForWaitRack;
-                    });
-                });
-            }
-
             return inputContainsValidProduct && emptyAndVisibleRackExists && waitRackNotLocked;
         }
 
@@ -1215,13 +1191,13 @@ namespace WPF_WMS01.ViewModels
 
                 if (availableRacksForCheckout == null || !availableRacksForCheckout.Any())
                 {
-                    MessageBox.Show($"No racks with {productName} product to checkout.", $"{productName} Checkout Not Possible", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    MessageBox.Show($"출고할 {productName} 제품이 있는 랙이 없습니다..", $"{productName} 제품 출고 불가능", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
 
                 var selectCheckoutRackViewModel = new SelectCheckoutRackPopupViewModel(availableRacksForCheckout);
                 var selectCheckoutRackView = new SelectCheckoutRackPopupView { DataContext = selectCheckoutRackViewModel };
-                selectCheckoutRackView.Title = $"Select rack for checkout of {productName} product";
+                selectCheckoutRackView.Title = $"출고할 {productName} 제품 선택";
 
                 if (selectCheckoutRackView.ShowDialog() == true && selectCheckoutRackViewModel.DialogResult == true)
                 {
@@ -1229,11 +1205,11 @@ namespace WPF_WMS01.ViewModels
 
                     if (selectedRacksForCheckout == null || !selectedRacksForCheckout.Any())
                     {
-                        MessageBox.Show("No racks selected.", "Checkout Cancelled", MessageBoxButton.OK, MessageBoxImage.Information);
+                        MessageBox.Show("선택된 랙이 없습니다.", "출고 취소", MessageBoxButton.OK, MessageBoxImage.Information);
                         return;
                     }
 
-                    ShowAutoClosingMessage($"Starting checkout operation for {selectedRacksForCheckout.Count} {productName} product racks.");
+                    ShowAutoClosingMessage($"{selectedRacksForCheckout.Count} 개 랙의 {productName} 제품 출고가 시작됩니다.");
 
                     var targetRackVmsToLock = selectedRacksForCheckout.Select(r => RackList?.FirstOrDefault(rvm => rvm.Id == r.Id))
                                                                        .Where(rvm => rvm != null)
@@ -1255,7 +1231,7 @@ namespace WPF_WMS01.ViewModels
 
                                 try
                                 {
-                                    ShowAutoClosingMessage($"Processing checkout for rack {targetRackVm.Title}... (Waiting 10 seconds)");
+                                    ShowAutoClosingMessage($"랙 {targetRackVm.Title}의 제품 출고가 진행되고 있습니다... (10 초 대기)");
 
                                     await Task.Delay(TimeSpan.FromSeconds(10));
 
@@ -1265,14 +1241,14 @@ namespace WPF_WMS01.ViewModels
                                     {
                                         targetRackVm.BulletType = 0;
                                         targetRackVm.IsLocked = false;
-                                        ShowAutoClosingMessage($"Checkout completed for rack {targetRackVm.Title}.");
+                                        ShowAutoClosingMessage($"랙 {targetRackVm.Title}의 제품 출고가 완료되었습니다.");
                                     });
                                 }
                                 catch (Exception ex)
                                 {
                                     Application.Current.Dispatcher.Invoke(() =>
                                     {
-                                        MessageBox.Show($"Error during checkout for rack {targetRackVm.Title}: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                                        MessageBox.Show($"랙 {targetRackVm.Title} 제품 출고 중 에러 발생: {ex.Message}", "예외 발생", MessageBoxButton.OK, MessageBoxImage.Error);
                                     });
                                     await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, false);
                                     Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
@@ -1281,13 +1257,13 @@ namespace WPF_WMS01.ViewModels
 
                             Application.Current.Dispatcher.Invoke(() =>
                             {
-                                ShowAutoClosingMessage($"All {productName} product checkout operations completed.");
+                                ShowAutoClosingMessage($"요청된 {productName} 제품의 출고가 모두 완료되었습니다..");
                             });
                         });
                     }
                     catch (Exception ex) // 외부 try-catch 추가
                     {
-                        MessageBox.Show($"Error initiating checkout operation: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        MessageBox.Show($"출고 작업을 시작하는 중 오류가 발생: {ex.Message}", "예외 발생", MessageBoxButton.OK, MessageBoxImage.Error);
                         Debug.WriteLine($"[Checkout] Error initiating checkout: {ex.GetType().Name} - {ex.Message}");
                         foreach (var rvm in targetRackVmsToLock)
                         {
@@ -1298,12 +1274,12 @@ namespace WPF_WMS01.ViewModels
                 }
                 else
                 {
-                    ShowAutoClosingMessage($"{productName} product checkout operation cancelled.");
+                    ShowAutoClosingMessage($"{productName} 제품 출고가 취소되었습니다.");
                 }
             }
             else
             {
-                MessageBox.Show("Invalid checkout request.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show("잘못된 출고 요청.", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
