@@ -322,20 +322,24 @@ namespace WPF_WMS01.ViewModels
 
             if (wrapRackViewModel == null)
             {
-                ShowAutoClosingMessage("이동할 'WRAP' 랙을 찾을 수 없습니다.");
+                MessageBox.Show("이동할 'WRAP' 장소을 찾을 수 없습니다.", "알림", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
             // "WRAP" 랙의 상태 확인
             if (wrapRackViewModel.BulletType != 0 || wrapRackViewModel.IsLocked)
             {
-                ShowAutoClosingMessage("'WRAP' 랙이 이미 사용 중이거나 잠겨있어 이동할 수 없습니다.");
+
+                MessageBox.Show("포장 장소가 이미 사용 중이거나 잠겨있어 이동할 수 없습니다.", "알림", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
             // 사용자에게 이동 여부 확인 팝업
             var confirmViewModel = new ConfirmTransferPopupViewModel(
-                sourceRackViewModel.Title, sourceRackViewModel.LotNumber, "WRAP"
+                sourceRackViewModel.Title,
+                sourceRackViewModel.Title.Equals(_mainViewModel._waitRackTitle) ?
+                    _mainViewModel.InputStringForButton.TrimStart().TrimEnd(_mainViewModel._militaryCharacter) : sourceRackViewModel.LotNumber,
+                "WRAP", sourceRackViewModel.BulletType
             );
             var confirmView = new ConfirmTransferPopupView { DataContext = confirmViewModel };
             bool? confirmResult = confirmView.ShowDialog();
@@ -355,6 +359,10 @@ namespace WPF_WMS01.ViewModels
                 });
 
                 ShowAutoClosingMessage($"랙 {sourceRackViewModel.Title} 에서 'WRAP' 랙으로 이동 중입니다. 10초 대기...");
+                int originalSourceBulletType = sourceRackViewModel.RackModel.BulletType;
+                string originalSourceLotNumber =
+                    sourceRackViewModel.Title.Equals(_mainViewModel._waitRackTitle) ?
+                    _mainViewModel.InputStringForButton.TrimStart().TrimEnd(_mainViewModel._militaryCharacter) : sourceRackViewModel.LotNumber; // LotNumber도 미리 저장
 
                 await Task.Run(async () =>
                 {
@@ -366,12 +374,12 @@ namespace WPF_WMS01.ViewModels
                         await _databaseService.UpdateRackStateAsync(
                             wrapRackViewModel.Id,
                             wrapRackViewModel.RackType,
-                            sourceRackViewModel.BulletType, // 원본 랙의 제품 타입 복사
+                            originalSourceBulletType, // 원본 랙의 제품 타입 복사
                             false // 잠금 해제
                         );
                         await _databaseService.UpdateLotNumberAsync(
                             wrapRackViewModel.Id,
-                            sourceRackViewModel.LotNumber // 원본 랙의 LotNumber 복사
+                            originalSourceLotNumber // 원본 랙의 LotNumber 복사
                         );
 
                         // 3) 원본 랙 비우기
@@ -385,6 +393,8 @@ namespace WPF_WMS01.ViewModels
                             sourceRackViewModel.Id,
                             String.Empty // LotNumber 비움
                         );
+                        if (sourceRackViewModel.Title.Equals(_mainViewModel._waitRackTitle))
+                            _mainViewModel.InputStringForButton = string.Empty; // 입고 후 TextBox 내용 초기화;
 
                         Application.Current.Dispatcher.Invoke(() =>
                         {

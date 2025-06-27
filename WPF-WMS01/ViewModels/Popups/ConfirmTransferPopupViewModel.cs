@@ -7,11 +7,18 @@ namespace WPF_WMS01.ViewModels.Popups
 {
     public class ConfirmTransferPopupViewModel : ViewModelBase
     {
-        private string _message;
-        public string Message
+        private string _confirmMessage;
+        public string ConfirmMessage
         {
-            get => _message;
-            set => SetProperty(ref _message, value);
+            get => _confirmMessage;
+            set => SetProperty(ref _confirmMessage, value);
+        }
+
+        private string _lotNoMessage;
+        public string LotNoMessage
+        {
+            get => _lotNoMessage;
+            set => SetProperty(ref _lotNoMessage, value);
         }
 
         public ICommand ConfirmCommand { get; private set; }
@@ -21,15 +28,29 @@ namespace WPF_WMS01.ViewModels.Popups
         // public bool DialogResult { get; private set; }
 
         // Design-time 또는 기본 사용을 위한 매개 변수 없는 public 생성자 추가
-        public ConfirmTransferPopupViewModel() : this("알 수 없는 랙", "알 수 없는 Lot", "알 수 없는 목적지")
+        public ConfirmTransferPopupViewModel() : this("알 수 없는 랙", "알 수 없는 Lot", "알 수 없는 목적지", 0)
         {
             // 이 생성자는 주로 디자인 타임 뷰에서 ViewModel을 인스턴스화할 때 사용됩니다.
             // 런타임에서는 아래의 매개 변수 있는 생성자가 사용될 것입니다.
         }
 
-        public ConfirmTransferPopupViewModel(string sourceRackTitle, string sourceLotNumber, string destinationRackTitle)
+        public ConfirmTransferPopupViewModel(string sourceRackTitle, string sourceLotNumber, string destinationRackTitle, int bulletType)
         {
-            Message = $"랙 [{sourceRackTitle}]의 제품 (Lot: {sourceLotNumber})을/를 랙 [{destinationRackTitle}](으)로 이동하시겠습니까?";
+            string product = bulletType == 1 ? "223A"
+                : bulletType == 2 ? "223SP"
+                : bulletType == 3 ? "223XM"
+                : bulletType == 4 ? "5.56X"
+                : bulletType == 5 ? "5.56K"
+                : bulletType == 6 ? "M855T"
+                : bulletType == 7 ? "M193"
+                : bulletType == 8 ? "308B"
+                : bulletType == 9 ? "308SP"
+                : bulletType == 10 ? "308XM"
+                : bulletType == 11 ? "7.62X"
+                : bulletType == 12 ? "M80" : "Unknown";
+            string rackName = sourceRackTitle.Equals("WAIT") ? "대기장소" : "랙 "+sourceRackTitle;
+            LotNoMessage = $"Lot No. :  {sourceLotNumber}";
+            ConfirmMessage = $"{rackName}의 {product} 제품을 포장할까요?";
             ConfirmCommand = new RelayCommand(ExecuteConfirm);
             CancelCommand = new RelayCommand(ExecuteCancel);
             // DialogResult = false; // 이제 Window.DialogResult를 직접 설정합니다.
