@@ -26,10 +26,12 @@ namespace WPF_WMS01.ViewModels
     {
         private bool _isEnabled; // 버튼의 활성화 상태 (Coil 1일 때 true, 그리고 작업 중이 아닐 때)
         private string _content; // 버튼에 표시될 텍스트 (예: "팔레트 공급")
-        private ushort _modbusAddress; // 해당 버튼이 관여하는 Modbus Coil 주소
+        private ushort _discreteInputAddress; // 해당 버튼이 관여하는 Modbus Discrete Input 주소
+        private ushort _coilOutputAddress; // 해당 버튼에 대응하는 Modbus Coil Output 주소 (경광등)
         private bool _isProcessing; // 비동기 작업 진행 중 여부
         private int _currentProgress; // 진행률 (0-100)
-        private bool _isCoilTaskScheduled; // 이 Coil 활성화에 대한 비동기 작업이 이미 스케줄링되었는지 여부
+        private bool _isTaskInitiatedByDiscreteInput; // Discrete Input에 의해 작업이 시작되었음을 나타내는 플래그 (중복 트리거 방지용)
+        private bool _currentDiscreteInputState; // 현재 Discrete Input 상태를 저장 (이전 상태 비교용)
 
         public bool IsEnabled
         {
@@ -43,10 +45,16 @@ namespace WPF_WMS01.ViewModels
             set => SetProperty(ref _content, value);
         }
 
-        public ushort ModbusAddress
+        public ushort DiscreteInputAddress // Call Button 입력 주소
         {
-            get => _modbusAddress;
-            set => SetProperty(ref _modbusAddress, value);
+            get => _discreteInputAddress;
+            set => SetProperty(ref _discreteInputAddress, value);
+        }
+
+        public ushort CoilOutputAddress // 경광등 제어 Coil 주소
+        {
+            get => _coilOutputAddress;
+            set => SetProperty(ref _coilOutputAddress, value);
         }
 
         public bool IsProcessing // 작업 진행 중 여부
@@ -68,23 +76,31 @@ namespace WPF_WMS01.ViewModels
             set => SetProperty(ref _currentProgress, value);
         }
 
-        public bool IsCoilTaskScheduled // 비동기 작업이 스케줄링/시작되었는지 여부 (중복 트리거 방지용)
+        public bool IsTaskInitiatedByDiscreteInput // Discrete Input에 의해 작업이 스케줄링/시작되었는지 여부 (중복 트리거 방지용)
         {
-            get => _isCoilTaskScheduled;
-            set => SetProperty(ref _isCoilTaskScheduled, value);
+            get => _isTaskInitiatedByDiscreteInput;
+            set => SetProperty(ref _isTaskInitiatedByDiscreteInput, value);
+        }
+
+        public bool CurrentDiscreteInputState // 현재 Discrete Input 상태 (for 0->1 transition detection)
+        {
+            get => _currentDiscreteInputState;
+            set => SetProperty(ref _currentDiscreteInputState, value);
         }
 
         // 이 Command는 MainViewModel에서 초기화될 것입니다.
         public ICommand ExecuteButtonCommand { get; set; }
 
-        public ModbusButtonViewModel(string content, ushort address)
+        public ModbusButtonViewModel(string content, ushort discreteInputAddress, ushort coilOutputAddress)
         {
             Content = content;
-            ModbusAddress = address;
+            DiscreteInputAddress = discreteInputAddress;
+            CoilOutputAddress = coilOutputAddress;
             IsEnabled = false; // 초기에는 비활성화
             IsProcessing = false; // 초기에는 작업 중 아님
             CurrentProgress = 0; // 초기 진행률 0
-            IsCoilTaskScheduled = false; // 초기 상태
+            IsTaskInitiatedByDiscreteInput = false; // 초기 상태
+            CurrentDiscreteInputState = false; // 초기 Discrete Input 상태
         }
     }
 
@@ -109,9 +125,25 @@ namespace WPF_WMS01.ViewModels
         public readonly string _waitRackTitle;
         public readonly char[] _militaryCharacter = { 'a', 'b', 'c', ' ' };
 
-        // Modbus Coil 상태를 저장할 ObservableCollection
+        // Modbus Discrete Input/Coil 상태를 저장할 ObservableCollection
         public ObservableCollection<ModbusButtonViewModel> ModbusButtons { get; set; }
 
+        private bool _plcStatusIsRun; // PLC 구동 상태 (Discrete Input 100012)
+        public bool PlcStatusIsRun
+        {
+            get => _plcStatusIsRun;
+            set
+            {
+                if (SetProperty(ref _plcStatusIsRun, value))
+                {
+                    // PLC 상태가 변경되면 모든 Modbus 버튼의 활성화 상태를 갱신
+                    foreach (var buttonVm in ModbusButtons)
+                    {
+                        ((RelayCommand)buttonVm.ExecuteButtonCommand)?.RaiseCanExecuteChanged();
+                    }
+                }
+            }
+        }
 
         private string _loginStatusMessage;
         public string LoginStatusMessage
@@ -207,24 +239,25 @@ namespace WPF_WMS01.ViewModels
             //    ConfigurationManager.AppSettings["ModbusIpAddress"] ?? "localhost",
             //    int.Parse(ConfigurationManager.AppSettings["ModbusPort"] ?? "502"),
             //    byte.Parse(ConfigurationManager.AppSettings["ModbusSlaveId"] ?? "1")
-           // );
+            // );
 
             // ModbusButtons 컬렉션 초기화 (XAML의 버튼 순서 및 내용에 맞춰)
-            // Modbus Coil Address는 임의로 0부터 순차적으로 부여했습니다. 실제 PLC 주소에 맞춰 변경해야 합니다.
+            // Discrete Input Address와 Coil Output Address를 스펙에 맞춰 매핑
+            // Discrete Input은 100000번부터 시작, Coil Output은 0번부터 시작
             ModbusButtons = new ObservableCollection<ModbusButtonViewModel>
             {
-                new ModbusButtonViewModel("팔레트 공급", 0), // Coil Address 0
-                new ModbusButtonViewModel("단프라 공급", 1), // Coil Address 1
-                new ModbusButtonViewModel("7.62mm", 2),    // Coil Address 2
-                new ModbusButtonViewModel("5.56mm[1]", 3), // Coil Address 3
-                new ModbusButtonViewModel("5.56mm[2]", 4), // Coil Address 4
-                new ModbusButtonViewModel("5.56mm[3]", 5), // Coil Address 5
-                new ModbusButtonViewModel("5.56mm[4]", 6), // Coil Address 6
-                new ModbusButtonViewModel("5.56mm[5]", 7), // Coil Address 7
-                new ModbusButtonViewModel("5.56mm[6]", 8), // Coil Address 8
-                new ModbusButtonViewModel("카타르[1]", 9), // Coil Address 9
-                new ModbusButtonViewModel("카타르[2]", 10),// Coil Address 10
-                new ModbusButtonViewModel("특수 포장", 11) // Coil Address 11
+                new ModbusButtonViewModel("팔레트 공급", 0, 0),    // Discrete Input 100000 -> 0x02 Read 0 / Coil Output 0x05 Write 0
+                new ModbusButtonViewModel("단프라 공급", 1, 1),    // Discrete Input 100001 -> 0x02 Read 1 / Coil Output 0x05 Write 1
+                new ModbusButtonViewModel("7.62mm", 2, 2),        // Discrete Input 100002 -> 0x02 Read 2 / Coil Output 0x05 Write 2
+                new ModbusButtonViewModel("5.56mm[1]", 3, 3),     // Discrete Input 100003 -> 0x02 Read 3 / Coil Output 0x05 Write 3
+                new ModbusButtonViewModel("5.56mm[2]", 4, 4),     // Discrete Input 100004 -> 0x02 Read 4 / Coil Output 0x05 Write 4
+                new ModbusButtonViewModel("5.56mm[3]", 5, 5),     // Discrete Input 100005 -> 0x02 Read 5 / Coil Output 0x05 Write 5
+                new ModbusButtonViewModel("5.56mm[4]", 6, 6),     // Discrete Input 100006 -> 0x02 Read 6 / Coil Output 0x05 Write 6
+                new ModbusButtonViewModel("5.56mm[5]", 7, 7),     // Discrete Input 100007 -> 0x02 Read 7 / Coil Output 0x05 Write 7
+                new ModbusButtonViewModel("5.56mm[6]", 8, 8),     // Discrete Input 100008 -> 0x02 Read 8 / Coil Output 0x05 Write 8
+                new ModbusButtonViewModel("카타르[1]", 9, 9),     // Discrete Input 100009 -> 0x02 Read 9 / Coil Output 0x05 Write 9
+                new ModbusButtonViewModel("카타르[2]", 10, 10),   // Discrete Input 100010 -> 0x02 Read 10 / Coil Output 0x05 Write 10
+                new ModbusButtonViewModel("특수 포장", 11, 11)    // Discrete Input 100011 -> 0x02 Read 11 / Coil Output 0x05 Write 11
             };
 
             // 각 ModbusButtonViewModel에 Command 할당
@@ -267,95 +300,104 @@ namespace WPF_WMS01.ViewModels
             Debug.WriteLine("[ModbusService] Modbus Read Timer Started.");
         }
 
-        // Modbus Coil 상태 주기적 읽기
+        // Modbus Discrete Input/Coil 상태 주기적 읽기
         private async void ModbusReadTimer_Tick(object sender, EventArgs e)
         {
             if (!_modbusService.IsConnected)
             {
-                // ConnectAsync를 await하여 연결 시도를 기다림 (UI 스레드 블로킹 방지)
                 Debug.WriteLine("[ModbusService] Read Timer: Not Connected. Attempting to reconnect asynchronously...");
                 await _modbusService.ConnectAsync().ConfigureAwait(false); // ConfigureAwait(false) 사용
                 if (!_modbusService.IsConnected)
                 {
-                    Debug.WriteLine("[ModbusService] Read Timer: Connection failed after reconnect attempt. Skipping coil read.");
+                    Debug.WriteLine("[ModbusService] Read Timer: Connection failed after reconnect attempt. Skipping Modbus read.");
                     return;
                 }
             }
 
             try
             {
-                // PLC에서 12개 Coil의 상태를 한 번에 읽어옵니다. (주소 0부터 12개)
-                ushort startAddress = 0; // Modbus Coil 시작 주소
-                ushort numberOfCoils = (ushort)ModbusButtons.Count; // 12개
+                // 1. PLC 구동 상태 (Discrete Input 100012) 읽기
+                ushort plcStatusAddress = 12; // 100012의 주소는 0x02 Read 12
+                bool[] plcStatus = await _modbusService.ReadDiscreteInputStatesAsync(plcStatusAddress, 1).ConfigureAwait(false);
 
-                // ReadCallButtonStatesAsync는 내부적으로 ConfigureAwait(false)를 사용하므로 여기서는 사용하지 않아도 됨.
-                bool[] coilStates = await _modbusService.ReadCallButtonStatesAsync(startAddress, numberOfCoils);
-
-                if (coilStates != null && coilStates.Length >= numberOfCoils)
+                // UI 스레드에서 PlcStatusIsRun 업데이트
+                Application.Current.Dispatcher.Invoke(() =>
                 {
-                    // UI 업데이트는 UI 스레드에서 수행해야 하므로 Dispatcher.Invoke 사용
-                    // 여기서는 Task.Run으로 감싸지 않고, 내부에서 필요한 비동기 작업만 Task.Run으로 오프로드.
+                    PlcStatusIsRun = (plcStatus != null && plcStatus.Length > 0 && plcStatus[0]);
+                });
+
+                if (!PlcStatusIsRun)
+                {
+                    Debug.WriteLine("[ModbusService] PLC Status is STOP (0). Ignoring call button inputs.");
+                    // PLC가 STOP 상태이면 모든 버튼을 비활성화하고 작업 플래그 리셋
                     Application.Current.Dispatcher.Invoke(() =>
                     {
-                        for (int i = 0; i < numberOfCoils; i++)
+                        foreach (var buttonVm in ModbusButtons)
+                        {
+                            buttonVm.IsEnabled = false;
+                            buttonVm.IsProcessing = false;
+                            buttonVm.CurrentProgress = 0;
+                            buttonVm.IsTaskInitiatedByDiscreteInput = false;
+                            buttonVm.CurrentDiscreteInputState = false; // Discrete Input 상태 초기화
+                            ((RelayCommand)buttonVm.ExecuteButtonCommand)?.RaiseCanExecuteChanged();
+                        }
+                    });
+                    return; // PLC가 정지 상태이므로 Call Button 입력은 처리하지 않음
+                }
+
+                // 2. Call Button Discrete Input (100000 ~ 100011) 상태 읽기
+                ushort startDiscreteInputAddress = 0; // 100000의 주소는 0x02 Read 0
+                ushort numberOfDiscreteInputs = (ushort)ModbusButtons.Count; // 12개
+                bool[] discreteInputStates = await _modbusService.ReadDiscreteInputStatesAsync(startDiscreteInputAddress, numberOfDiscreteInputs).ConfigureAwait(false);
+
+                // 3. 경광등 Coil Output (0 ~ 11) 상태 읽기 (필요시, 현재는 PLC에 Write만 하므로 생략 가능)
+                // 현재 경광등 상태를 읽어와서 UI에 반영할 필요가 있다면 여기에 추가
+
+                if (discreteInputStates != null && discreteInputStates.Length >= numberOfDiscreteInputs)
+                {
+                    // UI 업데이트는 UI 스레드에서 수행
+                    Application.Current.Dispatcher.Invoke(async () =>
+                    {
+                        for (int i = 0; i < numberOfDiscreteInputs; i++)
                         {
                             var buttonVm = ModbusButtons[i];
-                            bool currentCoilState = coilStates[i];
+                            bool currentDiscreteInputState = discreteInputStates[i];
+                            bool previousDiscreteInputState = buttonVm.CurrentDiscreteInputState;
 
-                            // Coil이 1이고, 작업 중이 아니며, 아직 이 Coil에 대한 작업이 스케줄링되지 않았다면
-                            if (currentCoilState && !buttonVm.IsProcessing && !buttonVm.IsCoilTaskScheduled)
+                            // Discrete Input 상태 업데이트 (다음 틱에서 이전 상태 비교를 위해)
+                            buttonVm.CurrentDiscreteInputState = currentDiscreteInputState;
+
+                            // PLC 신호 (Discrete Input 0->1) 감지 및 PLC가 Run 상태일 때
+                            if (currentDiscreteInputState && !previousDiscreteInputState && !buttonVm.IsProcessing && !buttonVm.IsTaskInitiatedByDiscreteInput)
                             {
-                                buttonVm.IsCoilTaskScheduled = true; // 작업 스케줄링 플래그 설정
-                                Debug.WriteLine($"[Modbus] Coil {buttonVm.ModbusAddress} activated (0->1). Scheduling task start in 10 seconds.");
-                                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} Coil 신호 감지! 10초 후 작업 자동 시작됩니다.");
+                                // 이 버튼에 대한 작업이 이미 시작되지 않았고, Discrete Input이 0에서 1로 전환되었다면
+                                buttonVm.IsTaskInitiatedByDiscreteInput = true; // 작업 시작 플래그 설정
+                                Debug.WriteLine($"[Modbus] Call Button (Discrete Input {buttonVm.DiscreteInputAddress}) activated (0->1). Initiating task.");
+                                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} Call Button 신호 감지! 작업 자동 시작됩니다.");
 
-                                // 10초 지연 및 비동기 작업 시작을 백그라운드 스레드에서 처리
-                                // _ = Task.Run(...) 형태로 fire-and-forget 패턴 사용.
-                                _ = Task.Run(async () =>
+                                // 해당 경광등 Coil을 1로 켜기 (App -> PLC)
+                                bool writeLampSuccess = await _modbusService.WriteSingleCoilAsync(buttonVm.CoilOutputAddress, true).ConfigureAwait(false);
+                                if (writeLampSuccess)
                                 {
-                                    await Task.Delay(TimeSpan.FromSeconds(10)).ConfigureAwait(false); // 10초 지연 (백그라운드 스레드)
-
-                                    // 지연 후, 현재 코일 상태를 다시 확인하여 작업 시작 여부 결정
-                                    bool postDelayCoilState = false;
-                                    try
-                                    {
-                                        // 백그라운드 스레드에서 Modbus Read (ConfigureAwait(false) 포함)
-                                        postDelayCoilState = await _modbusService.ReadSingleCoilAsync(buttonVm.ModbusAddress).ConfigureAwait(false);
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        Debug.WriteLine($"[Modbus] Error re-reading coil {buttonVm.ModbusAddress} after delay: {ex.Message}");
-                                        // 오류 발생 시 작업 스케줄링 취소 처리 (UI 스레드에서)
-                                        Application.Current.Dispatcher.Invoke(() => buttonVm.IsCoilTaskScheduled = false);
-                                        return;
-                                    }
-
-                                    // 10초 지연 후에도 Coil이 여전히 1이고, 아직 작업 중이 아니라면 메인 비동기 작업 시작
-                                    if (postDelayCoilState && !buttonVm.IsProcessing)
-                                    {
-                                        // HandleCoilActivatedTask는 UI 업데이트를 포함하므로, UI 스레드에서 호출되어야 함.
-                                        await Application.Current.Dispatcher.InvokeAsync(async () =>
-                                        {
-                                            await HandleCoilActivatedTask(buttonVm); // UI 스레드에서 작업 시작
-                                        });
-                                    }
-                                    else
-                                    {
-                                        Debug.WriteLine($"[Modbus] Coil {buttonVm.ModbusAddress} task not started after delay. State changed or already processing.");
-                                        // 작업이 시작되지 않았다면, 스케줄링 플래그 리셋 (UI 스레드에서)
-                                        Application.Current.Dispatcher.Invoke(() => buttonVm.IsCoilTaskScheduled = false);
-                                    }
-                                }).ConfigureAwait(false); // Task.Run의 Continuation도 백그라운드 스레드에서 유지
+                                    Debug.WriteLine($"[Modbus] Lamp Coil {buttonVm.CoilOutputAddress} set to ON (1).");
+                                    // 10초 지연 후 메인 비동기 작업 시작
+                                    _ = HandleCallButtonActivatedTask(buttonVm); // 백그라운드에서 실행 (fire-and-forget)
+                                }
+                                else
+                                {
+                                    Debug.WriteLine($"[Modbus] Failed to write Lamp Coil {buttonVm.CoilOutputAddress} to ON (1). Task not started.");
+                                    ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 경광등 켜기 실패! 작업 시작 불가.");
+                                    buttonVm.IsTaskInitiatedByDiscreteInput = false; // 작업 시작 실패했으므로 플래그 리셋
+                                }
                             }
-                            else if (!currentCoilState && buttonVm.IsCoilTaskScheduled)
-                            {
-                                // Coil이 0으로 돌아갔고 작업이 스케줄링된 상태였다면, 스케줄링 취소
-                                Debug.WriteLine($"[Modbus] Coil {buttonVm.ModbusAddress} went low, cancelling scheduled task initiation.");
-                                buttonVm.IsCoilTaskScheduled = false; // 플래그 리셋
-                            }
+                            // 경광등이 꺼진 것이 감지되면 (Coil 1 -> 0) Discrete Input을 0으로 초기화
+                            // 이 부분은 PLC가 처리하는 것이 일반적이지만, HMI가 트리거하는 경우를 위해 남겨둠.
+                            // 스펙상 "경광등이 꺼지면 (1 -> 0) 이에 트리거되어 call button의 입력이 0으로 바뀐다"는 PLC의 동작을 의미.
+                            // HMI는 단순히 경광등을 끄는 역할만 하므로, 여기서는 Discrete Input을 HMI가 직접 0으로 바꾸는 로직은 필요 없음.
+                            // HMI가 경광등을 0으로 쓴 후, 다음 ModbusReadTimer_Tick에서 PLC의 Discrete Input이 0으로 바뀐 것을 확인하게 될 것임.
 
-                            // 버튼의 IsEnabled 상태는 현재 Coil 상태와 IsProcessing 여부에 따라 즉시 업데이트
-                            buttonVm.IsEnabled = currentCoilState && !buttonVm.IsProcessing;
+                            // 버튼의 IsEnabled 상태는 PLC가 Run 상태이고, Discrete Input이 1이고, 현재 작업 중이 아닐 때 활성화
+                            buttonVm.IsEnabled = PlcStatusIsRun && currentDiscreteInputState && !buttonVm.IsProcessing;
                             // Command의 CanExecute 상태를 명시적으로 갱신하여 UI가 IsEnabled/IsProcessing 변화에 즉시 반응하도록 함
                             ((RelayCommand)buttonVm.ExecuteButtonCommand)?.RaiseCanExecuteChanged();
                         }
@@ -364,7 +406,7 @@ namespace WPF_WMS01.ViewModels
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[ModbusService] Error reading Modbus coils in timer tick: {ex.GetType().Name} - {ex.Message}. StackTrace: {ex.StackTrace}");
+                Debug.WriteLine($"[ModbusService] Error reading Modbus inputs/coils in timer tick: {ex.GetType().Name} - {ex.Message}. StackTrace: {ex.StackTrace}");
                 _modbusService.Dispose(); // 통신 오류 발생 시 연결 끊고 재연결 준비
             }
         }
@@ -377,28 +419,29 @@ namespace WPF_WMS01.ViewModels
             // 버튼 클릭 시점의 상태에 따라 팝업 메시지 표시
             if (buttonVm.IsProcessing)
             {
-                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 작업 진행 중: {buttonVm.CurrentProgress}% (주소: {buttonVm.ModbusAddress}).");
+                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 작업 진행 중: {buttonVm.CurrentProgress}% (주소: {buttonVm.DiscreteInputAddress}).");
                 Debug.WriteLine($"[Modbus] Button clicked for {buttonVm.Content}. Task is already processing. Displaying current progress.");
             }
-            else if (buttonVm.IsCoilTaskScheduled) // Coil은 1이지만 10초 지연 중인 경우
+            else if (buttonVm.IsTaskInitiatedByDiscreteInput && buttonVm.CurrentDiscreteInputState) // Discrete Input이 1이고, 작업이 스케줄링되었지만 아직 진행 중은 아닌 경우 (10초 지연 중)
             {
-                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 작업 대기 중. 10초 지연 후 자동 시작됩니다. (주소: {buttonVm.ModbusAddress}).");
-                Debug.WriteLine($"[Modbus] Button clicked for {buttonVm.Content}. Coil is active, task is scheduled to start soon.");
+                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 작업 대기 중. 10초 지연 후 자동 시작됩니다. (주소: {buttonVm.DiscreteInputAddress}).");
+                Debug.WriteLine($"[Modbus] Button clicked for {buttonVm.Content}. Discrete Input is active, task is scheduled to start soon.");
             }
-            else if (buttonVm.IsEnabled) // Coil은 1이지만, IsProcessing도 IsCoilTaskScheduled도 아닌 경우는 거의 없겠지만, 혹시나
+            else if (buttonVm.IsEnabled && buttonVm.CurrentDiscreteInputState) // PLC가 Run이고 Discrete Input이 1이지만, 다른 조건으로 작업이 시작되지 않은 경우 (거의 없겠지만)
             {
-                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 작업 시작 준비 완료. (주소: {buttonVm.ModbusAddress}).");
-                Debug.WriteLine($"[Modbus] Button clicked for {buttonVm.Content}. Coil is active and ready.");
+                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 작업 시작 준비 완료. (주소: {buttonVm.DiscreteInputAddress}).");
+                Debug.WriteLine($"[Modbus] Button clicked for {buttonVm.Content}. Discrete Input is active and ready.");
             }
-            else // 버튼이 비활성화된 경우 (Coil이 0)
+            else // 버튼이 비활성화된 경우 (PLC Stop 또는 Discrete Input 0)
             {
-                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 작업 비활성화됨. (주소: {buttonVm.ModbusAddress}).");
-                Debug.WriteLine($"[Modbus] Button clicked for {buttonVm.Content}. Coil is not active.");
+                string status = PlcStatusIsRun ? $"Discrete Input {buttonVm.DiscreteInputAddress}이 0입니다." : "PLC가 정지 상태입니다.";
+                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 작업 비활성화됨. ({status}).");
+                Debug.WriteLine($"[Modbus] Button clicked for {buttonVm.Content}. Not active. Status: {status}");
             }
         }
 
-        // 비동기 작업 수행 및 진행률 업데이트, 작업 완료 후 Coil 0으로 초기화
-        private async Task HandleCoilActivatedTask(ModbusButtonViewModel buttonVm)
+        // Discrete Input이 0에서 1로 활성화될 때 수행될 비동기 작업
+        private async Task HandleCallButtonActivatedTask(ModbusButtonViewModel buttonVm)
         {
             if (buttonVm == null) return;
 
@@ -415,7 +458,7 @@ namespace WPF_WMS01.ViewModels
                 buttonVm.IsProcessing = true; // 작업 진행 중 상태로 변경 (UI에 ProgressBar 표시)
                 buttonVm.CurrentProgress = 0; // 진행률 초기화
             });
-            Debug.WriteLine($"[Modbus] Async task started for {buttonVm.Content} (Address: {buttonVm.ModbusAddress}).");
+            Debug.WriteLine($"[Modbus] Async task started for {buttonVm.Content} (Discrete Input: {buttonVm.DiscreteInputAddress}).");
 
             const int totalDurationSeconds = 45; // 45초 (30초 ~ 1분 사이)
             const int updateIntervalMs = 500; // 0.5초마다 진행률 업데이트
@@ -430,25 +473,24 @@ namespace WPF_WMS01.ViewModels
                         buttonVm.CurrentProgress = (int)((double)i / totalSteps * 100);
                     });
 
-                    // await Task.Delay를 ConfigureAwait(false)와 함께 사용하여 백그라운드 스레드에서 지연.
                     await Task.Delay(updateIntervalMs).ConfigureAwait(false);
                 }
 
-                // 작업 완료 후 Coil 0으로 쓰기 (HMI 작업 완료 신호)
-                // 백그라운드 스레드에서 Modbus Write (ConfigureAwait(false) 포함)
-                bool writeSuccess = await _modbusService.WriteSingleCoilAsync(buttonVm.ModbusAddress, false).ConfigureAwait(false);
-                if (!writeSuccess)
+                // 작업 완료 후 해당 경광등 Coil을 0으로 쓰기 (App -> PLC)
+                // 이 0으로 쓰는 동작이 PLC의 Discrete Input을 0으로 초기화하는 트리거가 됨.
+                bool writeLampOffSuccess = await _modbusService.WriteSingleCoilAsync(buttonVm.CoilOutputAddress, false).ConfigureAwait(false);
+                if (!writeLampOffSuccess)
                 {
-                    ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} Coil 0 쓰기 실패!");
-                    Debug.WriteLine($"[Modbus] Failed to write Coil {buttonVm.ModbusAddress} to false after task completion.");
+                    ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 경광등 끄기 실패!");
+                    Debug.WriteLine($"[Modbus] Failed to write Lamp Coil {buttonVm.CoilOutputAddress} to OFF (0) after task completion.");
                 }
                 else
                 {
-                    Debug.WriteLine($"[Modbus] Coil {buttonVm.ModbusAddress} set to False after task completion.");
+                    Debug.WriteLine($"[Modbus] Lamp Coil {buttonVm.CoilOutputAddress} set to OFF (0) after task completion. Expecting PLC to reset Discrete Input {buttonVm.DiscreteInputAddress}.");
                 }
 
-                // 작업 완료 메시지는 UI 스레드에서 표시
-                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 작업 완료! (주소: {buttonVm.ModbusAddress})");
+                // UI 스레드에서 작업 완료 메시지 표시
+                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 작업 완료! (Discrete Input: {buttonVm.DiscreteInputAddress})");
             }
             catch (Exception ex)
             {
@@ -463,7 +505,7 @@ namespace WPF_WMS01.ViewModels
                 {
                     buttonVm.IsProcessing = false; // 작업 완료 상태로 변경 (ProgressBar 숨김)
                     buttonVm.CurrentProgress = 0; // 진행률 초기화
-                    buttonVm.IsCoilTaskScheduled = false; // 다음 PLC 신호를 위해 플래그 리셋
+                    buttonVm.IsTaskInitiatedByDiscreteInput = false; // 다음 PLC 신호를 위해 플래그 리셋
                 });
             }
         }
@@ -471,9 +513,9 @@ namespace WPF_WMS01.ViewModels
         // Modbus 버튼 활성화 여부를 결정하는 CanExecute 로직
         private bool CanExecuteModbusButtonCommand(ModbusButtonViewModel buttonVm)
         {
-            // 버튼은 Coil이 1(활성화 상태)이고, 현재 비동기 작업이 진행 중이 아닐 때만 클릭 가능합니다.
+            // 버튼은 PLC가 Run 상태이고, 해당 Discrete Input이 1이며, 현재 비동기 작업이 진행 중이 아닐 때만 클릭 가능합니다.
             // 클릭은 작업 시작이 아닌, 진행 상황 확인/정보 표시용입니다.
-            return buttonVm?.IsEnabled == true && !buttonVm.IsProcessing;
+            return PlcStatusIsRun && buttonVm?.CurrentDiscreteInputState == true && !buttonVm.IsProcessing;
         }
 
 
@@ -829,12 +871,12 @@ namespace WPF_WMS01.ViewModels
 
             if (emptyRacks == null || !emptyRacks.Any())
             {
-                MessageBox.Show("No empty racks available for inbound currently.", "Inbound Not Possible", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("현재 완제품을 입고할 수 있는 빈 랙이 없습니다.", "완제품 입고 불가", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
             var selectEmptyRackViewModel = new SelectEmptyRackPopupViewModel(emptyRacks.Select(r => r.RackModel).ToList(),
-                _inputStringForButton.TrimStart().TrimEnd(_militaryCharacter), "Unpacked Storage", "Pre-packaged product");
+                _inputStringForButton.TrimStart().TrimEnd(_militaryCharacter), "포장 전 적재", "미포장 제품");
             var selectEmptyRackView = new SelectEmptyRackPopupView { DataContext = selectEmptyRackViewModel };
             selectEmptyRackView.Title = $"Select rack for inbound of {InputStringForButton.TrimStart().TrimEnd(this._militaryCharacter)} product";
 
@@ -939,7 +981,7 @@ namespace WPF_WMS01.ViewModels
             }
             else
             {
-                ShowAutoClosingMessage("Inbound operation cancelled.");
+                ShowAutoClosingMessage("미포장 입고가 취소되었습니다.");
             }
         }
 
@@ -1000,12 +1042,12 @@ namespace WPF_WMS01.ViewModels
 
             if (emptyRacks == null || !emptyRacks.Any())
             {
-                MessageBox.Show("No empty half-pallet racks available for inbound currently.", "Fake Inbound Not Possible", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("현재 재공품을 적재할 빈 랙이 없습니다..", "재공품 입고 불가", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
             var selectEmptyRackViewModel = new SelectEmptyRackPopupViewModel(emptyRacks.Select(r => r.RackModel).ToList(),
-                _inputStringForButton.TrimStart().TrimEnd(_militaryCharacter), "Work-in-progress Storage", "Half-pallet Work-in-progress");
+                _inputStringForButton.TrimStart().TrimEnd(_militaryCharacter), "재공품 적재", "재공품");
             var selectEmptyRackView = new SelectEmptyRackPopupView { DataContext = selectEmptyRackViewModel };
             selectEmptyRackView.Title = $"Select rack for half-pallet inbound of {InputStringForButton.TrimStart().TrimEnd(this._militaryCharacter)} product";
 
@@ -1110,7 +1152,7 @@ namespace WPF_WMS01.ViewModels
             }
             else
             {
-                ShowAutoClosingMessage("Inbound operation cancelled.");
+                ShowAutoClosingMessage("재공품 입고가 취소되었습니다.");
             }
         }
 

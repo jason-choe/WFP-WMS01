@@ -103,7 +103,7 @@ namespace WPF_WMS01.ViewModels
         public void SetRackModel(Rack newRack)
         {
             RackModel = newRack; // 이 호출이 위에서 정의한 RackModel의 set 접근자를 호출
-        }   
+        }
 
         // 새롭게 추가할 메서드: 기존 RackModel의 속성을 업데이트
         public void UpdateProperties(Rack newRackData)
@@ -120,7 +120,7 @@ namespace WPF_WMS01.ViewModels
             }
             if (RackModel.BulletType != newRackData.BulletType)
             {
-                RackModel.BulletType = newRackData.BulletType;  
+                RackModel.BulletType = newRackData.BulletType;
             }
             if (RackModel.IsVisible != newRackData.IsVisible)
             {
@@ -164,7 +164,7 @@ namespace WPF_WMS01.ViewModels
                     // OnPropertyChanged()는 RackModel에서 이미 알림을 보내므로 여기서는 필요 없음.
                 }
             }
-        }   
+        }
         public bool IsVisible
         {
             get => _rackModel.IsVisible;
@@ -183,7 +183,7 @@ namespace WPF_WMS01.ViewModels
 
         public int RackType
         {
-            get => _rackModel.RackType;     
+            get => _rackModel.RackType;
             set
             {
                 if (_rackModel.RackType != value)
@@ -253,6 +253,8 @@ namespace WPF_WMS01.ViewModels
             {
                 case 0:
                 case 13:
+                    if (clickedRackViewModel.Title.Equals("WAIT"))
+                        break;
                     // 랙 타입 변경 팝업
                     //int currentRackType = clickedRackViewModel.RackType;
                     //int newRackType = (currentRackType == 0) ? 1 : 0; // 0이면 1로, 1이면 0으로 변경
@@ -277,7 +279,7 @@ namespace WPF_WMS01.ViewModels
                             ShowAutoClosingMessage($"랙 {Title}의 타입이 {currentRackType}에서 {newRackType}으로 변경되었습니다.");
                         }
                         catch (Exception ex)
-                        {   
+                        {
                             MessageBox.Show($"랙 타입   변경 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
                         }
                     }
@@ -299,6 +301,11 @@ namespace WPF_WMS01.ViewModels
                 case 10:
                 case 11:
                 case 12:    // 미 포장 제품이 적재된 랙 선택
+                    // ImageIndex가 1~12일 때 띄울 팝업 - 이동/복사 로직
+                    await HandleRackTransfer(clickedRackViewModel); // 새로운 비동기 처리 메서드 호출
+                    break;
+                case 26:    // clickedRackViewModel.ImageIndex == 26 && clickedRackViewModel.Title.Equals("WRAP")
+                    break;
                 case 27:    // WAIT rack click
                 case 28:    // WAIT rack click
                 case 29:    // WAIT rack click
@@ -343,7 +350,7 @@ namespace WPF_WMS01.ViewModels
                 case 51:
                     // 4) ImageIndex가 40~51일 때 띄울 팝업
                     await HandleHalfPalletExport(clickedRackViewModel);
-//                    MessageBox.Show($"랙 {Title} (ImageIndex: {ImageIndex}): 가입고 반출 : 추가 수정 필요!", "랙 상세", MessageBoxButton.OK, MessageBoxImage.Information);
+                    //                    MessageBox.Show($"랙 {Title} (ImageIndex: {ImageIndex}): 가입고 반출 : 추가 수정 필요!", "랙 상세", MessageBoxButton.OK, MessageBoxImage.Information);
                     break;
                 default:
                     // 그 외의 경우
@@ -579,10 +586,9 @@ namespace WPF_WMS01.ViewModels
 
         private bool CanClickRack(object parameter)
         {
-            // Title 이 "WRAP"이 아니고
             // Rack이 잠겨있지 않을 때만 클릭 가능
             // IsLocked는 RackModel.IsLocked에서 가져옴
-            return (!IsLocked && Title != "WRAP"); // 'locked' 상태가 아닐 때만 클릭 가능하도록 설정
+            return (!IsLocked); // 'locked' 상태가 아닐 때만 클릭 가능하도록 설정
         }
         // 자동 닫힘 메시지 팝업을 표시하는 헬퍼 메서드
         private void ShowAutoClosingMessage(string message)

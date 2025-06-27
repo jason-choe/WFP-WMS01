@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using System;
 using System.IO.Ports; // 시리얼 포트 통신을 위해 사용
 using System.Diagnostics; // Debug.WriteLine을 위해 추가
+using System.Linq; // for .Select() in logging
 
 namespace WPF_WMS01.Services
 {
@@ -165,44 +166,43 @@ namespace WPF_WMS01.Services
         }
 
         /// <summary>
-        /// 지정된 시작 주소부터 코일(Coil) 상태들을 비동기적으로 읽어옵니다.
-        /// Asynchronously reads coil states from a specified start address.
+        /// 지정된 시작 주소부터 Discrete Input 상태들을 비동기적으로 읽어옵니다. (Call Button 입력용)
+        /// Asynchronously reads Discrete Input states from a specified start address. (For Call Button input)
         /// </summary>
-        /// <param name="startAddress">읽기 시작할 코일 주소</param>
-        /// <param name="numberOfPoints">읽을 코일의 개수</param>
-        /// <returns>읽은 코일 값들의 배열 (bool[]), 오류 발생 시 null</returns>
-        public async Task<bool[]> ReadCallButtonStatesAsync(ushort startAddress, ushort numberOfPoints)
+        /// <param name="startAddress">읽기 시작할 Discrete Input 주소</param>
+        /// <param name="numberOfPoints">읽을 Discrete Input의 개수</param>
+        /// <returns>읽은 Discrete Input 값들의 배열 (bool[]), 오류 발생 시 null</returns>
+        public async Task<bool[]> ReadDiscreteInputStatesAsync(ushort startAddress, ushort numberOfPoints)
         {
             if (!IsConnected)
             {
-                Debug.WriteLine("[ModbusService] Read request: Not Connected. Attempting to reconnect...");
-                await ConnectAsync().ConfigureAwait(false); // ConnectAsync 호출
+                Debug.WriteLine("[ModbusService] Read Discrete Input request: Not Connected. Attempting to reconnect...");
+                await ConnectAsync().ConfigureAwait(false);
                 if (!IsConnected)
                 {
-                    Debug.WriteLine("[ModbusService] Read request: Reconnection failed. Cannot read coils.");
-                    return null; // 재연결 실패 시 null 반환
+                    Debug.WriteLine("[ModbusService] Read Discrete Input request: Reconnection failed. Cannot read discrete inputs.");
+                    return null;
                 }
             }
 
             try
             {
-                // ReadCoils: 코일(Coils) 값을 읽어옵니다. (기능 코드 0x01)
-                // ConfigureAwait(false)를 사용하여 호출 스레드로 돌아가지 않도록 함
-                bool[] coils = await _master.ReadCoilsAsync(_slaveId, startAddress, numberOfPoints).ConfigureAwait(false);
-                // Debug.WriteLine($"[ModbusService] Read coils from {startAddress}, count {numberOfPoints}. Data: [{string.Join(", ", coils.Select(c => c ? "1" : "0"))}]");
-                return coils;
+                // ReadInputs: Discrete Inputs 값을 읽어옵니다. (기능 코드 0x02)
+                bool[] inputs = await _master.ReadInputsAsync(_slaveId, startAddress, numberOfPoints).ConfigureAwait(false);
+                // Debug.WriteLine($"[ModbusService] Read discrete inputs from {startAddress}, count {numberOfPoints}. Data: [{string.Join(", ", inputs.Select(c => c ? "1" : "0"))}]");
+                return inputs;
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[ModbusService] Error reading coils from {startAddress}: {ex.GetType().Name} - {ex.Message}. StackTrace: {ex.StackTrace}");
-                Dispose(); // 통신 오류 발생 시 연결 끊고 재연결 준비
+                Debug.WriteLine($"[ModbusService] Error reading discrete inputs from {startAddress}: {ex.GetType().Name} - {ex.Message}. StackTrace: {ex.StackTrace}");
+                Dispose();
                 return null;
             }
         }
 
         /// <summary>
-        /// 지정된 단일 코일(Coil)의 상태를 비동기적으로 읽어옵니다.
-        /// Asynchronously reads the state of a single coil at the specified address.
+        /// 지정된 단일 코일(Coil)의 상태를 비동기적으로 읽어옵니다. (경광등 상태 확인용)
+        /// Asynchronously reads the state of a single coil at the specified address. (For indicator lamp status)
         /// </summary>
         /// <param name="address">읽을 코일 주소</param>
         /// <returns>코일 값 (bool), 오류 발생 시 false</returns>
@@ -212,17 +212,12 @@ namespace WPF_WMS01.Services
             {
                 Debug.WriteLine($"[ModbusService] Read single coil request: Not Connected. Attempting to reconnect for address {address}...");
                 await ConnectAsync().ConfigureAwait(false);
-                if (!IsConnected)
-                {
-                    Debug.WriteLine($"[ModbusService] Read single coil request: Reconnection failed. Cannot read coil {address}.");
-                    return false;
-                }
+                if (!IsConnected) return false;
             }
 
             try
             {
                 bool[] coils = await _master.ReadCoilsAsync(_slaveId, address, 1).ConfigureAwait(false);
-                // Debug.WriteLine($"[ModbusService] Read single coil at address {address}. Value: {(coils != null && coils.Length > 0 ? (coils[0] ? "1" : "0") : "N/A")}");
                 return coils != null && coils.Length > 0 && coils[0];
             }
             catch (Exception ex)
@@ -235,8 +230,8 @@ namespace WPF_WMS01.Services
 
 
         /// <summary>
-        /// 지정된 주소의 단일 코일(Coil) 값을 비동기적으로 씁니다. (코일 취소 등에 사용)
-        /// Asynchronously writes a single coil value to a specified address (used for coil cancellation, etc.).
+        /// 지정된 주소의 단일 코일(Coil) 값을 비동기적으로 씁니다. (경광등 제어용)
+        /// Asynchronously writes a single coil value to a specified address (for controlling indicator lamp).
         /// </summary>
         /// <param name="address">쓸 코일의 주소</param>
         /// <param name="value">설정할 값 (true/false)</param>
@@ -257,7 +252,6 @@ namespace WPF_WMS01.Services
             try
             {
                 // WriteSingleCoil: 단일 코일(Coil) 값을 씁니다. (기능 코드 0x05)
-                // ConfigureAwait(false)를 사용하여 호출 스레드로 돌아가지 않도록 함
                 await _master.WriteSingleCoilAsync(_slaveId, address, value).ConfigureAwait(false);
                 Debug.WriteLine($"[ModbusService] Coil at address {address} set to {value}. Write successful.");
                 return true;
