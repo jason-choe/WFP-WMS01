@@ -121,20 +121,14 @@ namespace WPF_WMS01.Services
 
         // 랙 상태 업데이트 메서드 (필요시)
         // 필요에 따라 다른 업데이트 메서드 (예: RackType, BulletType, IsLocked 등을 한 번에 업데이트)
-        public async Task UpdateRackStateAsync(
-            int rackId,
-            int newRackType,
-            int newBulletType,
-            bool newIsLocked
-            )
+        public async Task UpdateRackStateAsync(int rackId, int newRackType, int newBulletType)
         {
             using (var connection = new SqlConnection(_connectionString))
             {
                 await connection.OpenAsync();
-                var command = new SqlCommand("UPDATE RackState SET rack_type = @rackType, bullet_type = @bulletType, locked = @isLocked WHERE id = @rackId", connection);
+                var command = new SqlCommand("UPDATE RackState SET rack_type = @rackType, bullet_type = @bulletType WHERE id = @rackId", connection);
                 command.Parameters.AddWithValue("@rackType", newRackType);
                 command.Parameters.AddWithValue("@bulletType", newBulletType);
-                command.Parameters.AddWithValue("@isLocked", newIsLocked);
                 command.Parameters.AddWithValue("@rackId", rackId);
                 await command.ExecuteNonQueryAsync();
             }
@@ -146,7 +140,6 @@ namespace WPF_WMS01.Services
                 {
                     rackToUpdate.RackType = newRackType;
                     rackToUpdate.BulletType = newBulletType;
-                    rackToUpdate.IsLocked = newIsLocked;
                 }
             }
         }
@@ -177,5 +170,25 @@ namespace WPF_WMS01.Services
             }
         }
 
+        public async Task UpdateIsLockedAsync(int rackId, bool newIsLocked)
+        {
+            using (var connection = new SqlConnection(_connectionString))
+            {
+                await connection.OpenAsync();
+                var command = new SqlCommand("UPDATE RackState SET locked = @isLocked WHERE id = @rackId", connection);
+                  command.Parameters.AddWithValue("@isLocked", newIsLocked);
+                command.Parameters.AddWithValue("@rackId", rackId);
+                await command.ExecuteNonQueryAsync();
+            }
+
+            // DB 업데이트 후 캐시도 업데이트
+            lock (_cacheLock)
+            {
+                if (_rackCache.TryGetValue(rackId, out Rack rackToUpdate))
+                {
+                    rackToUpdate.IsLocked = newIsLocked;
+                }
+            }
+        }
     }
 }

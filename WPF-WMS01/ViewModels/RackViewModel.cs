@@ -349,8 +349,8 @@ namespace WPF_WMS01.ViewModels
             {
                 // 1) 원본 랙과 WRAP 랙 잠금
                 ShowAutoClosingMessage($"랙 {sourceRackViewModel.Title} 에서 'WRAP' 랙으로 이동을 시작합니다. 잠금 중...");
-                await _databaseService.UpdateRackStateAsync(sourceRackViewModel.Id, sourceRackViewModel.RackModel.RackType, sourceRackViewModel.RackModel.BulletType, true);
-                await _databaseService.UpdateRackStateAsync(wrapRackViewModel.Id, wrapRackViewModel.RackModel.RackType, wrapRackViewModel.RackModel.BulletType, true);
+                await _databaseService.UpdateIsLockedAsync(sourceRackViewModel.Id, true);
+                await _databaseService.UpdateIsLockedAsync(wrapRackViewModel.Id, true);
 
                 Application.Current.Dispatcher.Invoke(() =>
                 {
@@ -374,9 +374,9 @@ namespace WPF_WMS01.ViewModels
                         await _databaseService.UpdateRackStateAsync(
                             wrapRackViewModel.Id,
                             wrapRackViewModel.RackType,
-                            originalSourceBulletType, // 원본 랙의 제품 타입 복사
-                            false // 잠금 해제
+                            originalSourceBulletType // 원본 랙의 제품 타입 복사
                         );
+                        await _databaseService.UpdateIsLockedAsync(wrapRackViewModel.Id, false); // 잠금 해제
                         await _databaseService.UpdateLotNumberAsync(
                             wrapRackViewModel.Id,
                             originalSourceLotNumber // 원본 랙의 LotNumber 복사
@@ -386,9 +386,9 @@ namespace WPF_WMS01.ViewModels
                         await _databaseService.UpdateRackStateAsync(
                             sourceRackViewModel.Id,
                             sourceRackViewModel.RackType,
-                            0, // BulletType을 0으로 설정 (비움)
-                            false // 잠금 해제
+                            0 // BulletType을 0으로 설정 (비움)
                         );
+                        await _databaseService.UpdateIsLockedAsync(sourceRackViewModel.Id, false); // 잠금 해제
                         await _databaseService.UpdateLotNumberAsync(
                             sourceRackViewModel.Id,
                             String.Empty // LotNumber 비움
@@ -417,10 +417,10 @@ namespace WPF_WMS01.ViewModels
                     finally
                     {
                         // 오류 발생 시에도 잠금 해제 (최종적으로 보장)
+                        await _databaseService.UpdateIsLockedAsync(sourceRackViewModel.Id, false);
+                        await _databaseService.UpdateIsLockedAsync(wrapRackViewModel.Id, false);
                         Application.Current.Dispatcher.Invoke(async () =>
                         {
-                            await _databaseService.UpdateRackStateAsync(sourceRackViewModel.Id, sourceRackViewModel.RackModel.RackType, sourceRackViewModel.RackModel.BulletType, false);
-                            await _databaseService.UpdateRackStateAsync(wrapRackViewModel.Id, wrapRackViewModel.RackModel.RackType, wrapRackViewModel.RackModel.BulletType, false);
                             sourceRackViewModel.IsLocked = false;
                             wrapRackViewModel.IsLocked = false;
                         });
@@ -431,7 +431,7 @@ namespace WPF_WMS01.ViewModels
             {
                 ShowAutoClosingMessage("랙 이동 작업이 취소되었습니다.");
                 // 취소 시 원본 랙 잠금 해제 (만약 작업 시작 전에 잠겼다면)
-                await _databaseService.UpdateRackStateAsync(sourceRackViewModel.Id, sourceRackViewModel.RackModel.RackType, sourceRackViewModel.RackModel.BulletType, false);
+                await _databaseService.UpdateIsLockedAsync(sourceRackViewModel.Id, false);
                 Application.Current.Dispatcher.Invoke(() => sourceRackViewModel.IsLocked = false);
             }
         }
@@ -454,7 +454,7 @@ namespace WPF_WMS01.ViewModels
                     ShowAutoClosingMessage($"랙 {sourceRackViewModel.Title}의 재공품을 '{selectedLine.Name}'(으)로 반출합니다. 잠금 중...");
 
                     // 1) 기존 랙 (sourceRack)을 DB에서 잠금
-                    await _databaseService.UpdateRackStateAsync(sourceRackViewModel.Id, sourceRackViewModel.RackModel.RackType, sourceRackViewModel.RackModel.BulletType, true); // source 랙 잠금
+                    await _databaseService.UpdateIsLockedAsync(sourceRackViewModel.Id, true);
                     Application.Current.Dispatcher.Invoke(() => sourceRackViewModel.IsLocked = true);
 
 
@@ -472,9 +472,9 @@ namespace WPF_WMS01.ViewModels
                             await _databaseService.UpdateRackStateAsync(
                                 sourceRackViewModel.Id,
                                 sourceRackViewModel.RackModel.RackType, // 원본 랙의 RackType은 유지
-                                0,                                      // 원본 랙의 BulletType을 0으로 설정
-                                false                                   // IsLocked 해제
+                                0                                      // 원본 랙의 BulletType을 0으로 설정
                             );
+                            await _databaseService.UpdateIsLockedAsync(sourceRackViewModel.Id, false); // IsLocked 해제
                             await _databaseService.UpdateLotNumberAsync(sourceRackViewModel.Id, String.Empty);
 
                             Application.Current.Dispatcher.Invoke(() =>
@@ -494,7 +494,7 @@ namespace WPF_WMS01.ViewModels
                             // 오류 발생 시에도 잠금 해제 (최종적으로 보장)
                             Application.Current.Dispatcher.Invoke(async () =>
                             {
-                                await _databaseService.UpdateRackStateAsync(sourceRackViewModel.Id, sourceRackViewModel.RackModel.RackType, sourceRackViewModel.RackModel.BulletType, false);
+                                await _databaseService.UpdateIsLockedAsync(sourceRackViewModel.Id, false);
                                 sourceRackViewModel.IsLocked = false;
                             });
                         }
@@ -506,7 +506,7 @@ namespace WPF_WMS01.ViewModels
                     // 팝업이 닫히거나, 선택된 랙이 없으면 취소.
                     // 잠갔던 sourceRackViewModel.IsLocked = true; 를 다시 false로 되돌려야 합니다.
                     // 이 역시 DatabaseService를 통해 다시 업데이트
-                    await _databaseService.UpdateRackStateAsync(sourceRackViewModel.Id, sourceRackViewModel.RackModel.RackType, sourceRackViewModel.RackModel.BulletType, false);
+                    await _databaseService.UpdateIsLockedAsync(sourceRackViewModel.Id, false);
                     Application.Current.Dispatcher.Invoke(() => sourceRackViewModel.IsLocked = false);
                 }
             }
@@ -523,7 +523,7 @@ namespace WPF_WMS01.ViewModels
                 .ToList();
             if (!targetRacks.Any())
             {
-                MessageBox.Show("이동할 (비어있는 보관)랙이 없습니다.", "알림", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show("완제품릏 보관할 랙이 없습니다.", "알림", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
@@ -539,8 +539,8 @@ namespace WPF_WMS01.ViewModels
 
                 // 1) 기존 랙 (sourceRack)과 대상 랙 (destinationRack)을 DB에서 잠금
                 ShowAutoClosingMessage($"랙 {sourceRackViewModel.Title} 에서 랙 {destinationRack.Title} 로 이동을 시작합니다. 잠금 중...");
-                await _databaseService.UpdateRackStateAsync(sourceRackViewModel.Id, sourceRackViewModel.RackModel.RackType, sourceRackViewModel.RackModel.BulletType, true); // source 랙 잠금
-                await _databaseService.UpdateRackStateAsync(destinationRack.Id, destinationRack.RackType, destinationRack.BulletType, true); // destination 랙 잠금
+                await _databaseService.UpdateIsLockedAsync(sourceRackViewModel.Id, true); // source 랙 잠금
+                await _databaseService.UpdateIsLockedAsync(destinationRack.Id, true); // destination 랙 잠금
 
                 Application.Current.Dispatcher.Invoke(() =>
                 {
@@ -575,9 +575,9 @@ namespace WPF_WMS01.ViewModels
                         await _databaseService.UpdateRackStateAsync(
                             destinationRack.Id,
                             destinationRack.RackType,               // 대상 랙의 RackType은 유지
-                            originalSourceBulletType,               // <-- 미리 저장해둔 원본 랙의 BulletType을 사용
-                            false                                   // IsLocked 해제
+                            originalSourceBulletType               // <-- 미리 저장해둔 원본 랙의 BulletType을 사용
                         );
+                        await _databaseService.UpdateIsLockedAsync(destinationRack.Id, false); // IsLocked 해제
                         if (sourceRackViewModel.Title.Equals(_mainViewModel._waitRackTitle))
                             await _databaseService.UpdateLotNumberAsync(destinationRack.Id, _mainViewModel.InputStringForButton.TrimStart().TrimEnd(_mainViewModel._militaryCharacter));
                         else
@@ -588,9 +588,9 @@ namespace WPF_WMS01.ViewModels
                         await _databaseService.UpdateRackStateAsync(
                             sourceRackViewModel.Id,
                             sourceRackViewModel.RackModel.RackType, // 원본 랙의 RackType은 유지
-                            0,                                      // 원본 랙의 BulletType을 0으로 설정
-                            false                                   // IsLocked 해제
+                            0                                      // 원본 랙의 BulletType을 0으로 설정
                         );
+                        await _databaseService.UpdateIsLockedAsync(sourceRackViewModel.Id, false); // IsLocked 해제
                         await _databaseService.UpdateLotNumberAsync(sourceRackViewModel.Id, String.Empty);
 
                         if (sourceRackViewModel.Title.Equals(ConfigurationManager.AppSettings["WaitRackTitle"] ?? "WAIT"))
@@ -613,13 +613,13 @@ namespace WPF_WMS01.ViewModels
                         // 오류 발생 시에도 잠금 해제 (최종적으로 보장)
                         Application.Current.Dispatcher.Invoke(async () =>
                         {
-                            await _databaseService.UpdateRackStateAsync(sourceRackViewModel.Id, sourceRackViewModel.RackModel.RackType, sourceRackViewModel.RackModel.BulletType, false);
+                            await _databaseService.UpdateIsLockedAsync(sourceRackViewModel.Id, false);
                             sourceRackViewModel.IsLocked = false;
 
                             var destRackVm = _mainViewModel.RackList?.FirstOrDefault(r => r.Id == destinationRack.Id);
                             if (destRackVm != null)
                             {
-                                await _databaseService.UpdateRackStateAsync(destRackVm.Id, destRackVm.RackModel.RackType, destRackVm.RackModel.BulletType, false);
+                                await _databaseService.UpdateIsLockedAsync(destRackVm.Id, false);
                                 destRackVm.IsLocked = false;
                             }
                         });
@@ -632,7 +632,7 @@ namespace WPF_WMS01.ViewModels
                 // 팝업이 닫히거나, 선택된 랙이 없으면 취소.
                 // 잠갔던 sourceRackViewModel.IsLocked = true; 를 다시 false로 되돌려야 합니다.
                 // 이 역시 DatabaseService를 통해 다시 업데이트
-                await _databaseService.UpdateRackStateAsync(sourceRackViewModel.Id, sourceRackViewModel.RackModel.RackType, sourceRackViewModel.RackModel.BulletType, false);
+                await _databaseService.UpdateIsLockedAsync(sourceRackViewModel.Id, false);
                 Application.Current.Dispatcher.Invoke(() => sourceRackViewModel.IsLocked = false);
 
                 // destinationRack이 선택되지 않아 null일 수 있으므로 null 체크 후 잠금 해제
@@ -641,7 +641,7 @@ namespace WPF_WMS01.ViewModels
                     var destRackVm = _mainViewModel.RackList?.FirstOrDefault(r => r.Id == selectPopupViewModel.SelectedRack.Id);
                     if (destRackVm != null)
                     {
-                        await _databaseService.UpdateRackStateAsync(destRackVm.Id, destRackVm.RackModel.RackType, destRackVm.RackModel.BulletType, false);
+                        await _databaseService.UpdateIsLockedAsync(destRackVm.Id, false);
                         Application.Current.Dispatcher.Invoke(() => destRackVm.IsLocked = false);
                     }
                 }
@@ -659,7 +659,7 @@ namespace WPF_WMS01.ViewModels
                 ShowAutoClosingMessage($"랙 {targetRackViewModel.Title} 출고 작업을 시작합니다. 10초 대기...");
 
                 // 랙 잠금 및 비동기 작업 시작
-                await _databaseService.UpdateRackStateAsync(targetRackViewModel.Id, targetRackViewModel.RackType, targetRackViewModel.BulletType, true); // 랙 잠금
+                await _databaseService.UpdateIsLockedAsync(targetRackViewModel.Id, true);
                 Application.Current.Dispatcher.Invoke(() => targetRackViewModel.IsLocked = true);
 
 
@@ -683,9 +683,9 @@ namespace WPF_WMS01.ViewModels
                         await _databaseService.UpdateRackStateAsync(
                             targetRackViewModel.Id,
                             targetRackViewModel.RackType, // RackType은 유지
-                            0,                            // BulletType을 0으로 설정 (출고)
-                            false                         // IsLocked 해제
+                            0                            // BulletType을 0으로 설정 (출고)
                         );
+                        await _databaseService.UpdateIsLockedAsync(targetRackViewModel.Id, false); // IsLocked 해제
                         await _databaseService.UpdateLotNumberAsync(targetRackViewModel.Id, String.Empty);
 
                         Application.Current.Dispatcher.Invoke(() =>
@@ -705,7 +705,7 @@ namespace WPF_WMS01.ViewModels
                         // 오류 발생 시에도 잠금 해제 (최종적으로 보장)
                         Application.Current.Dispatcher.Invoke(async () =>
                         {
-                            await _databaseService.UpdateRackStateAsync(targetRackViewModel.Id, targetRackViewModel.RackModel.RackType, targetRackViewModel.RackModel.BulletType, false);
+                            await _databaseService.UpdateIsLockedAsync(targetRackViewModel.Id, false);
                             targetRackViewModel.IsLocked = false;
                         });
                     }
@@ -715,7 +715,7 @@ namespace WPF_WMS01.ViewModels
             {
                 ShowAutoClosingMessage("랙 출고 작업이 취소되었습니다.");
                 // 취소 시 랙 잠금 해제 (작업 시작 전에 잠겼다면)
-                await _databaseService.UpdateRackStateAsync(targetRackViewModel.Id, targetRackViewModel.RackModel.RackType, targetRackViewModel.RackModel.BulletType, false);
+                await _databaseService.UpdateIsLockedAsync(targetRackViewModel.Id, false);
                 Application.Current.Dispatcher.Invoke(() => targetRackViewModel.IsLocked = false);
             }
         }

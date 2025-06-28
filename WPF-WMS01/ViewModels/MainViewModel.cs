@@ -551,8 +551,8 @@ namespace WPF_WMS01.ViewModels
 
         private void InitializeCommands()
         {
-            InboundProductCommand = new RelayCommand(ExecuteInboundProduct, CanExecuteInboundProduct);
-            FakeInboundProductCommand = new RelayCommand(FakeExecuteInboundProduct, CanFakeExecuteInboundProduct);
+            InboundProductCommand = new RelayCommand(ExecuteInboundProduct, CanExecuteInboundProduct);  // 미포장 입고
+            FakeInboundProductCommand = new RelayCommand(FakeExecuteInboundProduct, CanFakeExecuteInboundProduct); // 재공품 입고
             Checkout223aProductCommand = new RelayCommand(
                 param => ExecuteCheckoutProduct(new CheckoutRequest { BulletType = 1, ProductName = "233A" }),
                 param => CanExecuteCheckoutProduct(new CheckoutRequest { BulletType = 1, ProductName = "233A" }));
@@ -650,9 +650,9 @@ namespace WPF_WMS01.ViewModels
                     await _databaseService.UpdateRackStateAsync(
                         rackViewModel.Id,
                         rackViewModel.RackModel.RackType,
-                        rackViewModel.RackModel.BulletType,
-                        rackViewModel.RackModel.IsLocked
+                        rackViewModel.RackModel.BulletType
                     );
+                    await _databaseService.UpdateIsLockedAsync(rackViewModel.Id, rackViewModel.RackModel.IsLocked);
                 }
                 catch (Exception ex)
                 {
@@ -871,7 +871,7 @@ namespace WPF_WMS01.ViewModels
 
             if (emptyRacks == null || !emptyRacks.Any())
             {
-                MessageBox.Show("현재 완제품을 입고할 수 있는 빈 랙이 없습니다.", "완제품 입고 불가", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("현재 미 포장 입고할 수 있는 빈 랙이 없습니다.", "경고", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -893,12 +893,12 @@ namespace WPF_WMS01.ViewModels
 
                     try
                     {
-                        await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, true);
+                        await _databaseService.UpdateIsLockedAsync(targetRackVm.Id, true);
                         Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = true);
 
                         if (waitRackVm != null)
                         {
-                            await _databaseService.UpdateRackStateAsync(waitRackVm.Id, waitRackVm.RackType, waitRackVm.BulletType, true);
+                            await _databaseService.UpdateIsLockedAsync(waitRackVm.Id, true);
                             Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = true);
                         }
 
@@ -912,11 +912,11 @@ namespace WPF_WMS01.ViewModels
                                 if (newBulletType == 0)
                                 {
                                     ShowAutoClosingMessage("Could not find a valid product type in the input string.");
-                                    await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, false);
+                                    await _databaseService.UpdateIsLockedAsync(targetRackVm.Id, false);
                                     Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
                                     if (waitRackVm != null)
                                     {
-                                        await _databaseService.UpdateRackStateAsync(waitRackVm.Id, waitRackVm.RackType, waitRackVm.BulletType, false);
+                                        await _databaseService.UpdateIsLockedAsync(waitRackVm.Id, false);
                                         Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = false);
                                     }
                                     return;
@@ -925,12 +925,15 @@ namespace WPF_WMS01.ViewModels
                                 await _databaseService.UpdateRackStateAsync(
                                     selectedRack.Id,
                                     selectedRack.RackType,
-                                    newBulletType,
-                                    false
+                                    newBulletType
                                 );
-
+                                await _databaseService.UpdateIsLockedAsync(selectedRack.Id, false);
                                 await _databaseService.UpdateLotNumberAsync(selectedRack.Id,
                                     InputStringForButton.TrimStart().TrimEnd(_militaryCharacter));
+                                if (waitRackVm != null)
+                                {
+                                    await _databaseService.UpdateIsLockedAsync(waitRackVm.Id, false);
+                                }
 
                                 Application.Current.Dispatcher.Invoke(() =>
                                 {
@@ -952,11 +955,11 @@ namespace WPF_WMS01.ViewModels
                                 {
                                     MessageBox.Show($"Error during inbound operation: {ex.Message}", "예외 발생", MessageBoxButton.OK, MessageBoxImage.Error);
                                 });
-                                await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, false);
+                                await _databaseService.UpdateIsLockedAsync(targetRackVm.Id, false);
                                 Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
                                 if (waitRackVm != null)
                                 {
-                                    await _databaseService.UpdateRackStateAsync(waitRackVm.Id, waitRackVm.RackType, waitRackVm.BulletType, false);
+                                    await _databaseService.UpdateIsLockedAsync(waitRackVm.Id, false);
                                     Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = false);
                                 }
                             }
@@ -968,12 +971,12 @@ namespace WPF_WMS01.ViewModels
                         Debug.WriteLine($"[Inbound] Error initiating inbound: {ex.GetType().Name} - {ex.Message}");
                         if (targetRackVm != null)
                         {
-                            await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, false);
+                            await _databaseService.UpdateIsLockedAsync(targetRackVm.Id, false);
                             Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
                         }
                         if (waitRackVm != null)
                         {
-                            await _databaseService.UpdateRackStateAsync(waitRackVm.Id, waitRackVm.RackType, waitRackVm.BulletType, false);
+                            await _databaseService.UpdateIsLockedAsync(waitRackVm.Id, false);
                             Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = false);
                         }
                     }
@@ -1005,7 +1008,7 @@ namespace WPF_WMS01.ViewModels
             bool emptyAndVisibleRackExists = RackList?.Any(r => (r.ImageIndex == 0 && r.IsVisible && !r.Title.Equals(_waitRackTitle))) == true;
 
             var waitRackVm = RackList?.FirstOrDefault(r => r.Title == _waitRackTitle);
-           bool waitRackNotLocked = (waitRackVm?.IsLocked == false) || (waitRackVm == null);
+            bool waitRackNotLocked = (waitRackVm?.IsLocked == false) || (waitRackVm == null);
 
             if (waitRackVm != null)
             {
@@ -1022,8 +1025,7 @@ namespace WPF_WMS01.ViewModels
                     await _databaseService.UpdateRackStateAsync(
                         waitRackVm.Id,
                         waitRackVm.RackType,
-                        newBulletTypeForWaitRack,
-                        waitRackVm.IsLocked
+                        newBulletTypeForWaitRack
                     );
                     Application.Current.Dispatcher.Invoke(() =>
                     {
@@ -1032,8 +1034,7 @@ namespace WPF_WMS01.ViewModels
                 });
             }
 
-            return inputContainsValidProduct && emptyAndVisibleRackExists && waitRackNotLocked;
-
+            return inputContainsValidProduct && waitRackNotLocked;
         }
 
         private async void FakeExecuteInboundProduct(object parameter)
@@ -1042,7 +1043,7 @@ namespace WPF_WMS01.ViewModels
 
             if (emptyRacks == null || !emptyRacks.Any())
             {
-                MessageBox.Show("현재 재공품을 적재할 빈 랙이 없습니다..", "재공품 입고 불가", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("현재 재공품을 적재할 빈 랙이 없습니다..", "경고", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -1064,12 +1065,12 @@ namespace WPF_WMS01.ViewModels
 
                     try
                     {
-                        await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, true);
+                        await _databaseService.UpdateIsLockedAsync(targetRackVm.Id, true);
                         Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = true);
 
                         if (waitRackVm != null)
                         {
-                            await _databaseService.UpdateRackStateAsync(waitRackVm.Id, waitRackVm.RackType, waitRackVm.BulletType, true);
+                            await _databaseService.UpdateIsLockedAsync(waitRackVm.Id, true);
                             Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = true);
                         }
 
@@ -1083,11 +1084,11 @@ namespace WPF_WMS01.ViewModels
                                 if (newBulletType == 0)
                                 {
                                     ShowAutoClosingMessage("입력한 문자열에서 유효한 제품 유형을 찾을 수 없습니다..");
-                                    await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, false);
+                                    await _databaseService.UpdateIsLockedAsync(targetRackVm.Id, false);
                                     Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
                                     if (waitRackVm != null)
                                     {
-                                        await _databaseService.UpdateRackStateAsync(waitRackVm.Id, waitRackVm.RackType, waitRackVm.BulletType, false);
+                                        await _databaseService.UpdateIsLockedAsync(waitRackVm.Id, false);
                                         Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = false);
                                     }
                                     return;
@@ -1096,10 +1097,9 @@ namespace WPF_WMS01.ViewModels
                                 await _databaseService.UpdateRackStateAsync(
                                     selectedRack.Id,
                                     3,
-                                    newBulletType,
-                                    false
+                                    newBulletType
                                 );
-
+                                await _databaseService.UpdateIsLockedAsync(selectedRack.Id, false);
                                 await _databaseService.UpdateLotNumberAsync(selectedRack.Id,
                                     InputStringForButton.TrimStart().TrimEnd(_militaryCharacter));
 
@@ -1123,11 +1123,11 @@ namespace WPF_WMS01.ViewModels
                                 {
                                     MessageBox.Show($"재공품 입고 작업 중 오류 발생: {ex.Message}", "예외 발생", MessageBoxButton.OK, MessageBoxImage.Error);
                                 });
-                                await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, false);
+                                await _databaseService.UpdateIsLockedAsync(targetRackVm.Id, false);
                                 Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
                                 if (waitRackVm != null)
                                 {
-                                    await _databaseService.UpdateRackStateAsync(waitRackVm.Id, waitRackVm.RackType, waitRackVm.BulletType, false);
+                                    await _databaseService.UpdateIsLockedAsync(waitRackVm.Id, false);
                                     Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = false);
                                 }
                             }
@@ -1139,12 +1139,12 @@ namespace WPF_WMS01.ViewModels
                         Debug.WriteLine($"[Fake Inbound] Error initiating fake inbound: {ex.GetType().Name} - {ex.Message}");
                         if (targetRackVm != null)
                         {
-                            await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, false);
+                            await _databaseService.UpdateIsLockedAsync(targetRackVm.Id, false);
                             Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
                         }
                         if (waitRackVm != null)
                         {
-                            await _databaseService.UpdateRackStateAsync(waitRackVm.Id, waitRackVm.RackType, waitRackVm.BulletType, false);
+                            await _databaseService.UpdateIsLockedAsync(waitRackVm.Id, false);
                             Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = false);
                         }
                     }
@@ -1179,7 +1179,7 @@ namespace WPF_WMS01.ViewModels
 
             bool waitRackNotLocked = (waitRackVm?.IsLocked == false) || (waitRackVm == null);
 
-            return inputContainsValidProduct && emptyAndVisibleRackExists && waitRackNotLocked;
+            return inputContainsValidProduct && waitRackNotLocked;
         }
 
         private async void ExecuteCheckoutProduct(object parameter)
@@ -1218,7 +1218,7 @@ namespace WPF_WMS01.ViewModels
                     {
                         foreach (var rvm in targetRackVmsToLock)
                         {
-                            await _databaseService.UpdateRackStateAsync(rvm.Id, rvm.RackType, rvm.BulletType, true);
+                            await _databaseService.UpdateIsLockedAsync(rvm.Id, true);
                             Application.Current.Dispatcher.Invoke(() => rvm.IsLocked = true);
                         }
 
@@ -1235,7 +1235,8 @@ namespace WPF_WMS01.ViewModels
 
                                     await Task.Delay(TimeSpan.FromSeconds(10));
 
-                                    await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, 0, false);
+                                    await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, 0); // bullet type = 0
+                                    await _databaseService.UpdateIsLockedAsync(targetRackVm.Id, false);
                                     await _databaseService.UpdateLotNumberAsync(targetRackVm.Id, String.Empty);
                                     Application.Current.Dispatcher.Invoke(() =>
                                     {
@@ -1250,7 +1251,7 @@ namespace WPF_WMS01.ViewModels
                                     {
                                         MessageBox.Show($"랙 {targetRackVm.Title} 제품 출고 중 에러 발생: {ex.Message}", "예외 발생", MessageBoxButton.OK, MessageBoxImage.Error);
                                     });
-                                    await _databaseService.UpdateRackStateAsync(targetRackVm.Id, targetRackVm.RackType, targetRackVm.BulletType, false);
+                                    await _databaseService.UpdateIsLockedAsync(targetRackVm.Id, false);
                                     Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
                                 }
                             }
@@ -1267,7 +1268,7 @@ namespace WPF_WMS01.ViewModels
                         Debug.WriteLine($"[Checkout] Error initiating checkout: {ex.GetType().Name} - {ex.Message}");
                         foreach (var rvm in targetRackVmsToLock)
                         {
-                            await _databaseService.UpdateRackStateAsync(rvm.Id, rvm.RackType, rvm.BulletType, false);
+                            await _databaseService.UpdateIsLockedAsync(rvm.Id, false);
                             Application.Current.Dispatcher.Invoke(() => rvm.IsLocked = false);
                         }
                     }
