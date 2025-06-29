@@ -7,7 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
-using WPF_WMS01.Models;
+using WPF_WMS01.Models; // 이 네임스페이스에 LoginRequest, LoginResponse, ApiVersion이 있다고 가정합니다.
 
 namespace WPF_WMS01.Services
 {
@@ -51,6 +51,7 @@ namespace WPF_WMS01.Services
         {
             _currentApiVersionMajor = major;
             _currentApiVersionMinor = minor;
+            // 디버그 메시지를 수정하여 실제 설정된 버전을 정확히 출력합니다.
             Debug.WriteLine($"HttpService API 버전이 v{_currentApiVersionMajor}.{_currentApiVersionMinor}로 설정되었습니다.");
         }
 
@@ -167,7 +168,6 @@ namespace WPF_WMS01.Services
             }
         }
 
-        // 필요하다면 PUT, DELETE 등의 메서드도 유사하게 추가할 수 있습니다.
         // 새 명세에 맞는 Login 메서드 (옵션: MainViewModel에서 직접 PostAsync 호출해도 됨)
         public async Task<LoginResponse> Login(string username, string password)
         {
