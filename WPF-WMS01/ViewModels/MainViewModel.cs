@@ -295,6 +295,7 @@ namespace WPF_WMS01.ViewModels
 
             SetupRefreshTimer(); // RackList 갱신 타이머
             SetupModbusReadTimer(); // Modbus Coil 상태 읽기 타이머 설정
+            SetupRobotMissionPollingTimer(); // 로봇 미션 상태 폴링 타이머 설정
             _ = LoadRacksAsync();
             _ = AutoLoginOnStartup();
         }
