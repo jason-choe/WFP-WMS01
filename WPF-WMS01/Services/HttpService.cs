@@ -7,7 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
-using WPF_WMS01.Models; // 이 네임스페이스에 LoginRequest, LoginResponse, ApiVersion이 있다고 가정합니다.
+using WPF_WMS01.Models; // RobotMissionModels.cs에 정의된 모델들 포함
 
 namespace WPF_WMS01.Services
 {
@@ -37,115 +37,101 @@ namespace WPF_WMS01.Services
 
         public HttpService(string baseApiUrl)
         {
-            _httpClient = new HttpClient();
-            BaseApiUrl = baseApiUrl;
-            _httpClient.BaseAddress = new Uri(baseApiUrl);
+            BaseApiUrl = baseApiUrl ?? throw new ArgumentNullException(nameof(baseApiUrl));
+            _httpClient = new HttpClient { BaseAddress = new Uri(BaseApiUrl) };
+            // 모든 요청에 대해 JSON을 camelCase로 직렬화하도록 설정
+            _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         }
 
-        /// <summary>
-        /// 서버 응답에 따라 후속 요청에 대한 API 버전을 설정합니다.
-        /// </summary>
-        /// <param name="major">주 버전 번호.</param>
-        /// <param name="minor">부 버전 번호.</param>
+        // 인증 토큰 설정 메서드
+        public void SetAuthorizationHeader(string token)
+        {
+            _authToken = token;
+            if (!string.IsNullOrEmpty(_authToken))
+            {
+                _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _authToken);
+                Debug.WriteLine("Authorization header set.");
+            }
+            else
+            {
+                _httpClient.DefaultRequestHeaders.Authorization = null;
+                Debug.WriteLine("Authorization header cleared.");
+            }
+        }
+
+        // 현재 API 버전 설정 메서드
         public void SetCurrentApiVersion(int major, int minor)
         {
             _currentApiVersionMajor = major;
             _currentApiVersionMinor = minor;
-            // 디버그 메시지를 수정하여 실제 설정된 버전을 정확히 출력합니다.
-            Debug.WriteLine($"HttpService API 버전이 v{_currentApiVersionMajor}.{_currentApiVersionMinor}로 설정되었습니다.");
+            Debug.WriteLine($"API Version set to v{_currentApiVersionMajor}.{_currentApiVersionMinor}");
         }
 
-        public void SetAuthorizationHeader(string token)
+        // HTTP GET 요청을 보내고 응답을 역직렬화
+        public async Task<TResponse> GetAsync<TResponse>(string endpoint)
         {
-            _authToken = token;
-            // HttpService는 싱글톤이므로, 토큰을 받으면 모든 요청에 이 헤더를 사용합니다.
-            _httpClient.DefaultRequestHeaders.Authorization =
-                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _authToken);
+            try
+            {
+                HttpResponseMessage response = await _httpClient.GetAsync(endpoint);
+                response.EnsureSuccessStatusCode(); // 200-299 외의 상태 코드는 예외 발생
+
+                string responseBody = await response.Content.ReadAsStringAsync();
+                return JsonConvert.DeserializeObject<TResponse>(responseBody, _jsonSettings);
+            }
+            catch (HttpRequestException ex)
+            {
+                Console.WriteLine($"GET 요청 오류 ({endpoint}): {ex.Message}");
+                throw;
+            }
+            catch (JsonException ex)
+            {
+                Console.WriteLine($"JSON 역직렬화 오류 ({endpoint}): {ex.Message}");
+                throw;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"예상치 못한 오류 ({endpoint}): {ex.Message}");
+                throw;
+            }
         }
 
-        public void ClearAuthorizationHeader()
-        {
-            _httpClient.DefaultRequestHeaders.Remove("Authorization");
-            _authToken = null;
-        }
-
-        /// <summary>
-        /// 동적 API 버전 관리를 사용하여 지정된 엔드포인트로 POST 요청을 보냅니다 (로그인 호출 제외).
-        /// </summary>
-        /// <typeparam name="TRequest">요청 데이터의 타입.</typeparam>
-        /// <typeparam name="TResponse">예상 응답의 타입.</typeparam>
-        /// <param name="endpoint">API 엔드포인트 (예: "missions", "wms/rest/login").</param>
-        /// <param name="data">요청 데이터 객체.</param>
-        /// <returns>역직렬화된 응답 객체.</returns>
+        // HTTP POST 요청을 보내고 응답을 역직렬화
         public async Task<TResponse> PostAsync<TRequest, TResponse>(string endpoint, TRequest data)
         {
-            string fullEndpoint = endpoint;
-            // 특정 로그인 엔드포인트가 아닌 경우에만 버전 관리를 적용합니다.
-            // 제공된 로그인 URL은 "wms/rest/login"이므로 정확히 일치하거나 이로 시작하는지 확인합니다.
-            if (!endpoint.Equals("wms/rest/login", StringComparison.OrdinalIgnoreCase))
+            try
             {
-                // "missions"와 같은 다른 엔드포인트의 경우 버전이 포함된 경로를 구성합니다: wms/rest/vX.Y/{endpoint}
-                fullEndpoint = $"wms/rest/v{_currentApiVersionMajor}.{_currentApiVersionMinor}/{endpoint}";
-            }
-            // else: fullEndpoint는 "wms/rest/login"으로 유지됩니다.
+                string jsonContent = JsonConvert.SerializeObject(data, _jsonSettings); // static _jsonSettings 사용
+                StringContent content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
 
-            var jsonContent = JsonConvert.SerializeObject(data, _jsonSettings);
-
-            Debug.WriteLine($"POST 요청 전송 대상: {BaseApiUrl}{fullEndpoint}");
-            Debug.WriteLine($"요청 본문 (JSON): {jsonContent}");
-
-            var httpContent = new StringContent(jsonContent, Encoding.UTF8, "application/json");
-
-            var response = await _httpClient.PostAsync(fullEndpoint, httpContent);
-
-            // 오류 발생 시 전체 오류 응답을 로깅하여 디버깅을 돕습니다.
-            if (!response.IsSuccessStatusCode)
-            {
-                string errorContent = await response.Content.ReadAsStringAsync();
-                Console.WriteLine($"API 오류 응답 ({response.StatusCode}): {errorContent}");
-                response.EnsureSuccessStatusCode(); // 여전히 비-성공 상태 코드에 대해 예외를 발생시킵니다.
-            }
-
-            var responseString = await response.Content.ReadAsStringAsync();
-            Console.WriteLine($"응답 본문: {responseString}");
-
-            return JsonConvert.DeserializeObject<TResponse>(responseString, _jsonSettings);
-        }
-
-        /// <summary>
-        /// 동적 API 버전 관리를 사용하여 지정된 엔드포인트로 GET 요청을 보냅니다.
-        /// </summary>
-        /// <typeparam name="T">예상 응답의 타입.</typeparam>
-        /// <param name="endpoint">API 엔드포인트 (예: "missions/{mission_id}").</param>
-        /// <returns>역직렬화된 응답 객체.</returns>
-        public async Task<T> GetAsync<T>(string endpoint)
-        {
-            // GET 요청의 경우, 모든 비-로그인 경로에 버전 관리가 적용된다고 가정합니다.
-            // 예: endpoint가 "missions/{mission_id}"인 경우 "wms/rest/vX.Y/missions/{mission_id}"가 됩니다.
-            string fullEndpoint = $"wms/rest/v{_currentApiVersionMajor}.{_currentApiVersionMinor}/{endpoint}";
-
-            HttpResponseMessage response = await _httpClient.GetAsync(fullEndpoint);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                string errorContent = await response.Content.ReadAsStringAsync();
-                Console.WriteLine($"API 오류 응답 ({response.StatusCode}): {errorContent}");
+                HttpResponseMessage response = await _httpClient.PostAsync(endpoint, content);
                 response.EnsureSuccessStatusCode();
+
+                string responseBody = await response.Content.ReadAsStringAsync();
+                return JsonConvert.DeserializeObject<TResponse>(responseBody, _jsonSettings); // static _jsonSettings 사용
             }
-
-            string responseBody = await response.Content.ReadAsStringAsync();
-            Console.WriteLine($"GET 응답 본문 ({fullEndpoint}): {responseBody}");
-
-            return JsonConvert.DeserializeObject<T>(responseBody, _jsonSettings);
+            catch (HttpRequestException ex)
+            {
+                Console.WriteLine($"POST 요청 오류 ({endpoint}): {ex.Message}");
+                throw;
+            }
+            catch (JsonException ex)
+            {
+                Console.WriteLine($"JSON 직렬화/역직렬화 오류 ({endpoint}): {ex.Message}");
+                throw;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"예상치 못한 오류 ({endpoint}): {ex.Message}");
+                throw;
+            }
         }
 
-
-        // POST 요청 (응답 본문이 없을 경우 또는 응답 타입을 특정하지 않는 경우)
+        // HTTP POST 요청 (응답 본문이 없는 경우)
         public async Task PostAsync<TRequest>(string endpoint, TRequest data)
         {
             try
             {
-                string jsonContent = JsonConvert.SerializeObject(data);
+                string jsonContent = JsonConvert.SerializeObject(data, _jsonSettings); // static _jsonSettings 사용
                 StringContent content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
 
                 HttpResponseMessage response = await _httpClient.PostAsync(endpoint, content);
@@ -168,8 +154,9 @@ namespace WPF_WMS01.Services
             }
         }
 
+        // 필요하다면 PUT, DELETE 등의 메서드도 유사하게 추가할 수 있습니다.
         // 새 명세에 맞는 Login 메서드 (옵션: MainViewModel에서 직접 PostAsync 호출해도 됨)
-        public async Task<LoginResponse> Login(string username, string password)
+        /*public async Task<LoginResponse> Login(string username, string password)
         {
             var loginRequest = new LoginRequest
             {
@@ -179,6 +166,6 @@ namespace WPF_WMS01.Services
             };
             // 변경된 엔드포인트 사용
             return await PostAsync<LoginRequest, LoginResponse>("wms/rest/login", loginRequest);
-        }
+        }*/
     }
 }

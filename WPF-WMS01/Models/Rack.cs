@@ -22,7 +22,9 @@ namespace WPF_WMS01.Models
                 if (_id != value)
                 {
                     _id = value;
-                    //OnPropertyChanged(nameof(Id));
+                    // Id는 일반적으로 생성 시에만 설정되며 변경되지 않으므로 OnPropertyChanged는 필요하지 않을 수 있습니다.
+                    // 그러나 ViewModel의 래퍼 속성이 업데이트될 때 변경 사항을 반영하려면 주석을 해제할 수 있습니다.
+                    // OnPropertyChanged(nameof(Id));
                 }
             }
         }
@@ -114,7 +116,7 @@ namespace WPF_WMS01.Models
                 if (_lotNumber != value)
                 {
                     _lotNumber = value;
-                    //OnPropertyChanged(nameof(LotNumber));
+                    //OnPropertyChanged(nameof(LotNumber)); // LotNumber 변경 시 알림 추가
                 }
             }
         }
@@ -128,9 +130,37 @@ namespace WPF_WMS01.Models
                 if (_rackedAt != value)
                 {
                     _rackedAt = value;
-                    //OnPropertyChanged(nameof(RackedAt));
+                    //OnPropertyChanged(nameof(RackedAt)); // RackedAt 변경 시 알림 추가
                 }
             }
+        }
+
+        private int _locationArea; // 새로운 location_area 필드
+        public int LocationArea // 새로운 LocationArea 속성
+        {
+            get { return _locationArea; }
+            set
+            {
+                if (_locationArea != value)
+                {
+                    _locationArea = value;
+                    //OnPropertyChanged(nameof(LocationArea)); // LocationArea 변경 시 알림
+                }
+            }
+        }
+
+        // 모든 속성을 받는 생성자 추가
+        public Rack(int id, string title, int rackType, int bulletType, bool isVisible, bool isLocked, string lotNumber, DateTime? rackedAt, int locationArea)
+        {
+            _id = id; // Id는 private set이므로 직접 할당
+            _title = title;
+            _rackType = rackType;
+            _bulletType = bulletType;
+            _isVisible = isVisible;
+            _isLocked = isLocked;
+            _lotNumber = lotNumber;
+            _rackedAt = rackedAt;
+            _locationArea = locationArea; // LocationArea 초기화
         }
 
         public Rack()

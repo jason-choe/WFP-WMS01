@@ -30,7 +30,7 @@ namespace WPF_WMS01.Services
         public async Task<List<Rack>> GetRackStatesAsync()
         {
             List<Rack> currentRacks = new List<Rack>(); // 현재 DB에서 읽어올 랙 목록 (캐시된 객체들로 구성)
-            string query = "SELECT id as 'Id', rack_name as 'Title', rack_type AS 'RackType', bullet_type as 'BulletType', visible AS 'IsVisible', locked AS 'IsLocked', lot_number AS 'LotNumber', racked_at AS 'RackedAt' FROM RackState";
+            string query = "SELECT id as 'Id', rack_name as 'Title', rack_type AS 'RackType', bullet_type as 'BulletType', visible AS 'IsVisible', locked AS 'IsLocked', lot_number AS 'LotNumber', racked_at AS 'RackedAt', location_area AS 'LocationArea' FROM RackState";
 
             using (SqlConnection connection = new SqlConnection(_connectionString))
             {
@@ -49,8 +49,9 @@ namespace WPF_WMS01.Services
                             bool isLocked = reader.IsDBNull(reader.GetOrdinal("IsLocked")) ? false : Convert.ToBoolean(reader["IsLocked"]);
                             string lotNumber = reader.IsDBNull(reader.GetOrdinal("LotNumber")) ? string.Empty : reader["LotNumber"].ToString();
                             DateTime? rackedAt = reader.IsDBNull(reader.GetOrdinal("RackedAt")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("RackedAt"));
+                            int locationArea = reader.IsDBNull(reader.GetOrdinal("LocationArea")) ? 0 : Convert.ToInt32(reader["LocationArea"]);
 
-                            int imageIndex = rackType * 7 + bulletType;
+                            int imageIndex = rackType * 13 + bulletType;
 
                             Rack rack;
                             lock (_cacheLock) // 캐시 접근 시 락 걸기 (멀티스레드 환경 대비)
@@ -66,6 +67,7 @@ namespace WPF_WMS01.Services
                                     rack.IsLocked = isLocked;
                                     rack.LotNumber = lotNumber;
                                     rack.RackedAt = rackedAt;
+                                    rack.LocationArea = locationArea;
                                 }
                                 else
                                 {
@@ -80,7 +82,8 @@ namespace WPF_WMS01.Services
                                         IsVisible = isVisible,
                                         IsLocked = isLocked,
                                         LotNumber = lotNumber,
-                                        RackedAt = rackedAt
+                                        RackedAt = rackedAt,
+                                        LocationArea = locationArea
                                     };
                                     _rackCache.Add(id, rack);
                                 }

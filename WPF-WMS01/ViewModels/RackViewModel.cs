@@ -13,6 +13,7 @@ using WPF_WMS01.Services;
 using WPF_WMS01.Views.Popups; // SelectStorageRackPopupView 추가
 using WPF_WMS01.ViewModels.Popups; // SelectStorageRackPopupViewModel 추가
 using System.Configuration;
+using System.Diagnostics;
 
 namespace WPF_WMS01.ViewModels
 {
@@ -43,12 +44,17 @@ namespace WPF_WMS01.ViewModels
                     }
 
                     // RackModel 객체 자체가 바뀌었으므로, 모든 래퍼 속성에 대해 PropertyChanged 알림
+                    OnPropertyChanged(nameof(Id)); // Id도 래퍼 속성이므로 필요
                     OnPropertyChanged(nameof(Title));
                     OnPropertyChanged(nameof(IsLocked));
                     OnPropertyChanged(nameof(IsVisible));
                     OnPropertyChanged(nameof(RackType));
                     OnPropertyChanged(nameof(BulletType));
                     OnPropertyChanged(nameof(ImageIndex));
+                    OnPropertyChanged(nameof(LotNumber));
+                    OnPropertyChanged(nameof(RackedAt));
+                    OnPropertyChanged(nameof(LocationArea)); // LocationArea 속성 변경 알림 추가
+                    ((RelayCommand)RackClickCommand)?.RaiseCanExecuteChanged(); // CanExecute 상태 갱신
                 }
             }
         }
@@ -71,37 +77,36 @@ namespace WPF_WMS01.ViewModels
         private void OnRackModelPropertyChanged(object sender, PropertyChangedEventArgs e)
         {
             // RackModel 내부의 속성 변경 시, ViewModel의 해당 래퍼 속성에 대한 알림
-            if (e.PropertyName == nameof(Models.Rack.ImageIndex))
+            switch (e.PropertyName)
             {
-                OnPropertyChanged(nameof(ImageIndex));
-            }
-            else if (e.PropertyName == nameof(Models.Rack.IsLocked))
-            {
-                OnPropertyChanged(nameof(IsLocked));
-            }
-            else if (e.PropertyName == nameof(Models.Rack.IsVisible))
-            {
-                OnPropertyChanged(nameof(IsVisible));
-            }
-            else if (e.PropertyName == nameof(Models.Rack.Title))
-            {
-                OnPropertyChanged(nameof(Title));
-            }
-            else if (e.PropertyName == nameof(Models.Rack.RackType))
-            {
-                OnPropertyChanged(nameof(RackType));
-            }
-            else if (e.PropertyName == nameof(Models.Rack.BulletType))
-            {
-                OnPropertyChanged(nameof(BulletType));
-            }
-            else if (e.PropertyName == nameof(Models.Rack.LotNumber)) // LotNumber 변경 시 알림 추가
-            {
-                OnPropertyChanged(nameof(LotNumber));
-            }
-            else if (e.PropertyName == nameof(Models.Rack.RackedAt)) // RackedAt 변경 시 알림 추가
-            {
-                OnPropertyChanged(nameof(RackedAt));
+                case nameof(Models.Rack.ImageIndex):
+                    OnPropertyChanged(nameof(ImageIndex));
+                    break;
+                case nameof(Models.Rack.IsLocked):
+                    OnPropertyChanged(nameof(IsLocked));
+                    ((RelayCommand)RackClickCommand)?.RaiseCanExecuteChanged(); // 잠금 상태 변경 시 버튼 활성화/비활성화 갱신
+                    break;
+                case nameof(Models.Rack.IsVisible):
+                    OnPropertyChanged(nameof(IsVisible));
+                    break;
+                case nameof(Models.Rack.Title):
+                    OnPropertyChanged(nameof(Title));
+                    break;
+                case nameof(Models.Rack.RackType):
+                    OnPropertyChanged(nameof(RackType));
+                    break;
+                case nameof(Models.Rack.BulletType):
+                    OnPropertyChanged(nameof(BulletType));
+                    break;
+                case nameof(Models.Rack.LotNumber):
+                    OnPropertyChanged(nameof(LotNumber));
+                    break;
+                case nameof(Models.Rack.RackedAt):
+                    OnPropertyChanged(nameof(RackedAt));
+                    break;
+                case nameof(Models.Rack.LocationArea): // LocationArea 변경 시 알림 추가
+                    OnPropertyChanged(nameof(LocationArea));
+                    break;
             }
         }
 
@@ -144,6 +149,10 @@ namespace WPF_WMS01.ViewModels
             {
                 RackModel.RackedAt = newRackData.RackedAt;
             }
+            if (RackModel.LocationArea != newRackData.LocationArea) // LocationArea 업데이트 로직 추가
+            {
+                RackModel.LocationArea = newRackData.LocationArea;
+            }
             // Id는 Primary Key이므로 변경하지 않습니다.
             // ImageIndex는 RackModel 내부에서 계산되므로 여기서 설정할 필요 없음.
         }
@@ -158,7 +167,7 @@ namespace WPF_WMS01.ViewModels
                 if (_rackModel.Title != value)
                 {
                     _rackModel.Title = value;
-                    // OnPropertyChanged()는 RackModel에서 이미 알림을 보내므로 여기서는 필요 없음.
+                    // OnPropertyChanged()는 RackModel에서 이미 알림을 보내므로 여기서는 명시적으로 호출할 필요 없음.
                     // 단, OnRackModelPropertyChanged가 Title 변경을 처리하도록 되어 있어야 함.
                 }
             }
@@ -171,7 +180,7 @@ namespace WPF_WMS01.ViewModels
                 if (_rackModel.IsLocked != value)
                 {
                     _rackModel.IsLocked = value;
-                    // OnPropertyChanged()는 RackModel에서 이미 알림을 보내므로 여기서는 필요 없음.
+                    // OnPropertyChanged()는 RackModel에서 이미 알림을 보내므로 여기서는 명시적으로 호출할 필요 없음.
                 }
             }
         }
@@ -183,7 +192,7 @@ namespace WPF_WMS01.ViewModels
                 if (_rackModel.IsVisible != value)
                 {
                     _rackModel.IsVisible = value;
-                    // OnPropertyChanged()는 RackModel에서 이미 알림을 보내므로 여기서는 필요 없음.
+                    // OnPropertyChanged()는 RackModel에서 이미 알림을 보내므로 여기서는 명시적으로 호출할 필요 없음.
                 }
             }
         }
@@ -198,7 +207,7 @@ namespace WPF_WMS01.ViewModels
                 if (_rackModel.RackType != value)
                 {
                     _rackModel.RackType = value;
-                    // OnPropertyChanged()는 RackModel에서 이미 알림을 보내므로 여기서는 필요 없음.
+                    // OnPropertyChanged()는 RackModel에서 이미 알림을 보내므로 여기서는 명시적으로 호출할 필요 없음
                 }
             }
         }
@@ -210,7 +219,7 @@ namespace WPF_WMS01.ViewModels
                 if (_rackModel.BulletType != value)
                 {
                     _rackModel.BulletType = value;
-                    // OnPropertyChanged()는 RackModel에서 이미 알림을 보내므로 여기서는 필요 없음.
+                    // OnPropertyChanged()는 RackModel에서 이미 알림을 보내므로 여기서는 명시적으로 호출할 필요 없음.
                 }
             }
         }
@@ -224,8 +233,7 @@ namespace WPF_WMS01.ViewModels
                 if (_rackModel.LotNumber != value)
                 {
                     _rackModel.LotNumber = value;
-                    OnPropertyChanged();
-                    // 데이터베이스 업데이트 로직이 필요한 경우 여기에 추가 (또는 상위 ViewModel에서 처리)
+                    // OnPropertyChanged()는 RackModel에서 이미 알림을 보내므로 여기서는 명시적으로 호출할 필요 없음.
                 }
             }
         }
@@ -238,8 +246,21 @@ namespace WPF_WMS01.ViewModels
                 if (_rackModel.RackedAt != value)
                 {
                     _rackModel.RackedAt = value;
-                    OnPropertyChanged();
-                    // 데이터베이스 업데이트 로직이 필요한 경우 여기에 추가
+                    // OnPropertyChanged()는 RackModel에서 이미 알림을 보내므로 여기서는 명시적으로 호출할 필요 없음.
+                }
+            }
+        }
+
+        // LocationArea 래퍼 속성 (모델의 LocationArea와 동기화)
+        public int LocationArea
+        {
+            get => _rackModel.LocationArea;
+            set
+            {
+                if (_rackModel.LocationArea != value)
+                {
+                    _rackModel.LocationArea = value;
+                    // OnPropertyChanged()는 RackModel에서 이미 알림을 보내므로 여기서는 명시적으로 호출할 필요 없음.
                 }
             }
         }
@@ -255,6 +276,13 @@ namespace WPF_WMS01.ViewModels
         {
             var clickedRackViewModel = parameter as RackViewModel;
             if (clickedRackViewModel == null) return;
+
+            // 랙이 잠겨있으면 작업을 수행할 수 없음
+            if (IsLocked)
+            {
+                ShowAutoClosingMessage("랙이 잠겨있어 작업을 수행할 수 없습니다.");
+                return;
+            }
 
             // ImageIndex 값에 따라 다른 팝업 창 띄우기
             switch (ImageIndex)
@@ -293,7 +321,13 @@ namespace WPF_WMS01.ViewModels
                     }
                     break;
                 case int i when i >= 1 && i <= 12: // ImageIndex가 1에서 12 사이인 경우
-                    await HandleTransferToWrapRack(clickedRackViewModel); // WRAP 랙으로 이동 로직 호출
+                    if (clickedRackViewModel.Title.Equals(_mainViewModel._waitRackTitle, StringComparison.OrdinalIgnoreCase))
+                    {
+                        // WAIT 랙에 제품이 있는 경우 (ImageIndex 1~12), WRAP 랙으로 이동 로직 호출
+                        await HandleTransferToWrapRack(clickedRackViewModel);
+                    }
+                    else
+                        await HandleTransferToWrapRack(clickedRackViewModel); // WRAP 랙으로 이동 로직 호출
                     break;
                 case 26:
                     break;
@@ -349,90 +383,168 @@ namespace WPF_WMS01.ViewModels
             {
                 // 1) 원본 랙과 WRAP 랙 잠금
                 ShowAutoClosingMessage($"랙 {sourceRackViewModel.Title} 에서 'WRAP' 랙으로 이동을 시작합니다. 잠금 중...");
-                await _databaseService.UpdateIsLockedAsync(sourceRackViewModel.Id, true);
-                await _databaseService.UpdateIsLockedAsync(wrapRackViewModel.Id, true);
-
-                Application.Current.Dispatcher.Invoke(() =>
+                try
                 {
-                    sourceRackViewModel.IsLocked = true;
-                    wrapRackViewModel.IsLocked = true;
-                });
+                    await _databaseService.UpdateIsLockedAsync(sourceRackViewModel.Id, true);
+                    await _databaseService.UpdateIsLockedAsync(wrapRackViewModel.Id, true);
 
-                ShowAutoClosingMessage($"랙 {sourceRackViewModel.Title} 에서 'WRAP' 랙으로 이동 중입니다. 10초 대기...");
-                int originalSourceBulletType = sourceRackViewModel.RackModel.BulletType;
-                string originalSourceLotNumber =
-                    sourceRackViewModel.Title.Equals(_mainViewModel._waitRackTitle) ?
-                    _mainViewModel.InputStringForButton.TrimStart().TrimEnd(_mainViewModel._militaryCharacter) : sourceRackViewModel.LotNumber; // LotNumber도 미리 저장
-
-                await Task.Run(async () =>
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        sourceRackViewModel.IsLocked = true;
+                        wrapRackViewModel.IsLocked = true;
+                    });
+                }
+                catch (Exception ex)
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(10)); // 10초 지연 시뮬레이션
+                    MessageBox.Show($"랙 잠금 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                    Debug.WriteLine($"[RackViewModel] Error locking racks: {ex.Message}");
+                    // 오류 발생 시 작업 취소 및 잠금 해제 시도
+                    await _databaseService.UpdateIsLockedAsync(sourceRackViewModel.Id, false);
+                    await _databaseService.UpdateIsLockedAsync(wrapRackViewModel.Id, false);
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        sourceRackViewModel.IsLocked = false;
+                        wrapRackViewModel.IsLocked = false;
+                    });
+                    return; // 더 이상 진행하지 않음
+                }
+
+                if (sourceRackViewModel.Title.Equals(_mainViewModel._waitRackTitle, StringComparison.OrdinalIgnoreCase))
+                {
+                    // Case 1: WAIT 랙 -> WRAP 랙 (실제 로봇 미션)
+                    ShowAutoClosingMessage($"로봇 미션: WAIT 랙({sourceRackViewModel.Title})에서 WRAP 랙으로 이동 시작. 명령 전송 중...");
+
+                    // 로봇 미션 단계 정의 (사용자 요청에 따라 4단계로 복원 및 IsLinkable, LinkedMission 조정)
+                    List<MissionStepDefinition> missionSteps = new List<MissionStepDefinition>
+                    {
+                        // 1. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
+                        new MissionStepDefinition { ProcessStepDescription = $"{sourceRackViewModel.Title} 랙 회전 준비", MissionType = "8", ToNode = "Turn_Rack_27_32", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
+                        // 2. 팔레트 외부 픽업 (WAIT 노드에서)
+                        new MissionStepDefinition { ProcessStepDescription = $"{sourceRackViewModel.Title} 제품 픽업", MissionType = "8", ToNode = "Palette_OUT_PickUP", FromNode = sourceRackViewModel.Title, Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
+                        // 3. 랩핑 드롭 (랩핑 스테이션으로 이동하여 드롭)
+                        new MissionStepDefinition { ProcessStepDescription = $"{wrapRackViewModel.Title} 랙으로 드롭", MissionType = "8", ToNode = "Wrapping_Drop", FromNode = "Palette_OUT_PickUP", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
+                        // 4. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
+                        new MissionStepDefinition { ProcessStepDescription = $"{wrapRackViewModel.Title} 랙 회전 완료", MissionType = "8", ToNode = "Turn_Rack_27_32", FromNode = "Wrapping_Drop", Payload = "AMR_2", IsLinkable = false, LinkWaitTimeout = 3600 }
+                    };
 
                     try
                     {
-                        // 2) WRAP 랙으로 제품 정보 이동
-                        await _databaseService.UpdateRackStateAsync(
-                            wrapRackViewModel.Id,
-                            wrapRackViewModel.RackType,
-                            originalSourceBulletType // 원본 랙의 제품 타입 복사
+                        // MainViewModel을 통해 로봇 미션 프로세스 시작
+                        // LinkedMission은 MainViewModel의 SendNextRobotMissionInProcess에서 처리될 것입니다.
+                        string processId = await _mainViewModel.InitiateRobotMissionProcess(
+                            "WaitToWrapTransfer", // 미션 프로세스 유형
+                            missionSteps,
+                            sourceRackViewModel,
+                            wrapRackViewModel // 목적지 랙 (WRAP 랙) 정보 전달
                         );
-                        await _databaseService.UpdateIsLockedAsync(wrapRackViewModel.Id, false); // 잠금 해제
-                        await _databaseService.UpdateLotNumberAsync(
-                            wrapRackViewModel.Id,
-                            originalSourceLotNumber // 원본 랙의 LotNumber 복사
-                        );
+                        Debug.WriteLine($"[RackViewModel] Robot mission process '{processId}' initiated for transfer from {sourceRackViewModel.Title} to WRAP.");
+                        ShowAutoClosingMessage($"로봇 미션 프로세스 시작됨: {processId}");
 
-                        // 3) 원본 랙 비우기
-                        await _databaseService.UpdateRackStateAsync(
-                            sourceRackViewModel.Id,
-                            sourceRackViewModel.RackType,
-                            0 // BulletType을 0으로 설정 (비움)
-                        );
-                        await _databaseService.UpdateIsLockedAsync(sourceRackViewModel.Id, false); // 잠금 해제
-                        await _databaseService.UpdateLotNumberAsync(
-                            sourceRackViewModel.Id,
-                            String.Empty // LotNumber 비움
-                        );
-                        if (sourceRackViewModel.Title.Equals(_mainViewModel._waitRackTitle))
-                            _mainViewModel.InputStringForButton = string.Empty; // 입고 후 TextBox 내용 초기화;
+                        // **중요**: 로봇 미션이 시작되었으므로, 이 시점에서는 랙의 잠금 상태만 유지하고,
+                        // 실제 DB 업데이트 (비우기, 채우기)는 MainViewModel의 폴링 로직 (RobotMissionPollingTimer_Tick)에서
+                        // 미션 완료 시점(`HandleRobotMissionCompletion`)에 이루어지도록 위임합니다.
+                        // 따라서 여기에 있던 10초 딜레이 및 직접적인 DB 업데이트 로직은 삭제합니다.
 
-                        Application.Current.Dispatcher.Invoke(() =>
-                        {
-                            ShowAutoClosingMessage($"랙 {sourceRackViewModel.Title} 에서 'WRAP' 랙으로의 이동이 완료되었습니다.");
-                            // UI ViewModel 업데이트는 DB 업데이트 시 MainViewModel에서 RefreshTimer_Tick을 통해 자동으로 이루어질 것입니다.
-                            // 하지만 즉각적인 반영을 위해 명시적으로 업데이트할 수도 있습니다.
-                            // sourceRackViewModel.BulletType = 0;
-                            // sourceRackViewModel.LotNumber = String.Empty;
-                            // wrapRackViewModel.BulletType = originalSourceBulletType;
-                            // wrapRackViewModel.LotNumber = originalSourceLotNumber;
-                        });
                     }
                     catch (Exception ex)
                     {
-                        Application.Current.Dispatcher.Invoke(() =>
-                        {
-                            MessageBox.Show($"랙 이동 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
-                        });
-                    }
-                    finally
-                    {
-                        // 오류 발생 시에도 잠금 해제 (최종적으로 보장)
+                        MessageBox.Show($"로봇 미션 시작 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                        Debug.WriteLine($"[RackViewModel] Error initiating robot mission: {ex.Message}");
+                        // 미션 시작 실패 시 랙 잠금 해제
                         await _databaseService.UpdateIsLockedAsync(sourceRackViewModel.Id, false);
                         await _databaseService.UpdateIsLockedAsync(wrapRackViewModel.Id, false);
-                        Application.Current.Dispatcher.Invoke(async () =>
+                        Application.Current.Dispatcher.Invoke(() =>
                         {
                             sourceRackViewModel.IsLocked = false;
                             wrapRackViewModel.IsLocked = false;
                         });
                     }
-                });
+                }
+                else
+                {
+                    // Case 2: 기타 ImageIndex 1~12 랙 -> WRAP 랙 (10초 지연 시뮬레이션)
+                    ShowAutoClosingMessage($"랙 {sourceRackViewModel.Title} 에서 'WRAP' 랙으로 이동 중입니다. 10초 대기...");
+                    int originalSourceBulletType = sourceRackViewModel.RackModel.BulletType;
+                    string originalSourceLotNumber =
+                        sourceRackViewModel.Title.Equals(_mainViewModel._waitRackTitle) ?
+                        _mainViewModel.InputStringForButton.TrimStart().TrimEnd(_mainViewModel._militaryCharacter) : sourceRackViewModel.LotNumber; // LotNumber도 미리 저장
+
+                    await Task.Run(async () =>
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(10)); // 10초 지연 시뮬레이션
+
+                        try
+                        {
+                            // 2) WRAP 랙으로 제품 정보 이동
+                            await _databaseService.UpdateRackStateAsync(
+                                wrapRackViewModel.Id,
+                                wrapRackViewModel.RackType,
+                                originalSourceBulletType // 원본 랙의 제품 타입 복사
+                            );
+                            await _databaseService.UpdateIsLockedAsync(wrapRackViewModel.Id, false); // 잠금 해제
+                            await _databaseService.UpdateLotNumberAsync(
+                                wrapRackViewModel.Id,
+                                originalSourceLotNumber // 원본 랙의 LotNumber 복사
+                            );
+
+                            // 3) 원본 랙 비우기
+                            await _databaseService.UpdateRackStateAsync(
+                                sourceRackViewModel.Id,
+                                sourceRackViewModel.RackType,
+                                0 // BulletType을 0으로 설정 (비움)
+                            );
+                            await _databaseService.UpdateIsLockedAsync(sourceRackViewModel.Id, false); // 잠금 해제
+                            await _databaseService.UpdateLotNumberAsync(
+                                sourceRackViewModel.Id,
+                                String.Empty // LotNumber 비움
+                            );
+                            if (sourceRackViewModel.Title.Equals(_mainViewModel._waitRackTitle))
+                                _mainViewModel.InputStringForButton = string.Empty; // 입고 후 TextBox 내용 초기화;
+
+                            Application.Current.Dispatcher.Invoke(() =>
+                            {
+                                ShowAutoClosingMessage($"랙 {sourceRackViewModel.Title} 에서 'WRAP' 랙으로의 이동이 완료되었습니다.");
+                            });
+                        }
+                        catch (Exception ex)
+                        {
+                            Application.Current.Dispatcher.Invoke(() =>
+                            {
+                                MessageBox.Show($"랙 이동 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                            });
+                        }
+                        finally
+                        {
+                            // 오류 발생 시에도 잠금 해제 (최종적으로 보장)
+                            await _databaseService.UpdateIsLockedAsync(sourceRackViewModel.Id, false);
+                            await _databaseService.UpdateIsLockedAsync(wrapRackViewModel.Id, false);
+                            Application.Current.Dispatcher.Invoke(async () =>
+                            {
+                                sourceRackViewModel.IsLocked = false;
+                                wrapRackViewModel.IsLocked = false;
+                            });
+                        }
+                    });
+                }
             }
             else
             {
                 ShowAutoClosingMessage("랙 이동 작업이 취소되었습니다.");
                 // 취소 시 원본 랙 잠금 해제 (만약 작업 시작 전에 잠겼다면)
-                await _databaseService.UpdateIsLockedAsync(sourceRackViewModel.Id, false);
-                Application.Current.Dispatcher.Invoke(() => sourceRackViewModel.IsLocked = false);
+                try
+                {
+                    await _databaseService.UpdateIsLockedAsync(sourceRackViewModel.Id, false);
+                    await _databaseService.UpdateIsLockedAsync(wrapRackViewModel.Id, false);
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        sourceRackViewModel.IsLocked = false;
+                        wrapRackViewModel.IsLocked = false;
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[RackViewModel] Error unlocking racks after cancellation: {ex.Message}");
+                }
             }
         }
 

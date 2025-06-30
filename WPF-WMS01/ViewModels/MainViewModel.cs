@@ -18,6 +18,8 @@ using System.Diagnostics;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Threading; // DispatcherTimer 사용을 위해 추가
+using Newtonsoft.Json;
+using JsonException = Newtonsoft.Json.JsonException;
 
 namespace WPF_WMS01.ViewModels
 {
@@ -122,11 +124,19 @@ namespace WPF_WMS01.ViewModels
         private ObservableCollection<RackViewModel> _rackList;
         private DispatcherTimer _refreshTimer;
         private DispatcherTimer _modbusReadTimer; // Modbus Coil 상태 읽기용 타이머
+        private DispatcherTimer _robotMissionPollingTimer; // 로봇 미션 상태 폴링용 타이머
+
         public readonly string _waitRackTitle;
         public readonly char[] _militaryCharacter = { 'a', 'b', 'c', ' ' };
 
         // Modbus Discrete Input/Coil 상태를 저장할 ObservableCollection
         public ObservableCollection<ModbusButtonViewModel> ModbusButtons { get; set; }
+
+        // 현재 진행 중인 로봇 미션 프로세스들을 추적 (Key: ProcessId)
+        // private 접근 한정자를 유지하고, 외부 접근은 InitiateRobotMissionProcess 메서드를 통해서만 허용합니다.
+        private readonly Dictionary<string, RobotMissionInfo> _activeRobotProcesses = new Dictionary<string, RobotMissionInfo>();
+        // _activeRobotProcesses 컬렉션에 대한 스레드 안전 잠금 객체
+        private readonly object _activeRobotProcessesLock = new object();
 
         private bool _plcStatusIsRun; // PLC 구동 상태 (Discrete Input 100012)
         public bool PlcStatusIsRun
@@ -287,6 +297,208 @@ namespace WPF_WMS01.ViewModels
             SetupModbusReadTimer(); // Modbus Coil 상태 읽기 타이머 설정
             _ = LoadRacksAsync();
             _ = AutoLoginOnStartup();
+        }
+
+        // 로봇 미션 폴링 타이머 설정
+        private void SetupRobotMissionPollingTimer()
+        {
+            _robotMissionPollingTimer = new DispatcherTimer();
+            _robotMissionPollingTimer.Interval = TimeSpan.FromSeconds(5); // 5초마다 폴링 (조정 가능)
+            _robotMissionPollingTimer.Tick += RobotMissionPollingTimer_Tick;
+            _robotMissionPollingTimer.Start();
+            Debug.WriteLine("[RobotMission] Robot Mission Polling Timer Started.");
+        }
+
+        // 로봇 미션 상태 주기적 폴링
+        private async void RobotMissionPollingTimer_Tick(object sender, EventArgs e)
+        {
+            // _activeRobotProcesses 컬렉션에 대한 스레드 안전 복사본 생성
+            List<RobotMissionInfo> currentActiveProcesses;
+            lock (_activeRobotProcessesLock)
+            {
+                currentActiveProcesses = _activeRobotProcesses.Values.ToList();
+            }
+
+            foreach (var processInfo in currentActiveProcesses)
+            {
+                // 이미 완료되었거나 실패한 미션은 폴링하지 않습니다.
+                if (processInfo.IsFinished || processInfo.IsFailed)
+                {
+                    // 완료되거나 실패한 프로세스는 딕셔너리에서 제거합니다.
+                    // Dictionary에서 제거는 lock 안에서 이루어져야 합니다.
+                    lock (_activeRobotProcessesLock)
+                    {
+                        _activeRobotProcesses.Remove(processInfo.ProcessId);
+                    }
+                    Debug.WriteLine($"[RobotMission] Process {processInfo.ProcessId} removed (Finished: {processInfo.IsFinished}, Failed: {processInfo.IsFailed}).");
+                    continue;
+                }
+
+                // 현재 추적 중인 미션 (LastSentMissionId)이 있을 경우에만 폴링을 시도
+                if (processInfo.LastSentMissionId.HasValue)
+                {
+                    try
+                    {
+                        var missionInfoResponse = await _httpService.GetAsync<GetMissionInfoResponse>($"wms/rest/v{_httpService.CurrentApiVersionMajor}.{_httpService.CurrentApiVersionMinor}/missions/{processInfo.LastSentMissionId.Value}").ConfigureAwait(false);
+
+                        if (missionInfoResponse?.Payload?.Missions != null && missionInfoResponse.Payload.Missions.Any())
+                        {
+                            var latestMissionDetail = missionInfoResponse.Payload.Missions.First();
+                            processInfo.CurrentMissionDetail = latestMissionDetail;
+
+                            Application.Current.Dispatcher.Invoke(() =>
+                            {
+                                MissionStatusEnum currentStatus;
+                                switch (latestMissionDetail.NavigationState)
+                                {
+                                    case 0: currentStatus = MissionStatusEnum.RECEIVED; break;
+                                    case 1: currentStatus = MissionStatusEnum.ACCEPTED; break;
+                                    case 2: currentStatus = MissionStatusEnum.REJECTED; break;
+                                    case 3: currentStatus = MissionStatusEnum.STARTED; break;
+                                    case 4: currentStatus = MissionStatusEnum.COMPLETED; break; // <-- 추가: navigationstate 4를 COMPLETED로 처리
+                                    case 5: currentStatus = MissionStatusEnum.CANCELLED; break;
+                                    case 6: currentStatus = MissionStatusEnum.COMPLETED; break; // 6도 완료로 간주
+                                    case 7: currentStatus = MissionStatusEnum.FAILED; break;
+                                    default: currentStatus = MissionStatusEnum.PENDING; break; // 알 수 없는 상태
+                                }
+                                processInfo.HmiStatus.Status = currentStatus.ToString();
+
+                                // 진행률 업데이트 (전체 미션 단계 중 현재 완료된 단계의 비율)
+                                // CurrentStepIndex는 다음에 전송할 미션의 인덱스이므로,
+                                // 실제 완료된 미션의 수 (progressNumerator)는 currentStatus가 COMPLETED일 때만 CurrentStepIndex.
+                                // 그 외에는 현재 진행중인 미션의 이전 단계까지만 완료되었다고 간주 (CurrentStepIndex-1).
+                                double progressNumerator = (currentStatus == MissionStatusEnum.COMPLETED && processInfo.CurrentStepIndex <= processInfo.TotalSteps) ?
+                                                           processInfo.CurrentStepIndex : Math.Max(0, processInfo.CurrentStepIndex - 1);
+                                processInfo.HmiStatus.ProgressPercentage = (int)((progressNumerator / processInfo.TotalSteps) * 100);
+
+                                // 현재 진행 중인 미션 단계의 설명
+                                if (currentStatus == MissionStatusEnum.COMPLETED && processInfo.CurrentStepIndex < processInfo.TotalSteps)
+                                {
+                                    // 현재 미션이 완료되었고 다음 미션이 남아있다면, 다음 미션 설명을 표시
+                                    processInfo.HmiStatus.CurrentStepDescription = processInfo.MissionSteps[processInfo.CurrentStepIndex].ProcessStepDescription;
+                                }
+                                else if (processInfo.CurrentStepIndex > 0 && processInfo.CurrentStepIndex <= processInfo.TotalSteps)
+                                {
+                                    // 현재 미션이 아직 완료되지 않았거나 마지막 미션인 경우, 현재 미션 설명을 표시
+                                    processInfo.HmiStatus.CurrentStepDescription = processInfo.MissionSteps[processInfo.CurrentStepIndex - 1].ProcessStepDescription;
+                                }
+                                else if (processInfo.TotalSteps > 0 && processInfo.CurrentStepIndex == 0 && currentStatus != MissionStatusEnum.COMPLETED)
+                                {
+                                    // 아직 첫 미션이 진행중 (Accepted/Started)
+                                    processInfo.HmiStatus.CurrentStepDescription = processInfo.MissionSteps[0].ProcessStepDescription;
+                                }
+                                else
+                                {
+                                    processInfo.HmiStatus.CurrentStepDescription = "No mission steps defined or process completed.";
+                                }
+
+                                Debug.WriteLine($"[RobotMission] Process {processInfo.ProcessId} - Polling Mission {latestMissionDetail.MissionId}: " +
+                                                $"Status: {processInfo.HmiStatus.Status}, Progress: {processInfo.HmiStatus.ProgressPercentage}%. Desc: {processInfo.HmiStatus.CurrentStepDescription}");
+                                Debug.WriteLine($"[RobotMission DEBUG] Polled Mission Detail for {latestMissionDetail.MissionId}:");
+                                Debug.WriteLine($"  NavigationState: {latestMissionDetail.NavigationState}");
+                                Debug.WriteLine($"  State: {latestMissionDetail.State}");
+                                Debug.WriteLine($"  TransportState: {latestMissionDetail.TransportState}");
+                                Debug.WriteLine($"  PayloadStatus: {latestMissionDetail.PayloadStatus}");
+                                Debug.WriteLine($"  AssignedTo: {latestMissionDetail.AssignedTo}");
+                                Debug.WriteLine($"  ParametersJson: {latestMissionDetail.ParametersJson}");
+                            });
+
+                            // 현재 폴링 중인 미션이 완료되면, 다음 미션을 전송
+                            if (latestMissionDetail.NavigationState == (int)MissionStatusEnum.COMPLETED || latestMissionDetail.NavigationState == 4)
+                            {
+                                // === 중단점: 개별 미션 완료 시점 ===
+                                Debug.WriteLine($"[RobotMission - BREAKPOINT] Mission {latestMissionDetail.MissionId} completed for Process {processInfo.ProcessId}. Proceeding to next step.");
+
+                                // string MissionId를 int로 파싱하여 할당
+                                if (int.TryParse(latestMissionDetail.MissionId, out int completedMissionId))
+                                {
+                                    processInfo.LastCompletedMissionId = completedMissionId;
+                                }
+                                else
+                                {
+                                    Debug.WriteLine($"[RobotMission] Warning: Could not parse MissionId '{latestMissionDetail.MissionId}' to int for LastCompletedMissionId.");
+                                    processInfo.LastCompletedMissionId = null; // 파싱 실패 시 null
+                                }
+
+                                // 미션 단계 인덱스 증가
+                                Application.Current.Dispatcher.Invoke(() =>
+                                {
+                                    processInfo.CurrentStepIndex++;
+                                    ShowAutoClosingMessage($"로봇 미션 단계 완료: {processInfo.HmiStatus.CurrentStepDescription}");
+                                });
+                                Debug.WriteLine($"[RobotMission] Process {processInfo.ProcessId} - CurrentStepIndex incremented to: {processInfo.CurrentStepIndex}. Total steps: {processInfo.TotalSteps}. Calling SendAndTrackMissionStepsForProcess.");
+
+                                // 다음 단계로 진행 (다음 미션 전송)
+                                await SendAndTrackMissionStepsForProcess(processInfo).ConfigureAwait(false);
+                            }
+                            else if (latestMissionDetail.NavigationState == (int)MissionStatusEnum.FAILED || latestMissionDetail.NavigationState == (int)MissionStatusEnum.REJECTED || latestMissionDetail.NavigationState == (int)MissionStatusEnum.CANCELLED)
+                            {
+                                Debug.WriteLine($"[RobotMission] Mission {latestMissionDetail.MissionId} FAILED/REJECTED/CANCELLED. Process {processInfo.ProcessId} marked as FAILED.");
+                                Application.Current.Dispatcher.Invoke(() =>
+                                {
+                                    processInfo.HmiStatus.Status = latestMissionDetail.NavigationState == (int)MissionStatusEnum.REJECTED ? MissionStatusEnum.REJECTED.ToString() :
+                                                                   latestMissionDetail.NavigationState == (int)MissionStatusEnum.CANCELLED ? MissionStatusEnum.CANCELLED.ToString() :
+                                                                   MissionStatusEnum.FAILED.ToString();
+                                    ShowAutoClosingMessage($"로봇 미션 {processInfo.ProcessType} (ID: {processInfo.ProcessId}) 실패: {latestMissionDetail.MissionId}. 남은 미션 취소.");
+                                });
+                                processInfo.IsFailed = true; // 프로세스를 실패로 마크
+                                // 미션 취소 로직 (API 제공 시 여기에 추가)
+                                HandleRobotMissionCompletion(processInfo); // 실패 처리도 완료 처리로 간주
+                            }
+                        }
+                        else
+                        {
+                            Debug.WriteLine($"[RobotMission] Mission {processInfo.LastSentMissionId} not found or no missions in payload. Potentially completed or invalid ID.");
+                            // 미션이 없거나 페이로드가 비어있지만, 프로세스 전체가 완료되지 않았다면 오류로 간주
+                            // 이 경우는 이미 완료된 미션이 PollingTimer_Tick에서 제거되므로 보통 여기에 도달하지 않음
+                            // 하지만, 미션 전송 자체가 실패하여 LastSentMissionId가 설정되었는데 미션이 없는 경우를 대비하여 실패로 처리
+                            if (processInfo.LastSentMissionId.HasValue && !processInfo.IsFinished && !processInfo.IsFailed)
+                            {
+                                Application.Current.Dispatcher.Invoke(() =>
+                                {
+                                    processInfo.HmiStatus.Status = MissionStatusEnum.FAILED.ToString();
+                                    ShowAutoClosingMessage($"로봇 미션 {processInfo.ProcessType} (ID: {processInfo.ProcessId}) 폴링 실패: 미션 {processInfo.LastSentMissionId.Value} 정보를 찾을 수 없습니다.");
+                                });
+                                processInfo.IsFailed = true;
+                                HandleRobotMissionCompletion(processInfo);
+                            }
+                        }
+                    }
+                    catch (HttpRequestException httpEx)
+                    {
+                        Debug.WriteLine($"[RobotMission] HTTP Request Error for mission {processInfo.LastSentMissionId}: {httpEx.Message}");
+                        Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            processInfo.HmiStatus.Status = MissionStatusEnum.FAILED.ToString();
+                            ShowAutoClosingMessage($"로봇 미션 상태 폴링 실패 (HTTP 오류): {httpEx.Message.Substring(0, Math.Min(100, httpEx.Message.Length))}");
+                        });
+                        processInfo.IsFailed = true; // 폴링 실패도 프로세스 실패로 간주
+                        HandleRobotMissionCompletion(processInfo);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"[RobotMission] Error polling mission status for process {processInfo.ProcessId}: {ex.Message}");
+                        Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            processInfo.HmiStatus.Status = MissionStatusEnum.FAILED.ToString();
+                            ShowAutoClosingMessage($"로봇 미션 상태 폴링 중 예상치 못한 오류: {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}");
+                        });
+                        processInfo.IsFailed = true; // 예상치 못한 오류도 프로세스 실패로 간주
+                        HandleRobotMissionCompletion(processInfo);
+                    }
+                }
+                else
+                {
+                    // LastSentMissionId가 아직 설정되지 않은 경우 (첫 번째 단계가 아직 보내지지 않은 경우)
+                    // 이 경우는 InitiateRobotMissionProcess에서 바로 첫 번째 미션을 보내므로 드물지만,
+                    // 프로세스가 시작되었으나 미션 전송 실패로 LastSentMissionId가 null일 때 재시도할 수 있도록
+                    if (processInfo.CurrentStepIndex == 0 && processInfo.MissionSteps.Any() && !processInfo.IsFailed)
+                    {
+                        Debug.WriteLine($"[RobotMission] Process {processInfo.ProcessId} - First step pending. Attempting to send initial mission.");
+                        await SendAndTrackMissionStepsForProcess(processInfo).ConfigureAwait(false);
+                    }
+                }
+            }
         }
 
 
@@ -808,12 +1020,298 @@ namespace WPF_WMS01.ViewModels
             return !IsLoginAttempting;
         }
 
+        /// <summary>
+        /// 새로운 로봇 미션 프로세스를 시작합니다.
+        /// 이 메서드는 RackViewModel과 같은 외부 ViewModel에서 호출될 수 있습니다.
+        /// </summary>
+        /// <param name="processType">미션 프로세스의 유형 (예: "WaitToWrapTransfer", "RackTransfer").</param>
+        /// <param name="missionSteps">이 프로세스를 구성하는 순차적인 미션 단계 목록.</param>
+        /// <param name="sourceRack">원본 랙 (선택 사항).</param>
+        /// <param name="destinationRack">목적지 랙 (선택 사항).</param>
+        /// <param name="destinationLine">목적지 생산 라인 (선택 사항).</param>
+        /// <returns>시작된 미션 프로세스의 고유 ID.</returns>
+        public async Task<string> InitiateRobotMissionProcess(
+            string processType,
+            List<MissionStepDefinition> missionSteps,
+            RackViewModel sourceRack = null,
+            RackViewModel destinationRack = null,
+            Location destinationLine = null)
+        {
+            string processId = Guid.NewGuid().ToString(); // 고유한 프로세스 ID 생성
+            var newMissionProcess = new RobotMissionInfo(processId, processType, missionSteps)
+            {
+                // SourceRack, DestinationRack, DestinationLine을 직접 할당
+                SourceRack = sourceRack,
+                DestinationRack = destinationRack,
+                DestinationLine = destinationLine
+            };
+
+            lock (_activeRobotProcessesLock) // _activeRobotProcesses에 대한 스레드 안전한 접근
+            {
+                _activeRobotProcesses.Add(processId, newMissionProcess);
+            }
+            Debug.WriteLine($"[RobotMission] Initiated new robot mission process: {processId} ({processType}). Total steps: {missionSteps.Count}");
+            ShowAutoClosingMessage($"로봇 미션 프로세스 시작: {processType} (ID: {processId})");
+
+            // 첫 번째 미션 단계를 전송하고 추적을 시작합니다.
+            await SendAndTrackMissionStepsForProcess(newMissionProcess);
+
+            return processId;
+        }
+
+        /// <summary>
+        /// 주어진 로봇 미션 프로세스에서 현재 단계의 미션을 ANT 서버에 전송하고 추적을 시작합니다.
+        /// 현재 미션이 완료되면 이 메서드를 다시 호출하여 다음 미션을 전송합니다.
+        /// </summary>
+        /// <param name="missionInfo">현재 미션 프로세스 정보.</param>
+        private async Task SendAndTrackMissionStepsForProcess(RobotMissionInfo missionInfo)
+        {
+            Debug.WriteLine($"[RobotMission] SendAndTrackMissionStepsForProcess called for Process {missionInfo.ProcessId}. Current Step: {missionInfo.CurrentStepIndex + 1}/{missionInfo.TotalSteps}. IsFailed: {missionInfo.IsFailed}");
+
+            // 미션 프로세스가 이미 실패했거나 모든 단계를 완료했다면 더 이상 미션을 보내지 않습니다.
+            if (missionInfo.IsFailed || missionInfo.CurrentStepIndex >= missionInfo.TotalSteps)
+            {
+                if (missionInfo.CurrentStepIndex >= missionInfo.TotalSteps && !missionInfo.IsFailed)
+                {
+                    Debug.WriteLine($"[RobotMission] Process {missionInfo.ProcessId}: All steps completed. Setting status to COMPLETED.");
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        missionInfo.HmiStatus.Status = MissionStatusEnum.COMPLETED.ToString();
+                        missionInfo.HmiStatus.ProgressPercentage = 100;
+                        ShowAutoClosingMessage($"로봇 미션 프로세스 완료: {missionInfo.ProcessType} (ID: {missionInfo.ProcessId})");
+                    });
+                }
+                HandleRobotMissionCompletion(missionInfo);
+                return;
+            }
+
+            var currentStep = missionInfo.MissionSteps[missionInfo.CurrentStepIndex];
+            int? linkedMissionId = missionInfo.LastCompletedMissionId; // 이전 완료된 미션 ID를 linkedMission으로 사용
+
+            var missionRequest = new MissionRequest
+            {
+                RequestPayload = new MissionRequestPayload
+                {
+                    Requestor = "admin",
+                    MissionType = currentStep.MissionType,
+                    ToNode = currentStep.ToNode,
+                    Payload = currentStep.Payload,
+                    Cardinality = "1",
+                    Priority = 2,
+                    Deadline = DateTime.UtcNow.AddHours(1).ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                    DispatchTime = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                    FromNode = currentStep.FromNode,
+                    Parameters = new MissionRequestParameters
+                    {
+                        Value = new MissionRequestParameterValue
+                        {
+                            Payload = currentStep.Payload,
+                            IsLinkable = currentStep.IsLinkable,
+                            LinkWaitTimeout = currentStep.LinkWaitTimeout,
+                            LinkedMission = linkedMissionId // 이전 미션의 ID를 연결
+                        },
+                        Description = "Mission extension", // 기본값 설정
+                        Type = "org.json.JSONObject",      // 기본값 설정
+                        Name = "parameters"                 // 기본값 설정
+                    }
+                }
+            };
+
+            try
+            {
+                // === 중단점: 미션 요청 엔드포인트 및 페이로드 ===
+                string requestEndpoint = $"wms/rest/v{_httpService.CurrentApiVersionMajor}.{_httpService.CurrentApiVersionMinor}/missions";
+                string requestPayloadJson = JsonConvert.SerializeObject(missionRequest, Formatting.Indented); // 가독성을 위해 Indented 포맷 사용
+                Debug.WriteLine($"[RobotMission - BREAKPOINT] Sending Mission Request for Process {missionInfo.ProcessId}, Step {missionInfo.CurrentStepIndex + 1}:");
+                Debug.WriteLine($"  Endpoint: {requestEndpoint}");
+                Debug.WriteLine($"  Payload: {requestPayloadJson}");
+
+                var missionResponse = await _httpService.PostAsync<MissionRequest, MissionResponse>(requestEndpoint, missionRequest).ConfigureAwait(false);
+
+                if (missionResponse?.ReturnCode == 0 && missionResponse.Payload?.AcceptedMissions != null && missionResponse.Payload.AcceptedMissions.Any())
+                {
+                    int acceptedMissionId = missionResponse.Payload.AcceptedMissions.First();
+                    missionInfo.LastSentMissionId = acceptedMissionId; // 전송된 미션 ID 저장
+                    // CurrentStepIndex는 이 미션이 완료될 때 (폴링 로직에서) 증가시킴
+
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        missionInfo.HmiStatus.Status = MissionStatusEnum.ACCEPTED.ToString();
+                        missionInfo.HmiStatus.CurrentStepDescription = currentStep.ProcessStepDescription;
+                        // 현재 전송된 단계까지의 진행률 (CurrentStepIndex는 다음 보낼 인덱스이므로 +1)
+                        missionInfo.HmiStatus.ProgressPercentage = (int)(((double)(missionInfo.CurrentStepIndex + 1) / missionInfo.TotalSteps) * 100);
+                        ShowAutoClosingMessage($"로봇 미션 단계 전송 성공: {currentStep.ProcessStepDescription} (미션 ID: {acceptedMissionId})");
+                    });
+                    Debug.WriteLine($"[RobotMission] Process {missionInfo.ProcessId}: Mission {acceptedMissionId} for step {missionInfo.CurrentStepIndex + 1}/{missionInfo.TotalSteps} sent successfully.");
+                }
+                else
+                {
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        missionInfo.HmiStatus.Status = MissionStatusEnum.FAILED.ToString();
+                        ShowAutoClosingMessage($"로봇 미션 단계 전송 실패: {currentStep.ProcessStepDescription}");
+                    });
+                    Debug.WriteLine($"[RobotMission] Process {missionInfo.ProcessId}: Mission step {currentStep.ProcessStepDescription} failed to be accepted. Return Code: {missionResponse?.ReturnCode}. " +
+                                    $"Rejected: {string.Join(",", missionResponse?.Payload?.RejectedMissions ?? new List<int>())}");
+                    missionInfo.IsFailed = true; // 프로세스 실패로 마크
+                    HandleRobotMissionCompletion(missionInfo); // 실패 처리
+                }
+            }
+            catch (HttpRequestException httpEx)
+            {
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    missionInfo.HmiStatus.Status = MissionStatusEnum.FAILED.ToString();
+                    ShowAutoClosingMessage($"로봇 미션 단계 전송 HTTP 오류: {httpEx.Message.Substring(0, Math.Min(100, httpEx.Message.Length))}");
+                });
+                Debug.WriteLine($"[RobotMission] Process {missionInfo.ProcessId}: HTTP Request Error sending mission step {currentStep.ProcessStepDescription}: {httpEx.Message}");
+                missionInfo.IsFailed = true; // 프로세스 실패로 마크
+                HandleRobotMissionCompletion(missionInfo); // 실패 처리
+            }
+            catch (Exception ex)
+            {
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    missionInfo.HmiStatus.Status = MissionStatusEnum.FAILED.ToString();
+                    ShowAutoClosingMessage($"로봇 미션 단계 전송 중 예상치 못한 오류: {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}");
+                });
+                Debug.WriteLine($"[RobotMission] Process {missionInfo.ProcessId}: Unexpected Error sending mission step {currentStep.ProcessStepDescription}: {ex.Message}");
+                missionInfo.IsFailed = true; // 프로세스 실패로 마크
+                HandleRobotMissionCompletion(missionInfo); // 실패 처리
+            }
+        }
+
+        /// <summary>
+        /// 로봇 미션이 최종적으로 완료(성공 또는 실패)되었을 때 데이터베이스 및 UI를 업데이트합니다.
+        /// 이 메서드는 MainViewModel의 폴링 로직에서 호출되어야 합니다.
+        /// </summary>
+        /// <param name="missionInfo">완료된 미션 프로세스 정보.</param>
+        private async void HandleRobotMissionCompletion(RobotMissionInfo missionInfo)
+        {
+            // === 중단점: 로봇 미션 프로세스 최종 완료/실패 시점 ===
+            Debug.WriteLine($"[RobotMission - BREAKPOINT] Handling completion for process {missionInfo.ProcessId}. Final Status: {missionInfo.HmiStatus.Status}. IsFailed: {missionInfo.IsFailed}");
+
+            // 현재는 "WaitToWrapTransfer" 프로세스에 대한 완료 처리만 포함.
+            // 다른 프로세스 유형에 대한 완료 로직은 필요에 따라 추가
+            if (missionInfo.ProcessType == "WaitToWrapTransfer")
+            {
+                var sourceRackVm = missionInfo.SourceRack;
+                var wrapRackVm = missionInfo.DestinationRack;
+
+                if (sourceRackVm != null && wrapRackVm != null)
+                {
+                    // 미션이 성공적으로 완료되었을 때만 DB 업데이트 수행
+                    if (missionInfo.HmiStatus.Status == MissionStatusEnum.COMPLETED.ToString() && !missionInfo.IsFailed)
+                    {
+                        try
+                        {
+                            // 1) WRAP 랙으로 제품 정보 이동 (BulletType, LotNumber)
+                            // WAIT 랙의 LotNumber는 InputStringForButton에서 가져옴.
+                            string originalSourceLotNumber = sourceRackVm.Title.Equals(_waitRackTitle) ?
+                                InputStringForButton.TrimStart().TrimEnd(_militaryCharacter) : sourceRackVm.LotNumber;
+                            int originalSourceBulletType = sourceRackVm.BulletType; // WAIT 랙의 BulletType
+
+                            // LocationArea 인자 제거 (DatabaseService.cs가 3개 인자만 받으므로)
+                            await _databaseService.UpdateRackStateAsync(
+                                wrapRackVm.Id,
+                                wrapRackVm.RackType,
+                                originalSourceBulletType
+                            );
+                            await _databaseService.UpdateLotNumberAsync(
+                                wrapRackVm.Id,
+                                originalSourceLotNumber
+                            );
+                            Debug.WriteLine($"[RobotMission] DB Update: WRAP rack {wrapRackVm.Title} updated with BulletType {originalSourceBulletType}, LotNumber {originalSourceLotNumber}.");
+
+                            // 2) 원본 랙 (WAIT 랙) 비우기
+                            // LocationArea 인자 제거 (DatabaseService.cs가 3개 인자만 받으므로)
+                            await _databaseService.UpdateRackStateAsync(
+                                sourceRackVm.Id,
+                                sourceRackVm.RackModel.RackType,
+                                0 // BulletType을 0으로 설정 (비움)
+                            );
+                            await _databaseService.UpdateLotNumberAsync(
+                                sourceRackVm.Id,
+                                String.Empty // LotNumber 비움
+                            );
+                            // WAIT 랙이 비워지면 입력 필드도 초기화 (WAIT 랙에 대해서만)
+                            if (sourceRackVm.Title.Equals(_waitRackTitle))
+                            {
+                                Application.Current.Dispatcher.Invoke(() => InputStringForButton = string.Empty);
+                                Debug.WriteLine($"[RobotMission] DB Update: WAIT rack {sourceRackVm.Title} cleared.");
+                            }
+
+                            ShowAutoClosingMessage($"로봇 미션 완료! 랙 {sourceRackVm.Title}에서 랙 {wrapRackVm.Title}으로 이동 성공.");
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine($"[RobotMission] DB update failed after robot mission completion: {ex.Message}");
+                            Application.Current.Dispatcher.Invoke(() =>
+                            {
+                                MessageBox.Show($"로봇 미션 완료 후 DB 업데이트 실패: {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}", "데이터베이스 오류");
+                            });
+                        }
+                    }
+                    else // 미션 실패 시
+                    {
+                        ShowAutoClosingMessage($"로봇 미션 실패! 랙 {sourceRackVm.Title}에서 랙 {wrapRackVm.Title}으로 이동 실패.");
+                    }
+
+                    // 미션 완료/실패 여부와 관계없이 랙 잠금 해제
+                    try
+                    {
+                        await _databaseService.UpdateIsLockedAsync(sourceRackVm.Id, false);
+                        await _databaseService.UpdateIsLockedAsync(wrapRackVm.Id, false);
+                        Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            sourceRackVm.IsLocked = false;
+                            wrapRackVm.IsLocked = false;
+                        });
+                        Debug.WriteLine($"[RobotMission] Racks {sourceRackVm.Title} and {wrapRackVm.Title} unlocked.");
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"[RobotMission] Failed to unlock racks after robot mission: {ex.Message}");
+                        Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            MessageBox.Show($"랙 잠금 해제 실패: {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}", "잠금 해제 오류");
+                        });
+                    }
+                }
+            }
+            // 다른 ProcessType에 대한 완료 처리 로직은 여기에 추가
+
+            // 프로세스가 최종적으로 완료되거나 실패하면, activeRobotProcesses에서 제거 (다음 폴링 틱에서 제거될 예정이지만 명시적으로 처리)
+            lock (_activeRobotProcessesLock)
+            {
+                if (_activeRobotProcesses.ContainsKey(missionInfo.ProcessId))
+                {
+                    _activeRobotProcesses.Remove(missionInfo.ProcessId);
+                    Debug.WriteLine($"[RobotMission] Process {missionInfo.ProcessId} explicitly removed from active processes.");
+                }
+            }
+        }
+
         public void Dispose()
         {
             _refreshTimer?.Stop();
             _refreshTimer.Tick -= RefreshTimer_Tick;
             _modbusReadTimer?.Stop(); // Modbus 타이머도 해제
             _modbusReadTimer.Tick -= ModbusReadTimer_Tick;
+            _robotMissionPollingTimer?.Stop(); // 로봇 미션 폴링 타이머 해제
+            _robotMissionPollingTimer.Tick -= RobotMissionPollingTimer_Tick;
+
+            // 모든 활성 로봇 미션의 CancellationTokenSource를 취소합니다.
+            lock (_activeRobotProcessesLock)
+            {
+                foreach (var processInfo in _activeRobotProcesses.Values)
+                {
+                    processInfo.CancellationTokenSource?.Cancel();
+                    processInfo.CancellationTokenSource?.Dispose();
+                }
+                _activeRobotProcesses.Clear(); // 딕셔너리 비우기
+            }
+
             _modbusService?.Dispose(); // Modbus 서비스 자원 해제
         }
 

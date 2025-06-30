@@ -22,3 +22,4 @@ namespace WPF_WMS01.ViewModels
         }
     }
 }
+
