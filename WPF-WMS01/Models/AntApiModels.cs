@@ -127,14 +127,14 @@ namespace WPF_WMS01.Models
         [JsonProperty("dispatchtime")]
         public string DispatchTime { get; set; } // ISO 8601 형식
 
-        [JsonProperty("fromnode")]
-        public string FromNode { get; set; } // 출발 노드 (선택 사항)
+        //[JsonProperty("fromnode")]
+        //public string FromNode { get; set; } // 출발 노드 (선택 사항)
 
         [JsonProperty("parameters")]
         public MissionRequestParameters Parameters { get; set; }
 
-        [JsonProperty("payload")]
-        public string Payload { get; set; } // 페이로드 정보
+        //[JsonProperty("payload")]
+        //public string Payload { get; set; } // 페이로드 정보
     }
 
     public class MissionRequest

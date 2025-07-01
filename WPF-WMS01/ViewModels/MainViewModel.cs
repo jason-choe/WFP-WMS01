@@ -1096,12 +1096,12 @@ namespace WPF_WMS01.ViewModels
                     Requestor = "admin",
                     MissionType = currentStep.MissionType,
                     ToNode = currentStep.ToNode,
-                    Payload = currentStep.Payload,
+                    //Payload = currentStep.Payload,
                     Cardinality = "1",
                     Priority = 2,
                     Deadline = DateTime.UtcNow.AddHours(1).ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
                     DispatchTime = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
-                    FromNode = currentStep.FromNode,
+                    //FromNode = currentStep.FromNode,
                     Parameters = new MissionRequestParameters
                     {
                         Value = new MissionRequestParameterValue
