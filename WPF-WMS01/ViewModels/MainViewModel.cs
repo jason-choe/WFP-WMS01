@@ -1194,7 +1194,7 @@ namespace WPF_WMS01.ViewModels
 
             // 현재는 "WaitToWrapTransfer" 프로세스에 대한 완료 처리만 포함.
             // 다른 프로세스 유형에 대한 완료 로직은 필요에 따라 추가
-            if (missionInfo.ProcessType == "WaitToWrapTransfer")
+            if (missionInfo.ProcessType == "WaitToWrapTransfer" || missionInfo.ProcessType == "HandleRackTransfer" || missionInfo.ProcessType == "HandleRackShipout")
             {
                 var sourceRackVm = missionInfo.SourceRack;
                 var wrapRackVm = missionInfo.DestinationRack;
