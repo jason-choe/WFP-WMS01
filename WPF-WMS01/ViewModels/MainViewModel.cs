@@ -1101,7 +1101,7 @@ namespace WPF_WMS01.ViewModels
                     Priority = 2,
                     Deadline = DateTime.UtcNow.AddHours(1).ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
                     DispatchTime = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
-                    //FromNode = currentStep.FromNode,
+                    FromNode = currentStep.FromNode,
                     Parameters = new MissionRequestParameters
                     {
                         Value = new MissionRequestParameterValue
@@ -1194,38 +1194,36 @@ namespace WPF_WMS01.ViewModels
 
             // 현재는 "WaitToWrapTransfer" 프로세스에 대한 완료 처리만 포함.
             // 다른 프로세스 유형에 대한 완료 로직은 필요에 따라 추가
-            if (missionInfo.ProcessType == "WaitToWrapTransfer" || missionInfo.ProcessType == "HandleRackTransfer" || missionInfo.ProcessType == "HandleRackShipout")
+//            if (missionInfo.ProcessType == "ExecuteInboundProduct" || missionInfo.ProcessType == "WaitToWrapTransfer" || missionInfo.ProcessType == "HandleRackTransfer" || missionInfo.ProcessType == "HandleRackShipout")
             {
                 var sourceRackVm = missionInfo.SourceRack;
-                var wrapRackVm = missionInfo.DestinationRack;
+                var destinationRackVm = missionInfo.DestinationRack;
 
-                if (sourceRackVm != null && wrapRackVm != null)
+                if (sourceRackVm != null && destinationRackVm != null)
                 {
                     // 미션이 성공적으로 완료되었을 때만 DB 업데이트 수행
                     if (missionInfo.HmiStatus.Status == MissionStatusEnum.COMPLETED.ToString() && !missionInfo.IsFailed)
                     {
                         try
                         {
-                            // 1) WRAP 랙으로 제품 정보 이동 (BulletType, LotNumber)
+                            // 1) Destination 랙으로 제품 정보 이동 (BulletType, LotNumber)
                             // WAIT 랙의 LotNumber는 InputStringForButton에서 가져옴.
                             string originalSourceLotNumber = sourceRackVm.Title.Equals(_waitRackTitle) ?
                                 InputStringForButton.TrimStart().TrimEnd(_militaryCharacter) : sourceRackVm.LotNumber;
                             int originalSourceBulletType = sourceRackVm.BulletType; // WAIT 랙의 BulletType
 
-                            // LocationArea 인자 제거 (DatabaseService.cs가 3개 인자만 받으므로)
                             await _databaseService.UpdateRackStateAsync(
-                                wrapRackVm.Id,
-                                wrapRackVm.RackType,
+                                destinationRackVm.Id,
+                                missionInfo.ProcessType == "FakeExecuteInboundProduct" ? 3 : destinationRackVm.RackType,
                                 originalSourceBulletType
                             );
                             await _databaseService.UpdateLotNumberAsync(
-                                wrapRackVm.Id,
+                                destinationRackVm.Id,
                                 originalSourceLotNumber
                             );
-                            Debug.WriteLine($"[RobotMission] DB Update: WRAP rack {wrapRackVm.Title} updated with BulletType {originalSourceBulletType}, LotNumber {originalSourceLotNumber}.");
+                            Debug.WriteLine($"[RobotMission] DB Update: WRAP rack {destinationRackVm.Title} updated with BulletType {originalSourceBulletType}, LotNumber {originalSourceLotNumber}.");
 
-                            // 2) 원본 랙 (WAIT 랙) 비우기
-                            // LocationArea 인자 제거 (DatabaseService.cs가 3개 인자만 받으므로)
+                            // 2) Source 랙 정보 비우기
                             await _databaseService.UpdateRackStateAsync(
                                 sourceRackVm.Id,
                                 sourceRackVm.RackModel.RackType,
@@ -1242,7 +1240,7 @@ namespace WPF_WMS01.ViewModels
                                 Debug.WriteLine($"[RobotMission] DB Update: WAIT rack {sourceRackVm.Title} cleared.");
                             }
 
-                            ShowAutoClosingMessage($"로봇 미션 완료! 랙 {sourceRackVm.Title}에서 랙 {wrapRackVm.Title}으로 이동 성공.");
+                            ShowAutoClosingMessage($"로봇 미션 완료! 랙 {sourceRackVm.Title}에서 랙 {destinationRackVm.Title}으로 이동 성공.");
                         }
                         catch (Exception ex)
                         {
@@ -1255,20 +1253,20 @@ namespace WPF_WMS01.ViewModels
                     }
                     else // 미션 실패 시
                     {
-                        ShowAutoClosingMessage($"로봇 미션 실패! 랙 {sourceRackVm.Title}에서 랙 {wrapRackVm.Title}으로 이동 실패.");
+                        ShowAutoClosingMessage($"로봇 미션 실패! 랙 {sourceRackVm.Title}에서 랙 {destinationRackVm.Title}으로 이동 실패.");
                     }
 
                     // 미션 완료/실패 여부와 관계없이 랙 잠금 해제
                     try
                     {
                         await _databaseService.UpdateIsLockedAsync(sourceRackVm.Id, false);
-                        await _databaseService.UpdateIsLockedAsync(wrapRackVm.Id, false);
+                        await _databaseService.UpdateIsLockedAsync(destinationRackVm.Id, false);
                         Application.Current.Dispatcher.Invoke(() =>
                         {
                             sourceRackVm.IsLocked = false;
-                            wrapRackVm.IsLocked = false;
+                            destinationRackVm.IsLocked = false;
                         });
-                        Debug.WriteLine($"[RobotMission] Racks {sourceRackVm.Title} and {wrapRackVm.Title} unlocked.");
+                        Debug.WriteLine($"[RobotMission] Racks {sourceRackVm.Title} and {destinationRackVm.Title} unlocked.");
                     }
                     catch (Exception ex)
                     {
@@ -1377,7 +1375,7 @@ namespace WPF_WMS01.ViewModels
             var selectEmptyRackViewModel = new SelectEmptyRackPopupViewModel(emptyRacks.Select(r => r.RackModel).ToList(),
                 _inputStringForButton.TrimStart().TrimEnd(_militaryCharacter), "포장 전 적재", "미포장 제품");
             var selectEmptyRackView = new SelectEmptyRackPopupView { DataContext = selectEmptyRackViewModel };
-            selectEmptyRackView.Title = $"Select rack for inbound of {InputStringForButton.TrimStart().TrimEnd(this._militaryCharacter)} product";
+            selectEmptyRackView.Title = $"미포장 입고 랙 선택";
 
             if (selectEmptyRackView.ShowDialog() == true && selectEmptyRackViewModel.DialogResult == true)
             {
@@ -1388,8 +1386,16 @@ namespace WPF_WMS01.ViewModels
                     var waitRackVm = RackList?.FirstOrDefault(r => r.Title == _waitRackTitle);
 
                     if (targetRackVm == null) return;
-                    ShowAutoClosingMessage($"Starting inbound operation for {InputStringForButton} product on rack {selectedRack.Title}. Waiting 10 seconds...");
+                    ShowAutoClosingMessage($"랙 {targetRackVm.Title}에 미포장 제품 {InputStringForButton.TrimStart().TrimEnd(_militaryCharacter)}의 입고 작업을 시작합니다.");
 
+                    int newBulletType = GetBulletTypeFromInputString(_inputStringForButton); // Helper method
+                    if (newBulletType == 0)
+                    {
+                        MessageBox.Show("입력된 Lot 번호에서 제품 정보를 알 수 없습니다.", "알림", MessageBoxButton.OK, MessageBoxImage.Information);
+                        return;
+                    }
+
+                    ShowAutoClosingMessage($"랙 {waitRackVm.Title} 에서 랙 {targetRackVm.Title} 로 미포장 입고를 시작합니다. 잠금 중...");
                     try
                     {
                         await _databaseService.UpdateIsLockedAsync(targetRackVm.Id, true);
@@ -1400,84 +1406,76 @@ namespace WPF_WMS01.ViewModels
                             await _databaseService.UpdateIsLockedAsync(waitRackVm.Id, true);
                             Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = true);
                         }
-
-                        await Task.Run(async () =>
-                        {
-                            await Task.Delay(TimeSpan.FromSeconds(10));
-
-                            try
-                            {
-                                int newBulletType = GetBulletTypeFromInputString(_inputStringForButton); // Helper method
-                                if (newBulletType == 0)
-                                {
-                                    ShowAutoClosingMessage("Could not find a valid product type in the input string.");
-                                    await _databaseService.UpdateIsLockedAsync(targetRackVm.Id, false);
-                                    Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
-                                    if (waitRackVm != null)
-                                    {
-                                        await _databaseService.UpdateIsLockedAsync(waitRackVm.Id, false);
-                                        Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = false);
-                                    }
-                                    return;
-                                }
-
-                                await _databaseService.UpdateRackStateAsync(
-                                    selectedRack.Id,
-                                    selectedRack.RackType,
-                                    newBulletType
-                                );
-                                await _databaseService.UpdateIsLockedAsync(selectedRack.Id, false);
-                                await _databaseService.UpdateLotNumberAsync(selectedRack.Id,
-                                    InputStringForButton.TrimStart().TrimEnd(_militaryCharacter));
-                                if (waitRackVm != null)
-                                {
-                                    await _databaseService.UpdateIsLockedAsync(waitRackVm.Id, false);
-                                }
-
-                                Application.Current.Dispatcher.Invoke(() =>
-                                {
-                                    targetRackVm.BulletType = newBulletType;
-                                    targetRackVm.IsLocked = false;
-
-                                    if (waitRackVm != null)
-                                    {
-                                        waitRackVm.IsLocked = false;
-                                    }
-
-                                    ShowAutoClosingMessage($"Product inbound completed for rack {selectedRack.Title}.");
-                                    InputStringForButton = string.Empty;
-                                });
-                            }
-                            catch (Exception ex)
-                            {
-                                Application.Current.Dispatcher.Invoke(() =>
-                                {
-                                    MessageBox.Show($"Error during inbound operation: {ex.Message}", "예외 발생", MessageBoxButton.OK, MessageBoxImage.Error);
-                                });
-                                await _databaseService.UpdateIsLockedAsync(targetRackVm.Id, false);
-                                Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
-                                if (waitRackVm != null)
-                                {
-                                    await _databaseService.UpdateIsLockedAsync(waitRackVm.Id, false);
-                                    Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = false);
-                                }
-                            }
-                        });
                     }
-                    catch (Exception ex) // 외부 try-catch 추가 (await _databaseService.UpdateRackStateAsync 때문에)
+                    catch (Exception ex)
                     {
-                        MessageBox.Show($"미포장 입고 작업을 시작하는 중 오류 발생: {ex.Message}", "예외 발생", MessageBoxButton.OK, MessageBoxImage.Error);
-                        Debug.WriteLine($"[Inbound] Error initiating inbound: {ex.GetType().Name} - {ex.Message}");
-                        if (targetRackVm != null)
-                        {
-                            await _databaseService.UpdateIsLockedAsync(targetRackVm.Id, false);
-                            Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
-                        }
+                        MessageBox.Show($"랙 잠금 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                        // 오류 발생 시 작업 취소 및 잠금 해제 시도
+                        await _databaseService.UpdateIsLockedAsync(targetRackVm.Id, false);
+                        Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
                         if (waitRackVm != null)
                         {
                             await _databaseService.UpdateIsLockedAsync(waitRackVm.Id, false);
                             Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = false);
                         }
+                        return; // 더 이상 진행하지 않음
+                    }
+
+                    ShowAutoClosingMessage($"로봇 미션: 랙 {waitRackVm.Title} 에서 랙 {targetRackVm.Title}(으)로 이동 시작. 명령 전송 중...");
+
+                    List<MissionStepDefinition> missionSteps;
+                    string shelf = $"{int.Parse(targetRackVm.Title.Split('-')[1]):D2}_{targetRackVm.Title.Split('-')[0]}";
+                    // 로봇 미션 단계 정의 (사용자 요청에 따라 4단계로 복원 및 IsLinkable, LinkedMission 조정)
+                    if (targetRackVm.LocationArea == 3)
+                    {
+                        missionSteps = new List<MissionStepDefinition>
+                        {
+                            // 1. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
+                            new MissionStepDefinition { ProcessStepDescription = $"{waitRackVm.Title} 픽업 준비", MissionType = "8", ToNode = "Turn_Rack_27_32", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
+                            // 2. 랩핑 드롭 (랩핑 스테이션으로 이동하여 드롭)
+                            new MissionStepDefinition { ProcessStepDescription = $"{waitRackVm.Title} 제품 픽업", MissionType = "7", FromNode = "Palette_OUT_PickUP", ToNode = "Turn_Rack_27_32", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
+                            // 3. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
+                            new MissionStepDefinition { ProcessStepDescription = $"{targetRackVm.Title} 제품 드롭", MissionType = "8", ToNode = $"Rack_{shelf}_Drop", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
+                            // 4. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
+                            new MissionStepDefinition { ProcessStepDescription = $"{targetRackVm.Title} 운반 완료", MissionType = "8", ToNode = "Turn_Rack_29", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
+                            // 5.
+                            new MissionStepDefinition { ProcessStepDescription = $"{targetRackVm.Title} 복귀 완료", MissionType = "8", ToNode = "Charge1", Payload = "AMR_2", IsLinkable = false, LinkWaitTimeout = 3600 }
+                        };
+                    }
+                    else //if (destinationRack.LocationArea == 2 || sourceRackViewModel.LocationArea == 1)
+                    {
+                        missionSteps = new List<MissionStepDefinition>
+                        {
+                            // 1. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
+                            new MissionStepDefinition { ProcessStepDescription = $"{waitRackVm.Title} 픽업 준비", MissionType = "8", ToNode = "Turn_Rack_27_32", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
+                            // 1. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
+                            new MissionStepDefinition { ProcessStepDescription = $"{waitRackVm.Title} 제품 픽업 & 드롭", MissionType = "7", FromNode = "Palette_OUT_PickUP", ToNode = $"Rack_{shelf}_Drop", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
+                            // 3. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
+                            new MissionStepDefinition { ProcessStepDescription = $"{targetRackVm.Title} 복귀 완료", MissionType = "8", ToNode = "Charge1", Payload = "AMR_2", IsLinkable = false, LinkWaitTimeout = 3600 }
+                        };
+                    }
+
+                    try
+                    {
+                        // 로봇 미션 프로세스 시작
+                        string processId = await InitiateRobotMissionProcess(
+                            "ExecuteInboundProduct", // 미션 프로세스 유형
+                            missionSteps,
+                            waitRackVm,
+                            targetRackVm //wrapRackViewModel // 목적지 랙 (WRAP 랙) 정보 전달
+                        );
+                        ShowAutoClosingMessage($"로봇 미션 프로세스 시작됨: {processId}");
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show($"로봇 미션 시작 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                        await _databaseService.UpdateIsLockedAsync(waitRackVm.Id, false);
+                        await _databaseService.UpdateIsLockedAsync(targetRackVm.Id, false);
+                        Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            waitRackVm.IsLocked = false;
+                            targetRackVm.IsLocked = false; // wrapRackViewModel.IsLocked = false;
+                        });
                     }
                 }
             }
@@ -1542,7 +1540,7 @@ namespace WPF_WMS01.ViewModels
 
             if (emptyRacks == null || !emptyRacks.Any())
             {
-                MessageBox.Show("현재 재공품을 적재할 빈 랙이 없습니다..", "경고", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("현재 재공품을 적재할 빈 랙이 없습니다..", "알림", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
@@ -1560,8 +1558,17 @@ namespace WPF_WMS01.ViewModels
                     var waitRackVm = RackList?.FirstOrDefault(r => r.Title == _waitRackTitle);
 
                     if (targetRackVm == null) return;
-                    ShowAutoClosingMessage($"랙 {selectedRack.Title}에 재공품 {InputStringForButton.TrimStart().TrimEnd(_militaryCharacter)}의 입고 작업을 시작합니다. 10초 동안 대기...");
+                    ShowAutoClosingMessage($"랙 {targetRackVm.Title}에 재공품 {InputStringForButton.TrimStart().TrimEnd(_militaryCharacter)}의 입고 작업을 시작합니다.");
 
+                    // 🚨 ToDo : WAIT  Rack으로부터 이동 시에는 inputString의 입력을 disable해야 한다.아니면 이동 전에  Lot No.를 DB에 copy.
+                    int newBulletType = GetBulletTypeFromInputString(_inputStringForButton); // Helper method
+                    if (newBulletType == 0)
+                    {
+                        MessageBox.Show("입력된 Lot 번호에서 제품 정보를 알 수 없습니다.", "경고", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+
+                    ShowAutoClosingMessage($"랙 {waitRackVm.Title}에서 랙 {targetRackVm.Title} 로 미포장 입고를 시작합니다. 잠금 중...");
                     try
                     {
                         await _databaseService.UpdateIsLockedAsync(targetRackVm.Id, true);
@@ -1573,79 +1580,76 @@ namespace WPF_WMS01.ViewModels
                             Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = true);
                         }
 
-                        await Task.Run(async () =>
-                        {
-                            await Task.Delay(TimeSpan.FromSeconds(10));
-
-                            try
-                            {
-                                int newBulletType = GetBulletTypeFromInputString(_inputStringForButton); // Helper method
-                                if (newBulletType == 0)
-                                {
-                                    ShowAutoClosingMessage("입력한 문자열에서 유효한 제품 유형을 찾을 수 없습니다..");
-                                    await _databaseService.UpdateIsLockedAsync(targetRackVm.Id, false);
-                                    Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
-                                    if (waitRackVm != null)
-                                    {
-                                        await _databaseService.UpdateIsLockedAsync(waitRackVm.Id, false);
-                                        Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = false);
-                                    }
-                                    return;
-                                }
-
-                                await _databaseService.UpdateRackStateAsync(
-                                    selectedRack.Id,
-                                    3,
-                                    newBulletType
-                                );
-                                await _databaseService.UpdateIsLockedAsync(selectedRack.Id, false);
-                                await _databaseService.UpdateLotNumberAsync(selectedRack.Id,
-                                    InputStringForButton.TrimStart().TrimEnd(_militaryCharacter));
-
-                                Application.Current.Dispatcher.Invoke(() =>
-                                {
-                                    targetRackVm.BulletType = newBulletType;
-                                    targetRackVm.IsLocked = false;
-
-                                    if (waitRackVm != null)
-                                    {
-                                        waitRackVm.IsLocked = false;
-                                    }
-
-                                    ShowAutoClosingMessage($"랙 {selectedRack.Title}에 재공품 입고가 완료되었습니다..");
-                                    InputStringForButton = string.Empty;
-                                });
-                            }
-                            catch (Exception ex)
-                            {
-                                Application.Current.Dispatcher.Invoke(() =>
-                                {
-                                    MessageBox.Show($"재공품 입고 작업 중 오류 발생: {ex.Message}", "예외 발생", MessageBoxButton.OK, MessageBoxImage.Error);
-                                });
-                                await _databaseService.UpdateIsLockedAsync(targetRackVm.Id, false);
-                                Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
-                                if (waitRackVm != null)
-                                {
-                                    await _databaseService.UpdateIsLockedAsync(waitRackVm.Id, false);
-                                    Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = false);
-                                }
-                            }
-                        });
                     }
-                    catch (Exception ex) // 외부 try-catch 추가
+                    catch (Exception ex)
                     {
-                        MessageBox.Show($"재공품 입고 작업을 시작하는 중 오류 발생: {ex.Message}", "예외 발생", MessageBoxButton.OK, MessageBoxImage.Error);
-                        Debug.WriteLine($"[Fake Inbound] Error initiating fake inbound: {ex.GetType().Name} - {ex.Message}");
-                        if (targetRackVm != null)
-                        {
-                            await _databaseService.UpdateIsLockedAsync(targetRackVm.Id, false);
-                            Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
-                        }
+                        MessageBox.Show($"랙 잠금 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                        // 오류 발생 시 작업 취소 및 잠금 해제 시도
+                        await _databaseService.UpdateIsLockedAsync(targetRackVm.Id, false);
+                        Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
                         if (waitRackVm != null)
                         {
                             await _databaseService.UpdateIsLockedAsync(waitRackVm.Id, false);
                             Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = false);
                         }
+                        return; // 더 이상 진행하지 않음
+                    }
+
+                    ShowAutoClosingMessage($"로봇 미션: 랙 {waitRackVm.Title} 에서 랙 {targetRackVm.Title}(으)로 이동 시작. 명령 전송 중...");
+
+                    List<MissionStepDefinition> missionSteps;
+                    string shelf = $"{int.Parse(targetRackVm.Title.Split('-')[1]):D2}_{targetRackVm.Title.Split('-')[0]}";
+                    // 로봇 미션 단계 정의 (사용자 요청에 따라 4단계로 복원 및 IsLinkable, LinkedMission 조정)
+                    if (targetRackVm.LocationArea == 3)
+                    {
+                        missionSteps = new List<MissionStepDefinition>
+                        {
+                            // 1. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
+                            new MissionStepDefinition { ProcessStepDescription = $"{waitRackVm.Title} 픽업 준비", MissionType = "8", ToNode = "Turn_Rack_27_32", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
+                            // 2. 랩핑 드롭 (랩핑 스테이션으로 이동하여 드롭)
+                            new MissionStepDefinition { ProcessStepDescription = $"{waitRackVm.Title} 제품 픽업", MissionType = "7", FromNode = "Palette_OUT_PickUP", ToNode = "Turn_Rack_27_32", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
+                            // 3. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
+                            new MissionStepDefinition { ProcessStepDescription = $"{targetRackVm.Title} 제품 드롭", MissionType = "8", ToNode = $"Rack_{shelf}_Drop", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
+                            // 4. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
+                            new MissionStepDefinition { ProcessStepDescription = $"{targetRackVm.Title} 운반 완료", MissionType = "8", ToNode = "Turn_Rack_29", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
+                            // 5.
+                            new MissionStepDefinition { ProcessStepDescription = $"{targetRackVm.Title} 복귀 완료", MissionType = "8", ToNode = "Charge1", Payload = "AMR_2", IsLinkable = false, LinkWaitTimeout = 3600 }
+                        };
+                    }
+                    else //if (destinationRack.LocationArea == 2 || sourceRackViewModel.LocationArea == 1)
+                    {
+                        missionSteps = new List<MissionStepDefinition>
+                        {
+                            // 1. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
+                            new MissionStepDefinition { ProcessStepDescription = $"{waitRackVm.Title} 픽업 준비", MissionType = "8", ToNode = "Turn_Rack_27_32", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
+                            // 1. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
+                            new MissionStepDefinition { ProcessStepDescription = $"{waitRackVm.Title} 제품 픽업 & 드롭", MissionType = "7", FromNode = "Palette_OUT_PickUP", ToNode = $"Rack_{shelf}_Drop", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
+                            // 3. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
+                            new MissionStepDefinition { ProcessStepDescription = $"{targetRackVm.Title} 복귀 완료", MissionType = "8", ToNode = "Charge1", Payload = "AMR_2", IsLinkable = false, LinkWaitTimeout = 3600 }
+                        };
+                    }
+
+                    try
+                    {
+                        // 로봇 미션 프로세스 시작
+                        string processId = await InitiateRobotMissionProcess(
+                            "FakeExecuteInboundProduct", // 미션 프로세스 유형
+                            missionSteps,
+                            waitRackVm,
+                            targetRackVm //wrapRackViewModel // 목적지 랙 (WRAP 랙) 정보 전달
+                        );
+                        ShowAutoClosingMessage($"로봇 미션 프로세스 시작됨: {processId}");
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show($"로봇 미션 시작 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                        await _databaseService.UpdateIsLockedAsync(waitRackVm.Id, false);
+                        await _databaseService.UpdateIsLockedAsync(targetRackVm.Id, false);
+                        Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            waitRackVm.IsLocked = false;
+                            targetRackVm.IsLocked = false; // wrapRackViewModel.IsLocked = false;
+                        });
                     }
                 }
             }

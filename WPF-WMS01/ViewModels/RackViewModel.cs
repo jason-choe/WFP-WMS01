@@ -417,13 +417,11 @@ namespace WPF_WMS01.ViewModels
                     missionSteps = new List<MissionStepDefinition>
                     {
                         // 1. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
-                        new MissionStepDefinition { ProcessStepDescription = $"{sourceRackViewModel.Title} 제품 픽업", MissionType = "8", ToNode = $"Rack_{shelf}_PickUP", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
-                        // 2. 팔레트 외부 픽업 (WAIT 노드에서)
-                        new MissionStepDefinition { ProcessStepDescription = $"{sourceRackViewModel.Title} 회전 준비", MissionType = "8", ToNode = "Turn_Rack_29", FromNode = sourceRackViewModel.Title, Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
-                        // 3. 랩핑 드롭 (랩핑 스테이션으로 이동하여 드롭)
+                        new MissionStepDefinition { ProcessStepDescription = $"{sourceRackViewModel.Title} 제품 픽업", MissionType = "7", FromNode = $"Rack_{shelf}_PickUP", ToNode = "Turn_Rack_29", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
+                        // 2. 랩핑 드롭 (랩핑 스테이션으로 이동하여 드롭)
                         new MissionStepDefinition { ProcessStepDescription = $"{wrapRackViewModel.Title} 제품 드롭", MissionType = "8", ToNode = "Wrapping_Drop", FromNode = "Palette_OUT_PickUP", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
-                        // 4. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
-                        new MissionStepDefinition { ProcessStepDescription = $"{wrapRackViewModel.Title} 회전 완료", MissionType = "8", ToNode = "Turn_Rack_27_32", FromNode = "Wrapping_Drop", Payload = "AMR_2", IsLinkable = false, LinkWaitTimeout = 3600 }
+                        // 3. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
+                        new MissionStepDefinition { ProcessStepDescription = $"{wrapRackViewModel.Title} 이동 완료", MissionType = "8", ToNode = "Turn_Rack_27_32", FromNode = "Wrapping_Drop", Payload = "AMR_2", IsLinkable = false, LinkWaitTimeout = 3600 }
                     };
                 }
                 else if (sourceRackViewModel.LocationArea == 2)
@@ -431,13 +429,11 @@ namespace WPF_WMS01.ViewModels
                     missionSteps = new List<MissionStepDefinition>
                     {
                         // 1. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
-                        new MissionStepDefinition { ProcessStepDescription = $"{sourceRackViewModel.Title} 회전 준비", MissionType = "8", ToNode = "Turn_Rack_27_32", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
+                        new MissionStepDefinition { ProcessStepDescription = $"{sourceRackViewModel.Title} 이동 준비", MissionType = "8", ToNode = "Turn_Rack_27_32", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
                         // 2. 팔레트 외부 픽업 (WAIT 노드에서)
-                        new MissionStepDefinition { ProcessStepDescription = $"{sourceRackViewModel.Title} 제품 픽업", MissionType = "8", ToNode = $"Rack_{shelf}_PickUP", FromNode = sourceRackViewModel.Title, Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
-                        // 3. 랩핑 드롭 (랩핑 스테이션으로 이동하여 드롭)
-                        new MissionStepDefinition { ProcessStepDescription = $"{wrapRackViewModel.Title} 제품 드롭", MissionType = "8", ToNode = "Wrapping_Drop", FromNode = "Palette_OUT_PickUP", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
-                        // 4. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
-                        new MissionStepDefinition { ProcessStepDescription = $"{wrapRackViewModel.Title} 회전 완료", MissionType = "8", ToNode = "Turn_Rack_27_32", FromNode = "Wrapping_Drop", Payload = "AMR_2", IsLinkable = false, LinkWaitTimeout = 3600 }
+                        new MissionStepDefinition { ProcessStepDescription = $"{sourceRackViewModel.Title} 제품 픽업 & 드롭", MissionType = "7", FromNode = $"Rack_{shelf}_PickUP", ToNode = "Wrapping_Drop", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
+                        // 3. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
+                        new MissionStepDefinition { ProcessStepDescription = $"{wrapRackViewModel.Title} 이동 완료", MissionType = "8", ToNode = "Turn_Rack_27_32", Payload = "AMR_2", IsLinkable = false, LinkWaitTimeout = 3600 }
                     };
                 }
                 else if (sourceRackViewModel.LocationArea == 1)
@@ -445,27 +441,23 @@ namespace WPF_WMS01.ViewModels
                     missionSteps = new List<MissionStepDefinition>
                     {
                         // 1. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
-                        new MissionStepDefinition { ProcessStepDescription = $"{sourceRackViewModel.Title} 제품 픽업", MissionType = "8", ToNode = $"Rack_{shelf}_PickUP", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
+                        new MissionStepDefinition { ProcessStepDescription = $"{sourceRackViewModel.Title} 제품 픽업", MissionType = "7", FromNode = $"Rack_{shelf}_PickUP", ToNode = "Turn_Rack_27_32", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
                         // 2. 팔레트 외부 픽업 (WAIT 노드에서)
-                        new MissionStepDefinition { ProcessStepDescription = $"{sourceRackViewModel.Title} 회전 준비", MissionType = "8", ToNode = "Turn_Rack_27_32", FromNode = sourceRackViewModel.Title, Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
-                        // 3. 랩핑 드롭 (랩핑 스테이션으로 이동하여 드롭)
-                        new MissionStepDefinition { ProcessStepDescription = $"{wrapRackViewModel.Title} 제품 드롭", MissionType = "8", ToNode = "Wrapping_Drop", FromNode = "Palette_OUT_PickUP", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
-                        // 4. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
-                        new MissionStepDefinition { ProcessStepDescription = $"{wrapRackViewModel.Title} 랙 회전 완료", MissionType = "8", ToNode = "Turn_Rack_27_32", FromNode = "Wrapping_Drop", Payload = "AMR_2", IsLinkable = false, LinkWaitTimeout = 3600 }
+                        new MissionStepDefinition { ProcessStepDescription = $"{wrapRackViewModel.Title} 제품 드롭", MissionType = "8", ToNode = "Wrapping_Drop", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
+                        // 3. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
+                        new MissionStepDefinition { ProcessStepDescription = $"{wrapRackViewModel.Title} 이동 완료", MissionType = "8", ToNode = "Turn_Rack_27_32", Payload = "AMR_2", IsLinkable = false, LinkWaitTimeout = 3600 }
                     };
                 }
-                else //if (sourceRackViewModel.LocationArea == 3)
+                else //if (sourceRackViewModel.LocationArea == 0)
                 {
                     missionSteps = new List<MissionStepDefinition>
                     {
                         // 1. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
                         new MissionStepDefinition { ProcessStepDescription = $"{sourceRackViewModel.Title} 회전 준비", MissionType = "8", ToNode = "Turn_Rack_27_32", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
                         // 2. 팔레트 외부 픽업 (WAIT 노드에서)
-                        new MissionStepDefinition { ProcessStepDescription = $"{sourceRackViewModel.Title} 제품 픽업", MissionType = "8", ToNode = "Palette_OUT_PickUP", FromNode = sourceRackViewModel.Title, Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
-                        // 3. 랩핑 드롭 (랩핑 스테이션으로 이동하여 드롭)
-                        new MissionStepDefinition { ProcessStepDescription = $"{wrapRackViewModel.Title} 제품 드롭", MissionType = "8", ToNode = "Wrapping_Drop", FromNode = "Palette_OUT_PickUP", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
+                        new MissionStepDefinition { ProcessStepDescription = $"{sourceRackViewModel.Title} 제품 픽업 & 드롭", MissionType = "7", FromNode = "Palette_OUT_PickUP", ToNode = "Wrapping_Drop", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
                         // 4. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
-                        new MissionStepDefinition { ProcessStepDescription = $"{wrapRackViewModel.Title} 회전 완료", MissionType = "8", ToNode = "Turn_Rack_27_32", FromNode = "Wrapping_Drop", Payload = "AMR_2", IsLinkable = false, LinkWaitTimeout = 3600 }
+                        new MissionStepDefinition { ProcessStepDescription = $"{wrapRackViewModel.Title} 이동 완료", MissionType = "8", ToNode = "Turn_Rack_27_32", Payload = "AMR_2", IsLinkable = false, LinkWaitTimeout = 3600 }
                     };
                 }
 
@@ -672,15 +664,13 @@ namespace WPF_WMS01.ViewModels
                     missionSteps = new List<MissionStepDefinition>
                     {
                         // 1. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
-                        new MissionStepDefinition { ProcessStepDescription = $"{sourceRackViewModel.Title} 제품 픽업", MissionType = "8", ToNode = $"Wrapping_PickUP", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
-                        // 2. 팔레트 외부 픽업 (WAIT 노드에서)
-                        new MissionStepDefinition { ProcessStepDescription = $"{sourceRackViewModel.Title} 회전 준비", MissionType = "8", ToNode = "Turn_Rack_27_32", FromNode = sourceRackViewModel.Title, Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
-                        // 3. 랩핑 드롭 (랩핑 스테이션으로 이동하여 드롭)
-                        new MissionStepDefinition { ProcessStepDescription = $"{destinationRack.Title} 제품 드롭", MissionType = "8", ToNode = $"Rack_{shelf}_Drop", FromNode = "Palette_OUT_PickUP", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
+                        new MissionStepDefinition { ProcessStepDescription = $"{sourceRackViewModel.Title} 제품 픽업", MissionType = "7", FromNode = $"Wrapping_PickUP", ToNode = "Turn_Rack_27_32", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
+                        // 2. 랩핑 드롭 (랩핑 스테이션으로 이동하여 드롭)
+                        new MissionStepDefinition { ProcessStepDescription = $"{destinationRack.Title} 제품 드롭", MissionType = "8", ToNode = $"Rack_{shelf}_Drop", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
                         // 4. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
-                        new MissionStepDefinition { ProcessStepDescription = $"{destinationRack.Title} 회전 완료", MissionType = "8", ToNode = "Turn_Rack_29", FromNode = "Wrapping_Drop", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
+                        new MissionStepDefinition { ProcessStepDescription = $"{destinationRack.Title} 운반 완료", MissionType = "8", ToNode = "Turn_Rack_29", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
                         // 5.
-                        new MissionStepDefinition { ProcessStepDescription = $"{destinationRack.Title} 복귀 완료", MissionType = "8", ToNode = "Charge1", FromNode = "Wrapping_Drop", Payload = "AMR_2", IsLinkable = false, LinkWaitTimeout = 3600 }
+                        new MissionStepDefinition { ProcessStepDescription = $"{destinationRack.Title} 복귀 완료", MissionType = "8", ToNode = "Charge1", Payload = "AMR_2", IsLinkable = false, LinkWaitTimeout = 3600 }
                     };
                 }
                 else //if (destinationRack.LocationArea == 2 || sourceRackViewModel.LocationArea == 1)
@@ -688,9 +678,7 @@ namespace WPF_WMS01.ViewModels
                     missionSteps = new List<MissionStepDefinition>
                     {
                         // 1. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
-                        new MissionStepDefinition { ProcessStepDescription = $"{sourceRackViewModel.Title} 제품 픽업", MissionType = "8", ToNode = "Wrapping_PickUP", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
-                        // 2. 팔레트 외부 픽업 (WAIT 노드에서)
-                        new MissionStepDefinition { ProcessStepDescription = $"{sourceRackViewModel.Title} 제품 드롭", MissionType = "8", ToNode = $"Rack_{shelf}_Drop", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
+                        new MissionStepDefinition { ProcessStepDescription = $"{sourceRackViewModel.Title} 제품 픽업 & 드롭", MissionType = "7", FromNode = "Wrapping_PickUP", ToNode = $"Rack_{shelf}_Drop", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
                         // 3. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
                         new MissionStepDefinition { ProcessStepDescription = $"{destinationRack.Title} 복귀 완료", MissionType = "8", ToNode = "Charge1", Payload = "AMR_2", IsLinkable = false, LinkWaitTimeout = 3600 }
                     };
@@ -783,12 +771,10 @@ namespace WPF_WMS01.ViewModels
                     missionSteps = new List<MissionStepDefinition>
                     {
                         // 1. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
-                        new MissionStepDefinition { ProcessStepDescription = $"{targetRackViewModel.Title} 제품 픽업", MissionType = "8", ToNode = $"Rack_{shelf}_PickUP", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
-                        // 2. 팔레트 외부 픽업 (WAIT 노드에서)
-                        new MissionStepDefinition { ProcessStepDescription = $"{targetRackViewModel.Title} 회전 준비", MissionType = "8", ToNode = "Turn_Rack_29", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
-                        // 3. 랩핑 드롭 (랩핑 스테이션으로 이동하여 드롭)
+                        new MissionStepDefinition { ProcessStepDescription = $"{targetRackViewModel.Title} 제품 픽업", MissionType = "7", FromNode = $"Rack_{shelf}_PickUP", ToNode = "Turn_Rack_29", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
+                        // 2. 랩핑 드롭 (랩핑 스테이션으로 이동하여 드롭)
                         new MissionStepDefinition { ProcessStepDescription = $"{targetRackViewModel.Title} 제품 드롭", MissionType = "8", ToNode = "WaitProduct_1_Drop", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
-                        // 4. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
+                        // 3. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
                         new MissionStepDefinition { ProcessStepDescription = $"{targetRackViewModel.Title} 복귀 완료", MissionType = "8", ToNode = "Charge1", Payload = "AMR_2", IsLinkable = false, LinkWaitTimeout = 3600 }
                     };
                 }
@@ -799,10 +785,8 @@ namespace WPF_WMS01.ViewModels
                         // 1. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
                         new MissionStepDefinition { ProcessStepDescription = $"{targetRackViewModel.Title} 회전 준비", MissionType = "8", ToNode = "Turn_Rack_27_32", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
                         // 2. 팔레트 외부 픽업 (WAIT 노드에서)
-                        new MissionStepDefinition { ProcessStepDescription = $"{targetRackViewModel.Title} 제품 픽업", MissionType = "8", ToNode = $"Rack_{shelf}_PickUP", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
-                        // 3. 랩핑 드롭 (랩핑 스테이션으로 이동하여 드롭)
-                        new MissionStepDefinition { ProcessStepDescription = $"{targetRackViewModel.Title} 제품 드롭", MissionType = "8", ToNode = "WaitProduct_1_Drop", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
-                        // 4. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
+                        new MissionStepDefinition { ProcessStepDescription = $"{targetRackViewModel.Title} 제품 픽업 & 드롭", MissionType = "7", FromNode = $"Rack_{shelf}_PickUP", ToNode = "WaitProduct_1_Drop", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
+                        // 3. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
                         new MissionStepDefinition { ProcessStepDescription = $"{targetRackViewModel.Title} 복귀 완료", MissionType = "8", ToNode = "Charge1", Payload = "AMR_2", IsLinkable = false, LinkWaitTimeout = 3600 }
                     };
                 }
@@ -811,9 +795,7 @@ namespace WPF_WMS01.ViewModels
                     missionSteps = new List<MissionStepDefinition>
                     {
                         // 1. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
-                        new MissionStepDefinition { ProcessStepDescription = $"{targetRackViewModel.Title} 제품 픽업", MissionType = "8", ToNode = $"Rack_{shelf}_PickUP", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
-                        // 2. 팔레트 외부 픽업 (WAIT 노드에서)
-                        new MissionStepDefinition { ProcessStepDescription = $"{targetRackViewModel.Title} 회전 준비", MissionType = "8", ToNode = "Turn_Rack_27_32", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
+                        new MissionStepDefinition { ProcessStepDescription = $"{targetRackViewModel.Title} 제품 픽업", MissionType = "7", FromNode = $"Rack_{shelf}_PickUP", ToNode = "Turn_Rack_27_32", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
                         // 3. 랩핑 드롭 (랩핑 스테이션으로 이동하여 드롭)
                         new MissionStepDefinition { ProcessStepDescription = $"{targetRackViewModel.Title} 제품 드롭", MissionType = "8", ToNode = "WaitProduct_1_Drop", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
                         // 4. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
