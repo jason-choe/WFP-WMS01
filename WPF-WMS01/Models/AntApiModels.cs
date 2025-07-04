@@ -2,31 +2,11 @@
 using System;
 using Newtonsoft.Json;
 using System.Collections.Generic; // List<T> 사용을 위해 추가
-using System.ComponentModel; // INotifyPropertyChanged 사용을 위해 추가
-using System.Runtime.CompilerServices; // CallerMemberName 사용을 위해 추가
 using System.Threading; // CancellationTokenSource를 위해 추가
+using WPF_WMS01.ViewModels;
 
 namespace WPF_WMS01.Models
 {
-    // ViewModelBase for common INotifyPropertyChanged implementation
-    public class ViewModelBase : INotifyPropertyChanged
-    {
-        public event PropertyChangedEventHandler PropertyChanged;
-
-        protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-        }
-
-        protected bool SetProperty<T>(ref T field, T value, [CallerMemberName] string propertyName = null)
-        {
-            if (EqualityComparer<T>.Default.Equals(field, value)) return false;
-            field = value;
-            OnPropertyChanged(propertyName);
-            return true;
-        }
-    }
-
     // ====== 1. Login (POST) - Appendix G.1 (p. 427) ======
     public class ApiVersion
     {

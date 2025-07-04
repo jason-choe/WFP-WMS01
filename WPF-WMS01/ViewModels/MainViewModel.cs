@@ -13,10 +13,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Configuration;
 using System.Net.Http;
-using System.Text.Json;
 using System.Diagnostics;
-using System.ComponentModel;
-using System.Runtime.CompilerServices;
 using System.Windows.Threading; // DispatcherTimer 사용을 위해 추가
 using Newtonsoft.Json;
 using JsonException = Newtonsoft.Json.JsonException;
@@ -1226,7 +1223,7 @@ namespace WPF_WMS01.ViewModels
                             // 2) Source 랙 정보 비우기
                             await _databaseService.UpdateRackStateAsync(
                                 sourceRackVm.Id,
-                                sourceRackVm.RackModel.RackType,
+                                missionInfo.ProcessType == "HandleHalfPalletExport" ? 1 : destinationRackVm.RackType,
                                 0 // BulletType을 0으로 설정 (비움)
                             );
                             await _databaseService.UpdateLotNumberAsync(
@@ -1448,7 +1445,7 @@ namespace WPF_WMS01.ViewModels
                         {
                             // 1. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
                             new MissionStepDefinition { ProcessStepDescription = $"{waitRackVm.Title} 픽업 준비", MissionType = "8", ToNode = "Turn_Rack_27_32", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
-                            // 1. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
+                            // 2. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
                             new MissionStepDefinition { ProcessStepDescription = $"{waitRackVm.Title} 제품 픽업 & 드롭", MissionType = "7", FromNode = "Palette_OUT_PickUP", ToNode = $"Rack_{shelf}_Drop", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
                             // 3. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
                             new MissionStepDefinition { ProcessStepDescription = $"{targetRackVm.Title} 복귀 완료", MissionType = "8", ToNode = "Charge1", Payload = "AMR_2", IsLinkable = false, LinkWaitTimeout = 3600 }
