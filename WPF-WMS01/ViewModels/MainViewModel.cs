@@ -114,6 +114,7 @@ namespace WPF_WMS01.ViewModels
     {
         private readonly DatabaseService _databaseService;
         private readonly HttpService _httpService;
+        private readonly IRobotMissionService _robotMissionService; // 로봇 미션 서비스 주입
         private readonly string _apiUsername;
         private readonly string _apiPassword;
         private readonly ModbusClientService _modbusService; // ModbusClientService 인스턴스 추가
@@ -121,19 +122,12 @@ namespace WPF_WMS01.ViewModels
         private ObservableCollection<RackViewModel> _rackList;
         private DispatcherTimer _refreshTimer;
         private DispatcherTimer _modbusReadTimer; // Modbus Coil 상태 읽기용 타이머
-        private DispatcherTimer _robotMissionPollingTimer; // 로봇 미션 상태 폴링용 타이머
 
         public readonly string _waitRackTitle;
         public readonly char[] _militaryCharacter = { 'a', 'b', 'c', ' ' };
 
         // Modbus Discrete Input/Coil 상태를 저장할 ObservableCollection
         public ObservableCollection<ModbusButtonViewModel> ModbusButtons { get; set; }
-
-        // 현재 진행 중인 로봇 미션 프로세스들을 추적 (Key: ProcessId)
-        // private 접근 한정자를 유지하고, 외부 접근은 InitiateRobotMissionProcess 메서드를 통해서만 허용합니다.
-        private readonly Dictionary<string, RobotMissionInfo> _activeRobotProcesses = new Dictionary<string, RobotMissionInfo>();
-        // _activeRobotProcesses 컬렉션에 대한 스레드 안전 잠금 객체
-        private readonly object _activeRobotProcessesLock = new object();
 
         private bool _plcStatusIsRun; // PLC 구동 상태 (Discrete Input 100012)
         public bool PlcStatusIsRun
@@ -227,7 +221,7 @@ namespace WPF_WMS01.ViewModels
         }
 
         // Constructor
-        public MainViewModel(DatabaseService databaseService, HttpService httpService, ModbusClientService modbusService)
+        public MainViewModel(DatabaseService databaseService, HttpService httpService, ModbusClientService modbusService, IRobotMissionService robotMissionService)
         {
             _databaseService = databaseService;
             _waitRackTitle = ConfigurationManager.AppSettings["WaitRackTitle"] ?? "WAIT";
@@ -242,15 +236,15 @@ namespace WPF_WMS01.ViewModels
             // RTU 모드를 사용하려면 ModbusClientService("COM1", 9600, Parity.None, StopBits.One, 8, 1) 와 같이 변경
             // App.config에서 IP/Port를 읽어오도록 변경 가능
             _modbusService = modbusService;
-            //_modbusService = new ModbusClientService(
-            //    ConfigurationManager.AppSettings["ModbusIpAddress"] ?? "localhost",
-            //    int.Parse(ConfigurationManager.AppSettings["ModbusPort"] ?? "502"),
-            //    byte.Parse(ConfigurationManager.AppSettings["ModbusSlaveId"] ?? "1")
-            // );
+            _robotMissionService = robotMissionService; // RobotMissionService 주입
+
+            // RobotMissionService의 이벤트 구독
+            _robotMissionService.OnShowAutoClosingMessage += ShowAutoClosingMessage;
+            _robotMissionService.OnRackLockStateChanged += OnRobotMissionRackLockStateChanged;
+            _robotMissionService.OnInputStringForButtonCleared += () => InputStringForButton = string.Empty;
 
             // ModbusButtons 컬렉션 초기화 (XAML의 버튼 순서 및 내용에 맞춰)
             // Discrete Input Address와 Coil Output Address를 스펙에 맞춰 매핑
-            // Discrete Input은 100000번부터 시작, Coil Output은 0번부터 시작
             ModbusButtons = new ObservableCollection<ModbusButtonViewModel>
             {
                 new ModbusButtonViewModel("5.56mm[1]", 0, 0),    // Discrete Input 100000 -> 0x02 Read 0 / Coil Output 0x05 Write 0
@@ -292,442 +286,28 @@ namespace WPF_WMS01.ViewModels
 
             SetupRefreshTimer(); // RackList 갱신 타이머
             SetupModbusReadTimer(); // Modbus Coil 상태 읽기 타이머 설정
-            SetupRobotMissionPollingTimer(); // 로봇 미션 상태 폴링 타이머 설정
             _ = LoadRacksAsync();
             _ = AutoLoginOnStartup();
         }
 
-        // 로봇 미션 폴링 타이머 설정
-        private void SetupRobotMissionPollingTimer()
+        /// <summary>
+        /// RobotMissionService에서 랙 잠금 상태 변경 이벤트가 발생했을 때 호출됩니다.
+        /// MainViewModel의 RackList에서 해당 랙을 찾아 UI를 업데이트합니다.
+        /// </summary>
+        /// <param name="rackId">상태가 변경된 랙의 ID.</param>
+        /// <param name="newIsLocked">새로운 잠금 상태.</param>
+        private void OnRobotMissionRackLockStateChanged(int rackId, bool newIsLocked)
         {
-            _robotMissionPollingTimer = new DispatcherTimer();
-            _robotMissionPollingTimer.Interval = TimeSpan.FromSeconds(5); // 5초마다 폴링 (조정 가능)
-            _robotMissionPollingTimer.Tick += RobotMissionPollingTimer_Tick;
-            _robotMissionPollingTimer.Start();
-            Debug.WriteLine("[RobotMission] Robot Mission Polling Timer Started.");
-        }
-
-        // 로봇 미션 상태 주기적 폴링
-        private async void RobotMissionPollingTimer_Tick(object sender, EventArgs e)
-        {
-            // _activeRobotProcesses 컬렉션에 대한 스레드 안전 복사본 생성
-            List<RobotMissionInfo> currentActiveProcesses;
-            lock (_activeRobotProcessesLock)
-            {
-                currentActiveProcesses = _activeRobotProcesses.Values.ToList();
-            }
-
-            foreach (var processInfo in currentActiveProcesses)
-            {
-                // 이미 완료되었거나 실패한 미션은 폴링하지 않습니다.
-                if (processInfo.IsFinished || processInfo.IsFailed)
-                {
-                    // 완료되거나 실패한 프로세스는 딕셔너리에서 제거합니다.
-                    // Dictionary에서 제거는 lock 안에서 이루어져야 합니다.
-                    lock (_activeRobotProcessesLock)
-                    {
-                        _activeRobotProcesses.Remove(processInfo.ProcessId);
-                    }
-                    Debug.WriteLine($"[RobotMission] Process {processInfo.ProcessId} removed (Finished: {processInfo.IsFinished}, Failed: {processInfo.IsFailed}).");
-                    continue;
-                }
-
-                // 현재 추적 중인 미션 (LastSentMissionId)이 있을 경우에만 폴링을 시도
-                if (processInfo.LastSentMissionId.HasValue)
-                {
-                    try
-                    {
-                        var missionInfoResponse = await _httpService.GetAsync<GetMissionInfoResponse>($"wms/rest/v{_httpService.CurrentApiVersionMajor}.{_httpService.CurrentApiVersionMinor}/missions/{processInfo.LastSentMissionId.Value}").ConfigureAwait(false);
-
-                        if (missionInfoResponse?.Payload?.Missions != null && missionInfoResponse.Payload.Missions.Any())
-                        {
-                            var latestMissionDetail = missionInfoResponse.Payload.Missions.First();
-                            processInfo.CurrentMissionDetail = latestMissionDetail;
-
-                            Application.Current.Dispatcher.Invoke(() =>
-                            {
-                                MissionStatusEnum currentStatus;
-                                switch (latestMissionDetail.NavigationState)
-                                {
-                                    case 0: currentStatus = MissionStatusEnum.RECEIVED; break;
-                                    case 1: currentStatus = MissionStatusEnum.ACCEPTED; break;
-                                    case 2: currentStatus = MissionStatusEnum.REJECTED; break;
-                                    case 3: currentStatus = MissionStatusEnum.STARTED; break;
-                                    case 4: currentStatus = MissionStatusEnum.COMPLETED; break; // <-- 추가: navigationstate 4를 COMPLETED로 처리
-                                    case 5: currentStatus = MissionStatusEnum.CANCELLED; break;
-                                    case 6: currentStatus = MissionStatusEnum.COMPLETED; break; // 6도 완료로 간주
-                                    case 7: currentStatus = MissionStatusEnum.FAILED; break;
-                                    default: currentStatus = MissionStatusEnum.PENDING; break; // 알 수 없는 상태
-                                }
-                                processInfo.HmiStatus.Status = currentStatus.ToString();
-
-                                // 진행률 업데이트 (전체 미션 단계 중 현재 완료된 단계의 비율)
-                                // CurrentStepIndex는 다음에 전송할 미션의 인덱스이므로,
-                                // 실제 완료된 미션의 수 (progressNumerator)는 currentStatus가 COMPLETED일 때만 CurrentStepIndex.
-                                // 그 외에는 현재 진행중인 미션의 이전 단계까지만 완료되었다고 간주 (CurrentStepIndex-1).
-                                double progressNumerator = (currentStatus == MissionStatusEnum.COMPLETED && processInfo.CurrentStepIndex <= processInfo.TotalSteps) ?
-                                                           processInfo.CurrentStepIndex : Math.Max(0, processInfo.CurrentStepIndex - 1);
-                                processInfo.HmiStatus.ProgressPercentage = (int)((progressNumerator / processInfo.TotalSteps) * 100);
-
-                                // 현재 진행 중인 미션 단계의 설명
-                                if (currentStatus == MissionStatusEnum.COMPLETED && processInfo.CurrentStepIndex < processInfo.TotalSteps)
-                                {
-                                    // 현재 미션이 완료되었고 다음 미션이 남아있다면, 다음 미션 설명을 표시
-                                    processInfo.HmiStatus.CurrentStepDescription = processInfo.MissionSteps[processInfo.CurrentStepIndex].ProcessStepDescription;
-                                }
-                                else if (processInfo.CurrentStepIndex > 0 && processInfo.CurrentStepIndex <= processInfo.TotalSteps)
-                                {
-                                    // 현재 미션이 아직 완료되지 않았거나 마지막 미션인 경우, 현재 미션 설명을 표시
-                                    processInfo.HmiStatus.CurrentStepDescription = processInfo.MissionSteps[processInfo.CurrentStepIndex - 1].ProcessStepDescription;
-                                }
-                                else if (processInfo.TotalSteps > 0 && processInfo.CurrentStepIndex == 0 && currentStatus != MissionStatusEnum.COMPLETED)
-                                {
-                                    // 아직 첫 미션이 진행중 (Accepted/Started)
-                                    processInfo.HmiStatus.CurrentStepDescription = processInfo.MissionSteps[0].ProcessStepDescription;
-                                }
-                                else
-                                {
-                                    processInfo.HmiStatus.CurrentStepDescription = "No mission steps defined or process completed.";
-                                }
-
-                                Debug.WriteLine($"[RobotMission] Process {processInfo.ProcessId} - Polling Mission {latestMissionDetail.MissionId}: " +
-                                                $"Status: {processInfo.HmiStatus.Status}, Progress: {processInfo.HmiStatus.ProgressPercentage}%. Desc: {processInfo.HmiStatus.CurrentStepDescription}");
-                                Debug.WriteLine($"[RobotMission DEBUG] Polled Mission Detail for {latestMissionDetail.MissionId}:");
-                                Debug.WriteLine($"  NavigationState: {latestMissionDetail.NavigationState}");
-                                Debug.WriteLine($"  State: {latestMissionDetail.State}");
-                                Debug.WriteLine($"  TransportState: {latestMissionDetail.TransportState}");
-                                Debug.WriteLine($"  PayloadStatus: {latestMissionDetail.PayloadStatus}");
-                                Debug.WriteLine($"  AssignedTo: {latestMissionDetail.AssignedTo}");
-                                Debug.WriteLine($"  ParametersJson: {latestMissionDetail.ParametersJson}");
-                            });
-
-                            // 현재 폴링 중인 미션이 완료되면, 다음 미션을 전송
-                            if (latestMissionDetail.NavigationState == (int)MissionStatusEnum.COMPLETED || latestMissionDetail.NavigationState == 4)
-                            {
-                                // === 중단점: 개별 미션 완료 시점 ===
-                                Debug.WriteLine($"[RobotMission - BREAKPOINT] Mission {latestMissionDetail.MissionId} completed for Process {processInfo.ProcessId}. Proceeding to next step.");
-
-                                // string MissionId를 int로 파싱하여 할당
-                                if (int.TryParse(latestMissionDetail.MissionId, out int completedMissionId))
-                                {
-                                    processInfo.LastCompletedMissionId = completedMissionId;
-                                }
-                                else
-                                {
-                                    Debug.WriteLine($"[RobotMission] Warning: Could not parse MissionId '{latestMissionDetail.MissionId}' to int for LastCompletedMissionId.");
-                                    processInfo.LastCompletedMissionId = null; // 파싱 실패 시 null
-                                }
-
-                                // 미션 단계 인덱스 증가
-                                Application.Current.Dispatcher.Invoke(() =>
-                                {
-                                    processInfo.CurrentStepIndex++;
-                                    ShowAutoClosingMessage($"로봇 미션 단계 완료: {processInfo.HmiStatus.CurrentStepDescription}");
-                                });
-                                Debug.WriteLine($"[RobotMission] Process {processInfo.ProcessId} - CurrentStepIndex incremented to: {processInfo.CurrentStepIndex}. Total steps: {processInfo.TotalSteps}. Calling SendAndTrackMissionStepsForProcess.");
-
-                                // 다음 단계로 진행 (다음 미션 전송)
-                                await SendAndTrackMissionStepsForProcess(processInfo).ConfigureAwait(false);
-                            }
-                            else if (latestMissionDetail.NavigationState == (int)MissionStatusEnum.FAILED || latestMissionDetail.NavigationState == (int)MissionStatusEnum.REJECTED || latestMissionDetail.NavigationState == (int)MissionStatusEnum.CANCELLED)
-                            {
-                                Debug.WriteLine($"[RobotMission] Mission {latestMissionDetail.MissionId} FAILED/REJECTED/CANCELLED. Process {processInfo.ProcessId} marked as FAILED.");
-                                Application.Current.Dispatcher.Invoke(() =>
-                                {
-                                    processInfo.HmiStatus.Status = latestMissionDetail.NavigationState == (int)MissionStatusEnum.REJECTED ? MissionStatusEnum.REJECTED.ToString() :
-                                                                   latestMissionDetail.NavigationState == (int)MissionStatusEnum.CANCELLED ? MissionStatusEnum.CANCELLED.ToString() :
-                                                                   MissionStatusEnum.FAILED.ToString();
-                                    ShowAutoClosingMessage($"로봇 미션 {processInfo.ProcessType} (ID: {processInfo.ProcessId}) 실패: {latestMissionDetail.MissionId}. 남은 미션 취소.");
-                                });
-                                processInfo.IsFailed = true; // 프로세스를 실패로 마크
-                                // 미션 취소 로직 (API 제공 시 여기에 추가)
-                                HandleRobotMissionCompletion(processInfo); // 실패 처리도 완료 처리로 간주
-                            }
-                        }
-                        else
-                        {
-                            Debug.WriteLine($"[RobotMission] Mission {processInfo.LastSentMissionId} not found or no missions in payload. Potentially completed or invalid ID.");
-                            // 미션이 없거나 페이로드가 비어있지만, 프로세스 전체가 완료되지 않았다면 오류로 간주
-                            // 이 경우는 이미 완료된 미션이 PollingTimer_Tick에서 제거되므로 보통 여기에 도달하지 않음
-                            // 하지만, 미션 전송 자체가 실패하여 LastSentMissionId가 설정되었는데 미션이 없는 경우를 대비하여 실패로 처리
-                            if (processInfo.LastSentMissionId.HasValue && !processInfo.IsFinished && !processInfo.IsFailed)
-                            {
-                                Application.Current.Dispatcher.Invoke(() =>
-                                {
-                                    processInfo.HmiStatus.Status = MissionStatusEnum.FAILED.ToString();
-                                    ShowAutoClosingMessage($"로봇 미션 {processInfo.ProcessType} (ID: {processInfo.ProcessId}) 폴링 실패: 미션 {processInfo.LastSentMissionId.Value} 정보를 찾을 수 없습니다.");
-                                });
-                                processInfo.IsFailed = true;
-                                HandleRobotMissionCompletion(processInfo);
-                            }
-                        }
-                    }
-                    catch (HttpRequestException httpEx)
-                    {
-                        Debug.WriteLine($"[RobotMission] HTTP Request Error for mission {processInfo.LastSentMissionId}: {httpEx.Message}");
-                        Application.Current.Dispatcher.Invoke(() =>
-                        {
-                            processInfo.HmiStatus.Status = MissionStatusEnum.FAILED.ToString();
-                            ShowAutoClosingMessage($"로봇 미션 상태 폴링 실패 (HTTP 오류): {httpEx.Message.Substring(0, Math.Min(100, httpEx.Message.Length))}");
-                        });
-                        processInfo.IsFailed = true; // 폴링 실패도 프로세스 실패로 간주
-                        HandleRobotMissionCompletion(processInfo);
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"[RobotMission] Error polling mission status for process {processInfo.ProcessId}: {ex.Message}");
-                        Application.Current.Dispatcher.Invoke(() =>
-                        {
-                            processInfo.HmiStatus.Status = MissionStatusEnum.FAILED.ToString();
-                            ShowAutoClosingMessage($"로봇 미션 상태 폴링 중 예상치 못한 오류: {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}");
-                        });
-                        processInfo.IsFailed = true; // 예상치 못한 오류도 프로세스 실패로 간주
-                        HandleRobotMissionCompletion(processInfo);
-                    }
-                }
-                else
-                {
-                    // LastSentMissionId가 아직 설정되지 않은 경우 (첫 번째 단계가 아직 보내지지 않은 경우)
-                    // 이 경우는 InitiateRobotMissionProcess에서 바로 첫 번째 미션을 보내므로 드물지만,
-                    // 프로세스가 시작되었으나 미션 전송 실패로 LastSentMissionId가 null일 때 재시도할 수 있도록
-                    if (processInfo.CurrentStepIndex == 0 && processInfo.MissionSteps.Any() && !processInfo.IsFailed)
-                    {
-                        Debug.WriteLine($"[RobotMission] Process {processInfo.ProcessId} - First step pending. Attempting to send initial mission.");
-                        await SendAndTrackMissionStepsForProcess(processInfo).ConfigureAwait(false);
-                    }
-                }
-            }
-        }
-
-
-        // Modbus Coil 상태 읽기 타이머 설정
-        private void SetupModbusReadTimer()
-        {
-            _modbusReadTimer = new DispatcherTimer();
-            _modbusReadTimer.Interval = TimeSpan.FromMilliseconds(1000); // 1초마다 읽기 (조정 가능)
-            _modbusReadTimer.Tick += ModbusReadTimer_Tick;
-            _modbusReadTimer.Start();
-            Debug.WriteLine("[ModbusService] Modbus Read Timer Started.");
-        }
-
-        // Modbus Discrete Input/Coil 상태 주기적 읽기
-        private async void ModbusReadTimer_Tick(object sender, EventArgs e)
-        {
-            if (!_modbusService.IsConnected)
-            {
-                Debug.WriteLine("[ModbusService] Read Timer: Not Connected. Attempting to reconnect asynchronously...");
-                await _modbusService.ConnectAsync().ConfigureAwait(false); // ConfigureAwait(false) 사용
-                if (!_modbusService.IsConnected)
-                {
-                    Debug.WriteLine("[ModbusService] Read Timer: Connection failed after reconnect attempt. Skipping Modbus read.");
-                    return;
-                }
-            }
-
-            try
-            {
-                // 1. PLC 구동 상태 (Discrete Input 100012) 읽기
-                ushort plcStatusAddress = 12; // 100012의 주소는 0x02 Read 12
-                bool[] plcStatus = await _modbusService.ReadDiscreteInputStatesAsync(plcStatusAddress, 1).ConfigureAwait(false);
-
-                // UI 스레드에서 PlcStatusIsRun 업데이트
-                Application.Current.Dispatcher.Invoke(() =>
-                {
-                    PlcStatusIsRun = (plcStatus != null && plcStatus.Length > 0 && plcStatus[0]);
-                });
-
-                if (!PlcStatusIsRun)
-                {
-                    Debug.WriteLine("[ModbusService] PLC Status is STOP (0). Ignoring call button inputs.");
-                    // PLC가 STOP 상태이면 모든 버튼을 비활성화하고 작업 플래그 리셋
-                    Application.Current.Dispatcher.Invoke(() =>
-                    {
-                        foreach (var buttonVm in ModbusButtons)
-                        {
-                            buttonVm.IsEnabled = false;
-                            buttonVm.IsProcessing = false;
-                            buttonVm.CurrentProgress = 0;
-                            buttonVm.IsTaskInitiatedByDiscreteInput = false;
-                            buttonVm.CurrentDiscreteInputState = false; // Discrete Input 상태 초기화
-                            ((RelayCommand)buttonVm.ExecuteButtonCommand)?.RaiseCanExecuteChanged();
-                        }
-                    });
-                    return; // PLC가 정지 상태이므로 Call Button 입력은 처리하지 않음
-                }
-
-                // 2. Call Button Discrete Input (100000 ~ 100011) 상태 읽기
-                ushort startDiscreteInputAddress = 0; // 100000의 주소는 0x02 Read 0
-                ushort numberOfDiscreteInputs = (ushort)ModbusButtons.Count; // 12개
-                bool[] discreteInputStates = await _modbusService.ReadDiscreteInputStatesAsync(startDiscreteInputAddress, numberOfDiscreteInputs).ConfigureAwait(false);
-
-                // 3. 경광등 Coil Output (0 ~ 11) 상태 읽기 (필요시, 현재는 PLC에 Write만 하므로 생략 가능)
-                // 현재 경광등 상태를 읽어와서 UI에 반영할 필요가 있다면 여기에 추가
-
-                if (discreteInputStates != null && discreteInputStates.Length >= numberOfDiscreteInputs)
-                {
-                    // UI 업데이트는 UI 스레드에서 수행
-                    Application.Current.Dispatcher.Invoke(async () =>
-                    {
-                        for (int i = 0; i < numberOfDiscreteInputs; i++)
-                        {
-                            var buttonVm = ModbusButtons[i];
-                            bool currentDiscreteInputState = discreteInputStates[i];
-                            bool previousDiscreteInputState = buttonVm.CurrentDiscreteInputState;
-
-                            // Discrete Input 상태 업데이트 (다음 틱에서 이전 상태 비교를 위해)
-                            buttonVm.CurrentDiscreteInputState = currentDiscreteInputState;
-
-                            // PLC 신호 (Discrete Input 0->1) 감지 및 PLC가 Run 상태일 때
-                            if (currentDiscreteInputState && !previousDiscreteInputState && !buttonVm.IsProcessing && !buttonVm.IsTaskInitiatedByDiscreteInput)
-                            {
-                                // 이 버튼에 대한 작업이 이미 시작되지 않았고, Discrete Input이 0에서 1로 전환되었다면
-                                buttonVm.IsTaskInitiatedByDiscreteInput = true; // 작업 시작 플래그 설정
-                                Debug.WriteLine($"[Modbus] Call Button (Discrete Input {buttonVm.DiscreteInputAddress}) activated (0->1). Initiating task.");
-                                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} Call Button 신호 감지! 작업 자동 시작됩니다.");
-
-                                // 해당 경광등 Coil을 1로 켜기 (App -> PLC)
-                                bool writeLampSuccess = await _modbusService.WriteSingleCoilAsync(buttonVm.CoilOutputAddress, true).ConfigureAwait(false);
-                                if (writeLampSuccess)
-                                {
-                                    Debug.WriteLine($"[Modbus] Lamp Coil {buttonVm.CoilOutputAddress} set to ON (1).");
-                                    // 10초 지연 후 메인 비동기 작업 시작
-                                    _ = HandleCallButtonActivatedTask(buttonVm); // 백그라운드에서 실행 (fire-and-forget)
-                                }
-                                else
-                                {
-                                    Debug.WriteLine($"[Modbus] Failed to write Lamp Coil {buttonVm.CoilOutputAddress} to ON (1). Task not started.");
-                                    ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 경광등 켜기 실패! 작업 시작 불가.");
-                                    buttonVm.IsTaskInitiatedByDiscreteInput = false; // 작업 시작 실패했으므로 플래그 리셋
-                                }
-                            }
-                            // 경광등이 꺼진 것이 감지되면 (Coil 1 -> 0) Discrete Input을 0으로 초기화
-                            // 이 부분은 PLC가 처리하는 것이 일반적이지만, HMI가 트리거하는 경우를 위해 남겨둠.
-                            // 스펙상 "경광등이 꺼지면 (1 -> 0) 이에 트리거되어 call button의 입력이 0으로 바뀐다"는 PLC의 동작을 의미.
-                            // HMI는 단순히 경광등을 끄는 역할만 하므로, 여기서는 Discrete Input을 HMI가 직접 0으로 바꾸는 로직은 필요 없음.
-                            // HMI가 경광등을 0으로 쓴 후, 다음 ModbusReadTimer_Tick에서 PLC의 Discrete Input이 0으로 바뀐 것을 확인하게 될 것임.
-
-                            // 버튼의 IsEnabled 상태는 PLC가 Run 상태이고, Discrete Input이 1이고, 현재 작업 중이 아닐 때 활성화
-                            buttonVm.IsEnabled = PlcStatusIsRun && currentDiscreteInputState && !buttonVm.IsProcessing;
-                            // Command의 CanExecute 상태를 명시적으로 갱신하여 UI가 IsEnabled/IsProcessing 변화에 즉시 반응하도록 함
-                            ((RelayCommand)buttonVm.ExecuteButtonCommand)?.RaiseCanExecuteChanged();
-                        }
-                    });
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[ModbusService] Error reading Modbus inputs/coils in timer tick: {ex.GetType().Name} - {ex.Message}. StackTrace: {ex.StackTrace}");
-                _modbusService.Dispose(); // 통신 오류 발생 시 연결 끊고 재연결 준비
-            }
-        }
-
-        // Modbus 버튼 클릭 시 실행될 Command (HMI에서 작업 진행 상황 확인)
-        private async Task ExecuteModbusButtonCommand(ModbusButtonViewModel buttonVm)
-        {
-            if (buttonVm == null) return;
-
-            // 버튼 클릭 시점의 상태에 따라 팝업 메시지 표시
-            if (buttonVm.IsProcessing)
-            {
-                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 작업 진행 중: {buttonVm.CurrentProgress}% (주소: {buttonVm.DiscreteInputAddress}).");
-                Debug.WriteLine($"[Modbus] Button clicked for {buttonVm.Content}. Task is already processing. Displaying current progress.");
-            }
-            else if (buttonVm.IsTaskInitiatedByDiscreteInput && buttonVm.CurrentDiscreteInputState) // Discrete Input이 1이고, 작업이 스케줄링되었지만 아직 진행 중은 아닌 경우 (10초 지연 중)
-            {
-                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 작업 대기 중. 10초 지연 후 자동 시작됩니다. (주소: {buttonVm.DiscreteInputAddress}).");
-                Debug.WriteLine($"[Modbus] Button clicked for {buttonVm.Content}. Discrete Input is active, task is scheduled to start soon.");
-            }
-            else if (buttonVm.IsEnabled && buttonVm.CurrentDiscreteInputState) // PLC가 Run이고 Discrete Input이 1이지만, 다른 조건으로 작업이 시작되지 않은 경우 (거의 없겠지만)
-            {
-                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 작업 시작 준비 완료. (주소: {buttonVm.DiscreteInputAddress}).");
-                Debug.WriteLine($"[Modbus] Button clicked for {buttonVm.Content}. Discrete Input is active and ready.");
-            }
-            else // 버튼이 비활성화된 경우 (PLC Stop 또는 Discrete Input 0)
-            {
-                string status = PlcStatusIsRun ? $"Discrete Input {buttonVm.DiscreteInputAddress}이 0입니다." : "PLC가 정지 상태입니다.";
-                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 작업 비활성화됨. ({status}).");
-                Debug.WriteLine($"[Modbus] Button clicked for {buttonVm.Content}. Not active. Status: {status}");
-            }
-        }
-
-        // Discrete Input이 0에서 1로 활성화될 때 수행될 비동기 작업
-        private async Task HandleCallButtonActivatedTask(ModbusButtonViewModel buttonVm)
-        {
-            if (buttonVm == null) return;
-
-            // 작업이 이미 진행 중인 경우 중복 실행 방지
-            if (buttonVm.IsProcessing)
-            {
-                Debug.WriteLine($"[Modbus] Task for {buttonVm.Content} is already processing. Skipping new initiation.");
-                return;
-            }
-
-            // UI 스레드에서 IsProcessing 및 CurrentProgress 업데이트 시작
             Application.Current.Dispatcher.Invoke(() =>
             {
-                buttonVm.IsProcessing = true; // 작업 진행 중 상태로 변경 (UI에 ProgressBar 표시)
-                buttonVm.CurrentProgress = 0; // 진행률 초기화
+                var rackVm = RackList?.FirstOrDefault(r => r.Id == rackId);
+                if (rackVm != null)
+                {
+                    rackVm.IsLocked = newIsLocked;
+                    Debug.WriteLine($"[MainViewModel] Rack {rackVm.Title} (ID: {rackId}) IsLocked updated to {newIsLocked} via event.");
+                }
             });
-            Debug.WriteLine($"[Modbus] Async task started for {buttonVm.Content} (Discrete Input: {buttonVm.DiscreteInputAddress}).");
-
-            const int totalDurationSeconds = 45; // 45초 (30초 ~ 1분 사이)
-            const int updateIntervalMs = 500; // 0.5초마다 진행률 업데이트
-            int totalSteps = totalDurationSeconds * 1000 / updateIntervalMs;
-
-            try
-            {
-                for (int i = 0; i <= totalSteps; i++)
-                {
-                    Application.Current.Dispatcher.Invoke(() =>
-                    {
-                        buttonVm.CurrentProgress = (int)((double)i / totalSteps * 100);
-                    });
-
-                    await Task.Delay(updateIntervalMs).ConfigureAwait(false);
-                }
-
-                // 작업 완료 후 해당 경광등 Coil을 0으로 쓰기 (App -> PLC)
-                // 이 0으로 쓰는 동작이 PLC의 Discrete Input을 0으로 초기화하는 트리거가 됨.
-                bool writeLampOffSuccess = await _modbusService.WriteSingleCoilAsync(buttonVm.CoilOutputAddress, false).ConfigureAwait(false);
-                if (!writeLampOffSuccess)
-                {
-                    ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 경광등 끄기 실패!");
-                    Debug.WriteLine($"[Modbus] Failed to write Lamp Coil {buttonVm.CoilOutputAddress} to OFF (0) after task completion.");
-                }
-                else
-                {
-                    Debug.WriteLine($"[Modbus] Lamp Coil {buttonVm.CoilOutputAddress} set to OFF (0) after task completion. Expecting PLC to reset Discrete Input {buttonVm.DiscreteInputAddress}.");
-                }
-
-                // UI 스레드에서 작업 완료 메시지 표시
-                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 작업 완료! (Discrete Input: {buttonVm.DiscreteInputAddress})");
-            }
-            catch (Exception ex)
-            {
-                // 작업 중 오류 발생 시 메시지 팝업 (UI 스레드에서)
-                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 작업 중 오류 발생: {ex.Message}");
-                Debug.WriteLine($"[Modbus] Error during {buttonVm.Content} task: {ex.GetType().Name} - {ex.Message}");
-            }
-            finally
-            {
-                // 작업 완료 (성공/실패 무관) 후 UI 상태 업데이트 (UI 스레드에서)
-                Application.Current.Dispatcher.Invoke(() =>
-                {
-                    buttonVm.IsProcessing = false; // 작업 완료 상태로 변경 (ProgressBar 숨김)
-                    buttonVm.CurrentProgress = 0; // 진행률 초기화
-                    buttonVm.IsTaskInitiatedByDiscreteInput = false; // 다음 PLC 신호를 위해 플래그 리셋
-                });
-            }
         }
-
-        // Modbus 버튼 활성화 여부를 결정하는 CanExecute 로직
-        private bool CanExecuteModbusButtonCommand(ModbusButtonViewModel buttonVm)
-        {
-            // 버튼은 PLC가 Run 상태이고, 해당 Discrete Input이 1이며, 현재 비동기 작업이 진행 중이 아닐 때만 클릭 가능합니다.
-            // 클릭은 작업 시작이 아닌, 진행 상황 확인/정보 표시용입니다.
-            return PlcStatusIsRun && buttonVm?.CurrentDiscreteInputState == true && !buttonVm.IsProcessing;
-        }
-
 
         private void ExecuteOpenMenuCommand()
         {
@@ -1021,6 +601,7 @@ namespace WPF_WMS01.ViewModels
         /// <summary>
         /// 새로운 로봇 미션 프로세스를 시작합니다.
         /// 이 메서드는 RackViewModel과 같은 외부 ViewModel에서 호출될 수 있습니다.
+        /// RobotMissionService로 호출을 위임합니다
         /// </summary>
         /// <param name="processType">미션 프로세스의 유형 (예: "WaitToWrapTransfer", "RackTransfer").</param>
         /// <param name="missionSteps">이 프로세스를 구성하는 순차적인 미션 단계 목록.</param>
@@ -1035,257 +616,244 @@ namespace WPF_WMS01.ViewModels
             RackViewModel destinationRack = null,
             Location destinationLine = null)
         {
-            string processId = Guid.NewGuid().ToString(); // 고유한 프로세스 ID 생성
-            var newMissionProcess = new RobotMissionInfo(processId, processType, missionSteps)
-            {
-                // SourceRack, DestinationRack, DestinationLine을 직접 할당
-                SourceRack = sourceRack,
-                DestinationRack = destinationRack,
-                DestinationLine = destinationLine
-            };
-
-            lock (_activeRobotProcessesLock) // _activeRobotProcesses에 대한 스레드 안전한 접근
-            {
-                _activeRobotProcesses.Add(processId, newMissionProcess);
-            }
-            Debug.WriteLine($"[RobotMission] Initiated new robot mission process: {processId} ({processType}). Total steps: {missionSteps.Count}");
-            ShowAutoClosingMessage($"로봇 미션 프로세스 시작: {processType} (ID: {processId})");
-
-            // 첫 번째 미션 단계를 전송하고 추적을 시작합니다.
-            await SendAndTrackMissionStepsForProcess(newMissionProcess);
-
-            return processId;
+            // RobotMissionService로 로직을 위임합니다.
+            // InputStringForButton 값을 가져오는 델리게이트를 전달합니다.
+            return await _robotMissionService.InitiateRobotMissionProcess(
+                processType,
+                missionSteps,
+                sourceRack,
+                destinationRack,
+                destinationLine,
+                () => InputStringForButton // InputStringForButton 값을 가져오는 델리게이트
+            );
         }
 
-        /// <summary>
-        /// 주어진 로봇 미션 프로세스에서 현재 단계의 미션을 ANT 서버에 전송하고 추적을 시작합니다.
-        /// 현재 미션이 완료되면 이 메서드를 다시 호출하여 다음 미션을 전송합니다.
-        /// </summary>
-        /// <param name="missionInfo">현재 미션 프로세스 정보.</param>
-        private async Task SendAndTrackMissionStepsForProcess(RobotMissionInfo missionInfo)
+        // Modbus Coil 상태 읽기 타이머 설정
+        private void SetupModbusReadTimer()
         {
-            Debug.WriteLine($"[RobotMission] SendAndTrackMissionStepsForProcess called for Process {missionInfo.ProcessId}. Current Step: {missionInfo.CurrentStepIndex + 1}/{missionInfo.TotalSteps}. IsFailed: {missionInfo.IsFailed}");
+            _modbusReadTimer = new DispatcherTimer();
+            _modbusReadTimer.Interval = TimeSpan.FromMilliseconds(1000); // 1초마다 읽기 (조정 가능)
+            _modbusReadTimer.Tick += ModbusReadTimer_Tick;
+            _modbusReadTimer.Start();
+            Debug.WriteLine("[ModbusService] Modbus Read Timer Started.");
+        }
 
-            // 미션 프로세스가 이미 실패했거나 모든 단계를 완료했다면 더 이상 미션을 보내지 않습니다.
-            if (missionInfo.IsFailed || missionInfo.CurrentStepIndex >= missionInfo.TotalSteps)
+        // Modbus Discrete Input/Coil 상태 주기적 읽기
+        private async void ModbusReadTimer_Tick(object sender, EventArgs e)
+        {
+            if (!_modbusService.IsConnected)
             {
-                if (missionInfo.CurrentStepIndex >= missionInfo.TotalSteps && !missionInfo.IsFailed)
+                Debug.WriteLine("[ModbusService] Read Timer: Not Connected. Attempting to reconnect asynchronously...");
+                await _modbusService.ConnectAsync().ConfigureAwait(false); // ConfigureAwait(false) 사용
+                if (!_modbusService.IsConnected)
                 {
-                    Debug.WriteLine($"[RobotMission] Process {missionInfo.ProcessId}: All steps completed. Setting status to COMPLETED.");
-                    Application.Current.Dispatcher.Invoke(() =>
-                    {
-                        missionInfo.HmiStatus.Status = MissionStatusEnum.COMPLETED.ToString();
-                        missionInfo.HmiStatus.ProgressPercentage = 100;
-                        ShowAutoClosingMessage($"로봇 미션 프로세스 완료: {missionInfo.ProcessType} (ID: {missionInfo.ProcessId})");
-                    });
+                    Debug.WriteLine("[ModbusService] Read Timer: Connection failed after reconnect attempt. Skipping Modbus read.");
+                    return;
                 }
-                HandleRobotMissionCompletion(missionInfo);
-                return;
             }
-
-            var currentStep = missionInfo.MissionSteps[missionInfo.CurrentStepIndex];
-            int? linkedMissionId = missionInfo.LastCompletedMissionId; // 이전 완료된 미션 ID를 linkedMission으로 사용
-
-            var missionRequest = new MissionRequest
-            {
-                RequestPayload = new MissionRequestPayload
-                {
-                    Requestor = "admin",
-                    MissionType = currentStep.MissionType,
-                    ToNode = currentStep.ToNode,
-                    //Payload = currentStep.Payload,
-                    Cardinality = "1",
-                    Priority = 2,
-                    Deadline = DateTime.UtcNow.AddHours(1).ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
-                    DispatchTime = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
-                    FromNode = currentStep.FromNode,
-                    Parameters = new MissionRequestParameters
-                    {
-                        Value = new MissionRequestParameterValue
-                        {
-                            Payload = currentStep.Payload,
-                            IsLinkable = currentStep.IsLinkable,
-                            LinkWaitTimeout = currentStep.LinkWaitTimeout,
-                            LinkedMission = linkedMissionId // 이전 미션의 ID를 연결
-                        },
-                        Description = "Mission extension", // 기본값 설정
-                        Type = "org.json.JSONObject",      // 기본값 설정
-                        Name = "parameters"                 // 기본값 설정
-                    }
-                }
-            };
 
             try
             {
-                // === 중단점: 미션 요청 엔드포인트 및 페이로드 ===
-                string requestEndpoint = $"wms/rest/v{_httpService.CurrentApiVersionMajor}.{_httpService.CurrentApiVersionMinor}/missions";
-                string requestPayloadJson = JsonConvert.SerializeObject(missionRequest, Formatting.Indented); // 가독성을 위해 Indented 포맷 사용
-                Debug.WriteLine($"[RobotMission - BREAKPOINT] Sending Mission Request for Process {missionInfo.ProcessId}, Step {missionInfo.CurrentStepIndex + 1}:");
-                Debug.WriteLine($"  Endpoint: {requestEndpoint}");
-                Debug.WriteLine($"  Payload: {requestPayloadJson}");
+                // 1. PLC 구동 상태 (Discrete Input 100012) 읽기
+                ushort plcStatusAddress = 12; // 100012의 주소는 0x02 Read 12
+                bool[] plcStatus = await _modbusService.ReadDiscreteInputStatesAsync(plcStatusAddress, 1).ConfigureAwait(false);
 
-                var missionResponse = await _httpService.PostAsync<MissionRequest, MissionResponse>(requestEndpoint, missionRequest).ConfigureAwait(false);
-
-                if (missionResponse?.ReturnCode == 0 && missionResponse.Payload?.AcceptedMissions != null && missionResponse.Payload.AcceptedMissions.Any())
-                {
-                    int acceptedMissionId = missionResponse.Payload.AcceptedMissions.First();
-                    missionInfo.LastSentMissionId = acceptedMissionId; // 전송된 미션 ID 저장
-                    // CurrentStepIndex는 이 미션이 완료될 때 (폴링 로직에서) 증가시킴
-
-                    Application.Current.Dispatcher.Invoke(() =>
-                    {
-                        missionInfo.HmiStatus.Status = MissionStatusEnum.ACCEPTED.ToString();
-                        missionInfo.HmiStatus.CurrentStepDescription = currentStep.ProcessStepDescription;
-                        // 현재 전송된 단계까지의 진행률 (CurrentStepIndex는 다음 보낼 인덱스이므로 +1)
-                        missionInfo.HmiStatus.ProgressPercentage = (int)(((double)(missionInfo.CurrentStepIndex + 1) / missionInfo.TotalSteps) * 100);
-                        ShowAutoClosingMessage($"로봇 미션 단계 전송 성공: {currentStep.ProcessStepDescription} (미션 ID: {acceptedMissionId})");
-                    });
-                    Debug.WriteLine($"[RobotMission] Process {missionInfo.ProcessId}: Mission {acceptedMissionId} for step {missionInfo.CurrentStepIndex + 1}/{missionInfo.TotalSteps} sent successfully.");
-                }
-                else
-                {
-                    Application.Current.Dispatcher.Invoke(() =>
-                    {
-                        missionInfo.HmiStatus.Status = MissionStatusEnum.FAILED.ToString();
-                        ShowAutoClosingMessage($"로봇 미션 단계 전송 실패: {currentStep.ProcessStepDescription}");
-                    });
-                    Debug.WriteLine($"[RobotMission] Process {missionInfo.ProcessId}: Mission step {currentStep.ProcessStepDescription} failed to be accepted. Return Code: {missionResponse?.ReturnCode}. " +
-                                    $"Rejected: {string.Join(",", missionResponse?.Payload?.RejectedMissions ?? new List<int>())}");
-                    missionInfo.IsFailed = true; // 프로세스 실패로 마크
-                    HandleRobotMissionCompletion(missionInfo); // 실패 처리
-                }
-            }
-            catch (HttpRequestException httpEx)
-            {
+                // UI 스레드에서 PlcStatusIsRun 업데이트
                 Application.Current.Dispatcher.Invoke(() =>
                 {
-                    missionInfo.HmiStatus.Status = MissionStatusEnum.FAILED.ToString();
-                    ShowAutoClosingMessage($"로봇 미션 단계 전송 HTTP 오류: {httpEx.Message.Substring(0, Math.Min(100, httpEx.Message.Length))}");
+                    PlcStatusIsRun = (plcStatus != null && plcStatus.Length > 0 && plcStatus[0]);
                 });
-                Debug.WriteLine($"[RobotMission] Process {missionInfo.ProcessId}: HTTP Request Error sending mission step {currentStep.ProcessStepDescription}: {httpEx.Message}");
-                missionInfo.IsFailed = true; // 프로세스 실패로 마크
-                HandleRobotMissionCompletion(missionInfo); // 실패 처리
+
+                if (!PlcStatusIsRun)
+                {
+                    Debug.WriteLine("[ModbusService] PLC Status is STOP (0). Ignoring call button inputs.");
+                    // PLC가 STOP 상태이면 모든 버튼을 비활성화하고 작업 플래그 리셋
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        foreach (var buttonVm in ModbusButtons)
+                        {
+                            buttonVm.IsEnabled = false;
+                            buttonVm.IsProcessing = false;
+                            buttonVm.CurrentProgress = 0;
+                            buttonVm.IsTaskInitiatedByDiscreteInput = false;
+                            buttonVm.CurrentDiscreteInputState = false; // Discrete Input 상태 초기화
+                            ((RelayCommand)buttonVm.ExecuteButtonCommand)?.RaiseCanExecuteChanged();
+                        }
+                    });
+                    return; // PLC가 정지 상태이므로 Call Button 입력은 처리하지 않음
+                }
+
+                // 2. Call Button Discrete Input (100000 ~ 100011) 상태 읽기
+                ushort startDiscreteInputAddress = 0; // 100000의 주소는 0x02 Read 0
+                ushort numberOfDiscreteInputs = (ushort)ModbusButtons.Count; // 12개
+                bool[] discreteInputStates = await _modbusService.ReadDiscreteInputStatesAsync(startDiscreteInputAddress, numberOfDiscreteInputs).ConfigureAwait(false);
+
+                // 3. 경광등 Coil Output (0 ~ 11) 상태 읽기 (필요시, 현재는 PLC에 Write만 하므로 생략 가능)
+                // 현재 경광등 상태를 읽어와서 UI에 반영할 필요가 있다면 여기에 추가
+
+                if (discreteInputStates != null && discreteInputStates.Length >= numberOfDiscreteInputs)
+                {
+                    // UI 업데이트는 UI 스레드에서 수행
+                    Application.Current.Dispatcher.Invoke(async () =>
+                    {
+                        for (int i = 0; i < numberOfDiscreteInputs; i++)
+                        {
+                            var buttonVm = ModbusButtons[i];
+                            bool currentDiscreteInputState = discreteInputStates[i];
+                            bool previousDiscreteInputState = buttonVm.CurrentDiscreteInputState;
+
+                            // Discrete Input 상태 업데이트 (다음 틱에서 이전 상태 비교를 위해)
+                            buttonVm.CurrentDiscreteInputState = currentDiscreteInputState;
+
+                            // PLC 신호 (Discrete Input 0->1) 감지 및 PLC가 Run 상태일 때
+                            if (currentDiscreteInputState && !previousDiscreteInputState && !buttonVm.IsProcessing && !buttonVm.IsTaskInitiatedByDiscreteInput)
+                            {
+                                // 이 버튼에 대한 작업이 이미 시작되지 않았고, Discrete Input이 0에서 1로 전환되었다면
+                                buttonVm.IsTaskInitiatedByDiscreteInput = true; // 작업 시작 플래그 설정
+                                Debug.WriteLine($"[Modbus] Call Button (Discrete Input {buttonVm.DiscreteInputAddress}) activated (0->1). Initiating task.");
+                                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} Call Button 신호 감지! 작업 자동 시작됩니다.");
+
+                                // 해당 경광등 Coil을 1로 켜기 (App -> PLC)
+                                bool writeLampSuccess = await _modbusService.WriteSingleCoilAsync(buttonVm.CoilOutputAddress, true).ConfigureAwait(false);
+                                if (writeLampSuccess)
+                                {
+                                    Debug.WriteLine($"[Modbus] Lamp Coil {buttonVm.CoilOutputAddress} set to ON (1).");
+                                    // 10초 지연 후 메인 비동기 작업 시작
+                                    _ = HandleCallButtonActivatedTask(buttonVm); // 백그라운드에서 실행 (fire-and-forget)
+                                }
+                                else
+                                {
+                                    Debug.WriteLine($"[Modbus] Failed to write Lamp Coil {buttonVm.CoilOutputAddress} to ON (1). Task not started.");
+                                    ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 경광등 켜기 실패! 작업 시작 불가.");
+                                    buttonVm.IsTaskInitiatedByDiscreteInput = false; // 작업 시작 실패했으므로 플래그 리셋
+                                }
+                            }
+                            // 경광등이 꺼진 것이 감지되면 (Coil 1 -> 0) Discrete Input을 0으로 초기화
+                            // 이 부분은 PLC가 처리하는 것이 일반적이지만, HMI가 트리거하는 경우를 위해 남겨둠.
+                            // 스펙상 "경광등이 꺼지면 (1 -> 0) 이에 트리거되어 call button의 입력이 0으로 바뀐다"는 PLC의 동작을 의미.
+                            // HMI는 단순히 경광등을 끄는 역할만 하므로, 여기서는 Discrete Input을 HMI가 직접 0으로 바꾸는 로직은 필요 없음.
+                            // HMI가 경광등을 0으로 쓴 후, 다음 ModbusReadTimer_Tick에서 PLC의 Discrete Input이 0으로 바뀐 것을 확인하게 될 것임.
+
+                            // 버튼의 IsEnabled 상태는 PLC가 Run 상태이고, Discrete Input이 1이고, 현재 작업 중이 아닐 때 활성화
+                            buttonVm.IsEnabled = PlcStatusIsRun && currentDiscreteInputState && !buttonVm.IsProcessing;
+                            // Command의 CanExecute 상태를 명시적으로 갱신하여 UI가 IsEnabled/IsProcessing 변화에 즉시 반응하도록 함
+                            ((RelayCommand)buttonVm.ExecuteButtonCommand)?.RaiseCanExecuteChanged();
+                        }
+                    });
+                }
             }
             catch (Exception ex)
             {
-                Application.Current.Dispatcher.Invoke(() =>
-                {
-                    missionInfo.HmiStatus.Status = MissionStatusEnum.FAILED.ToString();
-                    ShowAutoClosingMessage($"로봇 미션 단계 전송 중 예상치 못한 오류: {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}");
-                });
-                Debug.WriteLine($"[RobotMission] Process {missionInfo.ProcessId}: Unexpected Error sending mission step {currentStep.ProcessStepDescription}: {ex.Message}");
-                missionInfo.IsFailed = true; // 프로세스 실패로 마크
-                HandleRobotMissionCompletion(missionInfo); // 실패 처리
+                Debug.WriteLine($"[ModbusService] Error reading Modbus inputs/coils in timer tick: {ex.GetType().Name} - {ex.Message}. StackTrace: {ex.StackTrace}");
+                _modbusService.Dispose(); // 통신 오류 발생 시 연결 끊고 재연결 준비
             }
         }
 
-        /// <summary>
-        /// 로봇 미션이 최종적으로 완료(성공 또는 실패)되었을 때 데이터베이스 및 UI를 업데이트합니다.
-        /// 이 메서드는 MainViewModel의 폴링 로직에서 호출되어야 합니다.
-        /// </summary>
-        /// <param name="missionInfo">완료된 미션 프로세스 정보.</param>
-        private async void HandleRobotMissionCompletion(RobotMissionInfo missionInfo)
+        // Modbus 버튼 클릭 시 실행될 Command (HMI에서 작업 진행 상황 확인)
+        private async Task ExecuteModbusButtonCommand(ModbusButtonViewModel buttonVm)
         {
-            // === 중단점: 로봇 미션 프로세스 최종 완료/실패 시점 ===
-            Debug.WriteLine($"[RobotMission - BREAKPOINT] Handling completion for process {missionInfo.ProcessId}. Final Status: {missionInfo.HmiStatus.Status}. IsFailed: {missionInfo.IsFailed}");
+            if (buttonVm == null) return;
 
-            // 현재는 "WaitToWrapTransfer" 프로세스에 대한 완료 처리만 포함.
-            // 다른 프로세스 유형에 대한 완료 로직은 필요에 따라 추가
-//            if (missionInfo.ProcessType == "ExecuteInboundProduct" || missionInfo.ProcessType == "WaitToWrapTransfer" || missionInfo.ProcessType == "HandleRackTransfer" || missionInfo.ProcessType == "HandleRackShipout")
+            // 버튼 클릭 시점의 상태에 따라 팝업 메시지 표시
+            if (buttonVm.IsProcessing)
             {
-                var sourceRackVm = missionInfo.SourceRack;
-                var destinationRackVm = missionInfo.DestinationRack;
-
-                if (sourceRackVm != null && destinationRackVm != null)
-                {
-                    // 미션이 성공적으로 완료되었을 때만 DB 업데이트 수행
-                    if (missionInfo.HmiStatus.Status == MissionStatusEnum.COMPLETED.ToString() && !missionInfo.IsFailed)
-                    {
-                        try
-                        {
-                            // 1) Destination 랙으로 제품 정보 이동 (BulletType, LotNumber)
-                            // WAIT 랙의 LotNumber는 InputStringForButton에서 가져옴.
-                            string originalSourceLotNumber = sourceRackVm.Title.Equals(_waitRackTitle) ?
-                                InputStringForButton.TrimStart().TrimEnd(_militaryCharacter) : sourceRackVm.LotNumber;
-                            int originalSourceBulletType = sourceRackVm.BulletType; // WAIT 랙의 BulletType
-
-                            await _databaseService.UpdateRackStateAsync(
-                                destinationRackVm.Id,
-                                missionInfo.ProcessType == "FakeExecuteInboundProduct" ? 3 : destinationRackVm.RackType,
-                                originalSourceBulletType
-                            );
-                            await _databaseService.UpdateLotNumberAsync(
-                                destinationRackVm.Id,
-                                originalSourceLotNumber
-                            );
-                            Debug.WriteLine($"[RobotMission] DB Update: WRAP rack {destinationRackVm.Title} updated with BulletType {originalSourceBulletType}, LotNumber {originalSourceLotNumber}.");
-
-                            // 2) Source 랙 정보 비우기
-                            await _databaseService.UpdateRackStateAsync(
-                                sourceRackVm.Id,
-                                missionInfo.ProcessType == "HandleHalfPalletExport" ? 1 : destinationRackVm.RackType,
-                                0 // BulletType을 0으로 설정 (비움)
-                            );
-                            await _databaseService.UpdateLotNumberAsync(
-                                sourceRackVm.Id,
-                                String.Empty // LotNumber 비움
-                            );
-                            // WAIT 랙이 비워지면 입력 필드도 초기화 (WAIT 랙에 대해서만)
-                            if (sourceRackVm.Title.Equals(_waitRackTitle))
-                            {
-                                Application.Current.Dispatcher.Invoke(() => InputStringForButton = string.Empty);
-                                Debug.WriteLine($"[RobotMission] DB Update: WAIT rack {sourceRackVm.Title} cleared.");
-                            }
-
-                            ShowAutoClosingMessage($"로봇 미션 완료! 랙 {sourceRackVm.Title}에서 랙 {destinationRackVm.Title}으로 이동 성공.");
-                        }
-                        catch (Exception ex)
-                        {
-                            Debug.WriteLine($"[RobotMission] DB update failed after robot mission completion: {ex.Message}");
-                            Application.Current.Dispatcher.Invoke(() =>
-                            {
-                                MessageBox.Show($"로봇 미션 완료 후 DB 업데이트 실패: {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}", "데이터베이스 오류");
-                            });
-                        }
-                    }
-                    else // 미션 실패 시
-                    {
-                        ShowAutoClosingMessage($"로봇 미션 실패! 랙 {sourceRackVm.Title}에서 랙 {destinationRackVm.Title}으로 이동 실패.");
-                    }
-
-                    // 미션 완료/실패 여부와 관계없이 랙 잠금 해제
-                    try
-                    {
-                        await _databaseService.UpdateIsLockedAsync(sourceRackVm.Id, false);
-                        await _databaseService.UpdateIsLockedAsync(destinationRackVm.Id, false);
-                        Application.Current.Dispatcher.Invoke(() =>
-                        {
-                            sourceRackVm.IsLocked = false;
-                            destinationRackVm.IsLocked = false;
-                        });
-                        Debug.WriteLine($"[RobotMission] Racks {sourceRackVm.Title} and {destinationRackVm.Title} unlocked.");
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"[RobotMission] Failed to unlock racks after robot mission: {ex.Message}");
-                        Application.Current.Dispatcher.Invoke(() =>
-                        {
-                            MessageBox.Show($"랙 잠금 해제 실패: {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}", "잠금 해제 오류");
-                        });
-                    }
-                }
+                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 작업 진행 중: {buttonVm.CurrentProgress}% (주소: {buttonVm.DiscreteInputAddress}).");
+                Debug.WriteLine($"[Modbus] Button clicked for {buttonVm.Content}. Task is already processing. Displaying current progress.");
             }
-            // 다른 ProcessType에 대한 완료 처리 로직은 여기에 추가
-
-            // 프로세스가 최종적으로 완료되거나 실패하면, activeRobotProcesses에서 제거 (다음 폴링 틱에서 제거될 예정이지만 명시적으로 처리)
-            lock (_activeRobotProcessesLock)
+            else if (buttonVm.IsTaskInitiatedByDiscreteInput && buttonVm.CurrentDiscreteInputState) // Discrete Input이 1이고, 작업이 스케줄링되었지만 아직 진행 중은 아닌 경우 (10초 지연 중)
             {
-                if (_activeRobotProcesses.ContainsKey(missionInfo.ProcessId))
-                {
-                    _activeRobotProcesses.Remove(missionInfo.ProcessId);
-                    Debug.WriteLine($"[RobotMission] Process {missionInfo.ProcessId} explicitly removed from active processes.");
-                }
+                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 작업 대기 중. 10초 지연 후 자동 시작됩니다. (주소: {buttonVm.DiscreteInputAddress}).");
+                Debug.WriteLine($"[Modbus] Button clicked for {buttonVm.Content}. Discrete Input is active, task is scheduled to start soon.");
             }
+            else if (buttonVm.IsEnabled && buttonVm.CurrentDiscreteInputState) // PLC가 Run이고 Discrete Input이 1이지만, 다른 조건으로 작업이 시작되지 않은 경우 (거의 없겠지만)
+            {
+                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 작업 시작 준비 완료. (주소: {buttonVm.DiscreteInputAddress}).");
+                Debug.WriteLine($"[Modbus] Button clicked for {buttonVm.Content}. Discrete Input is active and ready.");
+            }
+            else // 버튼이 비활성화된 경우 (PLC Stop 또는 Discrete Input 0)
+            {
+                string status = PlcStatusIsRun ? $"Discrete Input {buttonVm.DiscreteInputAddress}이 0입니다." : "PLC가 정지 상태입니다.";
+                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 작업 비활성화됨. ({status}).");
+                Debug.WriteLine($"[Modbus] Button clicked for {buttonVm.Content}. Not active. Status: {status}");
+            }
+        }
+
+        // Discrete Input이 0에서 1로 활성화될 때 수행될 비동기 작업
+        private async Task HandleCallButtonActivatedTask(ModbusButtonViewModel buttonVm)
+        {
+            if (buttonVm == null) return;
+
+            // 작업이 이미 진행 중인 경우 중복 실행 방지
+            if (buttonVm.IsProcessing)
+            {
+                Debug.WriteLine($"[Modbus] Task for {buttonVm.Content} is already processing. Skipping new initiation.");
+                return;
+            }
+
+            // UI 스레드에서 IsProcessing 및 CurrentProgress 업데이트 시작
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                buttonVm.IsProcessing = true; // 작업 진행 중 상태로 변경 (UI에 ProgressBar 표시)
+                buttonVm.CurrentProgress = 0; // 진행률 초기화
+            });
+            Debug.WriteLine($"[Modbus] Async task started for {buttonVm.Content} (Discrete Input: {buttonVm.DiscreteInputAddress}).");
+
+            const int totalDurationSeconds = 45; // 45초 (30초 ~ 1분 사이)
+            const int updateIntervalMs = 500; // 0.5초마다 진행률 업데이트
+            int totalSteps = totalDurationSeconds * 1000 / updateIntervalMs;
+
+            try
+            {
+                for (int i = 0; i <= totalSteps; i++)
+                {
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        buttonVm.CurrentProgress = (int)((double)i / totalSteps * 100);
+                    });
+
+                    await Task.Delay(updateIntervalMs).ConfigureAwait(false);
+                }
+
+                // 작업 완료 후 해당 경광등 Coil을 0으로 쓰기 (App -> PLC)
+                // 이 0으로 쓰는 동작이 PLC의 Discrete Input을 0으로 초기화하는 트리거가 됨.
+                bool writeLampOffSuccess = await _modbusService.WriteSingleCoilAsync(buttonVm.CoilOutputAddress, false).ConfigureAwait(false);
+                if (!writeLampOffSuccess)
+                {
+                    ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 경광등 끄기 실패!");
+                    Debug.WriteLine($"[Modbus] Failed to write Lamp Coil {buttonVm.CoilOutputAddress} to OFF (0) after task completion.");
+                }
+                else
+                {
+                    Debug.WriteLine($"[Modbus] Lamp Coil {buttonVm.CoilOutputAddress} set to OFF (0) after task completion. Expecting PLC to reset Discrete Input {buttonVm.DiscreteInputAddress}.");
+                }
+
+                // UI 스레드에서 작업 완료 메시지 표시
+                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 작업 완료! (Discrete Input: {buttonVm.DiscreteInputAddress})");
+            }
+            catch (Exception ex)
+            {
+                // 작업 중 오류 발생 시 메시지 팝업 (UI 스레드에서)
+                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 작업 중 오류 발생: {ex.Message}");
+                Debug.WriteLine($"[Modbus] Error during {buttonVm.Content} task: {ex.GetType().Name} - {ex.Message}");
+            }
+            finally
+            {
+                // 작업 완료 (성공/실패 무관) 후 UI 상태 업데이트 (UI 스레드에서)
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    buttonVm.IsProcessing = false; // 작업 완료 상태로 변경 (ProgressBar 숨김)
+                    buttonVm.CurrentProgress = 0; // 진행률 초기화
+                    buttonVm.IsTaskInitiatedByDiscreteInput = false; // 다음 PLC 신호를 위해 플래그 리셋
+                });
+            }
+        }
+
+        // Modbus 버튼 활성화 여부를 결정하는 CanExecute 로직
+        private bool CanExecuteModbusButtonCommand(ModbusButtonViewModel buttonVm)
+        {
+            // 버튼은 PLC가 Run 상태이고, 해당 Discrete Input이 1이며, 현재 비동기 작업이 진행 중이 아닐 때만 클릭 가능합니다.
+            // 클릭은 작업 시작이 아닌, 진행 상황 확인/정보 표시용입니다.
+            return PlcStatusIsRun && buttonVm?.CurrentDiscreteInputState == true && !buttonVm.IsProcessing;
         }
 
         public void Dispose()
@@ -1294,21 +862,9 @@ namespace WPF_WMS01.ViewModels
             _refreshTimer.Tick -= RefreshTimer_Tick;
             _modbusReadTimer?.Stop(); // Modbus 타이머도 해제
             _modbusReadTimer.Tick -= ModbusReadTimer_Tick;
-            _robotMissionPollingTimer?.Stop(); // 로봇 미션 폴링 타이머 해제
-            _robotMissionPollingTimer.Tick -= RobotMissionPollingTimer_Tick;
-
-            // 모든 활성 로봇 미션의 CancellationTokenSource를 취소합니다.
-            lock (_activeRobotProcessesLock)
-            {
-                foreach (var processInfo in _activeRobotProcesses.Values)
-                {
-                    processInfo.CancellationTokenSource?.Cancel();
-                    processInfo.CancellationTokenSource?.Dispose();
-                }
-                _activeRobotProcesses.Clear(); // 딕셔너리 비우기
-            }
 
             _modbusService?.Dispose(); // Modbus 서비스 자원 해제
+            _robotMissionService?.Dispose(); // 로봇 미션 서비스 자원 해제
         }
 
         private void ShowAutoClosingMessage(string message)

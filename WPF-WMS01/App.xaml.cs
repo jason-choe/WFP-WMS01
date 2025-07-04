@@ -28,8 +28,8 @@ namespace WPF_WMS01
 
             // App.config에서 설정 값 읽기
             string baseApiUrl = ConfigurationManager.AppSettings["AntApiBaseUrl"];
-            string username = ConfigurationManager.AppSettings["AntApiUsername"];
-            string password = ConfigurationManager.AppSettings["AntApiPassword"];
+            string waitRackTitle = ConfigurationManager.AppSettings["WaitRackTitle"] ?? "WAIT";
+            char[] militaryCharacter = (ConfigurationManager.AppSettings["MilitaryCharacters"] ?? "abc ").ToCharArray(); // App.config에 추가하거나 기본값 사용
 
             // 서비스 등록
             services.AddSingleton<HttpService>(new HttpService(baseApiUrl));
@@ -40,6 +40,15 @@ namespace WPF_WMS01
                     int.Parse(ConfigurationManager.AppSettings["ModbusPort"]),
                     byte.Parse(ConfigurationManager.AppSettings["ModbusSlaveId"])
                 )); // ModbusClientService 인스턴스 생성
+
+            // IRobotMissionService와 RobotMissionService 등록
+            services.AddSingleton<IRobotMissionService, RobotMissionService>(provider =>
+                new RobotMissionService(
+                    provider.GetRequiredService<HttpService>(),
+                    provider.GetRequiredService<DatabaseService>(),
+                    waitRackTitle,
+                    militaryCharacter // App.config에서 읽은 값 전달
+                ));
 
             // MainViewModel 등록 (모든 종속성을 생성자 주입)
             services.AddSingleton<MainViewModel>(); // DI 컨테이너가 MainViewModel과 그 종속성을 해결
