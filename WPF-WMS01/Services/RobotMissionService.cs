@@ -109,15 +109,13 @@ namespace WPF_WMS01.Services
                             MissionStatusEnum currentStatus;
                             switch (latestMissionDetail.NavigationState)
                             {
-                                case 0: currentStatus = MissionStatusEnum.RECEIVED; break;
+                                case 0: currentStatus = MissionStatusEnum.RECEIVED; break;  //  Accepted (=planned).
                                 case 1: currentStatus = MissionStatusEnum.ACCEPTED; break;
                                 case 2: currentStatus = MissionStatusEnum.REJECTED; break;
-                                case 3: currentStatus = MissionStatusEnum.STARTED; break;
-                                case 4: currentStatus = MissionStatusEnum.COMPLETED; break; // navigationstate 4를 COMPLETED로 처리
+                                case 3: currentStatus = MissionStatusEnum.STARTED; break;   // Started (=running)
+                                case 4: currentStatus = MissionStatusEnum.COMPLETED; break; // navigationstate 4를 COMPLETED로 처리 // Terminated (=successful).
                                 case 5: currentStatus = MissionStatusEnum.CANCELLED; break;
-                                case 6: currentStatus = MissionStatusEnum.COMPLETED; break; // 6도 완료로 간주
-                                case 7: currentStatus = MissionStatusEnum.FAILED; break;
-                                default: currentStatus = MissionStatusEnum.PENDING; break; // 알 수 없는 상태
+                                default: currentStatus = MissionStatusEnum.FAILED; break;  // 지원하지 않는 알 수 없는 상태
                             }
                             processInfo.HmiStatus.Status = currentStatus.ToString();
 
@@ -304,7 +302,21 @@ namespace WPF_WMS01.Services
             }
 
             var currentStep = missionInfo.MissionSteps[missionInfo.CurrentStepIndex];
-            int? linkedMissionId = missionInfo.LastCompletedMissionId; // 이전 완료된 미션 ID를 linkedMission으로 사용
+            int? linkedMissionId = null;
+
+            // "false 다음의 true인 mission 요청 시 LinkedMission을 null로 해달라."는 요청에 따라 로직 수정
+            // 즉, 이전 단계가 IsLinkable=false 였다면, 현재 단계는 LinkedMission을 null로 설정
+            if (missionInfo.CurrentStepIndex > 0)
+            {
+                var previousStepDefinition = missionInfo.MissionSteps[missionInfo.CurrentStepIndex - 1];
+                if (previousStepDefinition.IsLinkable)
+                {
+                    // 이전 단계가 연결 가능했다면, 이전에 완료된 미션 ID를 연결
+                    linkedMissionId = missionInfo.LastCompletedMissionId;
+                }
+                // else: previousStepDefinition.IsLinkable이 false인 경우 linkedMissionId는 기본값인 null 유지
+            }
+            // 첫 번째 단계 (CurrentStepIndex == 0)는 항상 linkedMissionId가 null입니다.
 
             var missionRequest = new MissionRequest
             {

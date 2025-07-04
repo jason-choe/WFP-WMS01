@@ -329,7 +329,7 @@ namespace WPF_WMS01.Models
             CurrentStepIndex = 0;
             LastSentMissionId = null;
             LastCompletedMissionId = null;
-            HmiStatus = new HmiStatusInfo { Status = MissionStatusEnum.PENDING.ToString(), ProgressPercentage = 0, CurrentStepDescription = "미션 대기 중" };
+            HmiStatus = new HmiStatusInfo { Status = MissionStatusEnum.FAILED.ToString(), ProgressPercentage = 0, CurrentStepDescription = "미션 대기 중" };
             IsFinished = false;
             IsFailed = false;
         }
@@ -346,6 +346,7 @@ namespace WPF_WMS01.Models
         public string ToNode { get; set; }
         public string Payload { get; set; }
         public bool IsLinkable { get; set; }
+        public int? LinkedMission { get; set; }
         public int LinkWaitTimeout { get; set; }
     }
 
@@ -358,10 +359,9 @@ namespace WPF_WMS01.Models
         ACCEPTED = 1,
         REJECTED = 2,
         STARTED = 3,
-        COMPLETED = 6, // 4도 완료로 처리할 수 있으나, PDF 6을 따름
+        COMPLETED = 4,
         CANCELLED = 5,
-        FAILED = 7,
-        PENDING // 커스텀 상태: ANT 서버에 아직 전송되지 않았거나 초기 상태
+        FAILED // UNKNOWN X 커스텀 상태: ANT 서버에 아직 전송되지 않았거나 초기 상태
     }
 
     /// <summary>
