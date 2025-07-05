@@ -42,10 +42,12 @@ namespace WPF_WMS01.Services
         Task<string> InitiateRobotMissionProcess(
             string processType,
             List<MissionStepDefinition> missionSteps,
-            RackViewModel sourceRack,
-            RackViewModel destinationRack,
+            RackViewModel sourceRack, // 이 파라미터는 더 이상 사용되지 않지만, 인터페이스 호환을 위해 유지
+            RackViewModel destinationRack, // 이 파라미터는 더 이상 사용되지 않지만, 인터페이스 호환을 위해 유지
             Location destinationLine,
-            Func<string> getInputStringForButtonFunc
+            Func<string> getInputStringForButtonFunc,
+            List<int> racksLockedByProcess,
+            List<RackViewModel> racksToProcess = null
         );
     }
 }

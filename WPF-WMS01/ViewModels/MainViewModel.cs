@@ -13,7 +13,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Configuration;
 using System.Net.Http;
+using System.Text.Json; // System.Text.Json은 사용되지 않으므로 제거 가능
 using System.Diagnostics;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
 using System.Windows.Threading; // DispatcherTimer 사용을 위해 추가
 using Newtonsoft.Json;
 using JsonException = Newtonsoft.Json.JsonException;
@@ -114,7 +117,7 @@ namespace WPF_WMS01.ViewModels
     {
         private readonly DatabaseService _databaseService;
         private readonly HttpService _httpService;
-        private readonly IRobotMissionService _robotMissionService; // 로봇 미션 서비스 주입
+        private IRobotMissionService _robotMissionServiceInternal; // 필드 이름을 변경하여 인터페이스 구현체임을 명확히 함
         private readonly string _apiUsername;
         private readonly string _apiPassword;
         private readonly ModbusClientService _modbusService; // ModbusClientService 인스턴스 추가
@@ -220,8 +223,8 @@ namespace WPF_WMS01.ViewModels
             set => SetProperty(ref _popupDebugMessage, value);
         }
 
-        // Constructor
-        public MainViewModel(DatabaseService databaseService, HttpService httpService, ModbusClientService modbusService, IRobotMissionService robotMissionService)
+        // Constructor: IRobotMissionService parameter removed
+        public MainViewModel(DatabaseService databaseService, HttpService httpService, ModbusClientService modbusService)
         {
             _databaseService = databaseService;
             _waitRackTitle = ConfigurationManager.AppSettings["WaitRackTitle"] ?? "WAIT";
@@ -236,12 +239,15 @@ namespace WPF_WMS01.ViewModels
             // RTU 모드를 사용하려면 ModbusClientService("COM1", 9600, Parity.None, StopBits.One, 8, 1) 와 같이 변경
             // App.config에서 IP/Port를 읽어오도록 변경 가능
             _modbusService = modbusService;
-            _robotMissionService = robotMissionService; // RobotMissionService 주입
+            // _robotMissionServiceInternal is not set here. It will be set via SetRobotMissionService.
 
-            // RobotMissionService의 이벤트 구독
-            _robotMissionService.OnShowAutoClosingMessage += ShowAutoClosingMessage;
-            _robotMissionService.OnRackLockStateChanged += OnRobotMissionRackLockStateChanged;
-            _robotMissionService.OnInputStringForButtonCleared += () => InputStringForButton = string.Empty;
+            // IMPORTANT: Remove the conditional check here.
+            // SetupRobotMissionServiceEvents() should ONLY be called by SetRobotMissionService
+            // after the DI container has fully resolved and injected the RobotMissionService.
+            // if (_robotMissionServiceInternal != null)
+            // {
+            //     SetupRobotMissionServiceEvents();
+            // }
 
             // ModbusButtons 컬렉션 초기화 (XAML의 버튼 순서 및 내용에 맞춰)
             // Discrete Input Address와 Coil Output Address를 스펙에 맞춰 매핑
@@ -288,6 +294,35 @@ namespace WPF_WMS01.ViewModels
             SetupModbusReadTimer(); // Modbus Coil 상태 읽기 타이머 설정
             _ = LoadRacksAsync();
             _ = AutoLoginOnStartup();
+        }
+
+        /// <summary>
+        /// RobotMissionService 인스턴스를 설정하는 메서드 (App.xaml.cs에서 호출)
+        /// </summary>
+        /// <param name="service">주입할 IRobotMissionService 인스턴스</param>
+        public void SetRobotMissionService(IRobotMissionService service)
+        {
+            _robotMissionServiceInternal = service;
+            SetupRobotMissionServiceEvents(); // 서비스가 설정된 후에 이벤트 구독
+        }
+
+        /// <summary>
+        /// RobotMissionService 이벤트 구독을 위한 헬퍼 메서드
+        /// </summary>
+        private void SetupRobotMissionServiceEvents()
+        {
+            if (_robotMissionServiceInternal != null)
+            {
+                // 기존 구독 해제 (중복 구독 방지)
+                _robotMissionServiceInternal.OnShowAutoClosingMessage -= ShowAutoClosingMessage;
+                _robotMissionServiceInternal.OnRackLockStateChanged -= OnRobotMissionRackLockStateChanged;
+                _robotMissionServiceInternal.OnInputStringForButtonCleared -= () => InputStringForButton = string.Empty;
+
+                // 새로 구독
+                _robotMissionServiceInternal.OnShowAutoClosingMessage += ShowAutoClosingMessage;
+                _robotMissionServiceInternal.OnRackLockStateChanged += OnRobotMissionRackLockStateChanged;
+                _robotMissionServiceInternal.OnInputStringForButtonCleared += () => InputStringForButton = string.Empty;
+            }
         }
 
         /// <summary>
@@ -389,6 +424,12 @@ namespace WPF_WMS01.ViewModels
             set => SetProperty(ref _rackList, value);
         }
 
+        // RobotMissionService가 RackViewModel을 ID로 찾을 수 있도록 하는 헬퍼 메서드
+        public RackViewModel GetRackViewModelById(int rackId)
+        {
+            return RackList?.FirstOrDefault(r => r.Id == rackId);
+        }
+        
         public ICommand LoadRacksCommand { get; }
         private async Task LoadRacksAsync()
         {
@@ -601,30 +642,41 @@ namespace WPF_WMS01.ViewModels
         /// <summary>
         /// 새로운 로봇 미션 프로세스를 시작합니다.
         /// 이 메서드는 RackViewModel과 같은 외부 ViewModel에서 호출될 수 있습니다.
-        /// RobotMissionService로 호출을 위임합니다
+        /// RobotMissionService로 호출을 위임합니다.
         /// </summary>
         /// <param name="processType">미션 프로세스의 유형 (예: "WaitToWrapTransfer", "RackTransfer").</param>
         /// <param name="missionSteps">이 프로세스를 구성하는 순차적인 미션 단계 목록.</param>
-        /// <param name="sourceRack">원본 랙 (선택 사항).</param>
-        /// <param name="destinationRack">목적지 랙 (선택 사항).</param>
+        /// <param name="sourceRack">원본 랙 ViewModel (더 이상 직접 사용되지 않음).</param>
+        /// <param name="destinationRack">목적지 랙 ViewModel (더 이상 직접 사용되지 않음).</param>
         /// <param name="destinationLine">목적지 생산 라인 (선택 사항).</param>
+        /// <param name="racksLockedAtStart">이 프로세스 시작 시 잠긴 모든 랙의 ID 목록.</param>
+        /// <param name="racksToProcess">여러 랙을 처리할 경우 (예: 출고) 해당 랙들의 ViewModel 목록.</param>
         /// <returns>시작된 미션 프로세스의 고유 ID.</returns>
         public async Task<string> InitiateRobotMissionProcess(
             string processType,
             List<MissionStepDefinition> missionSteps,
-            RackViewModel sourceRack = null,
-            RackViewModel destinationRack = null,
-            Location destinationLine = null)
+            RackViewModel sourceRack = null, // 이제 이 파라미터는 null로 전달됨
+            RackViewModel destinationRack = null, // 이제 이 파라미터는 null로 전달됨
+            Location destinationLine = null,
+            List<int> racksLockedAtStart = null,
+            List<RackViewModel> racksToProcess = null)
         {
-            // RobotMissionService로 로직을 위임합니다.
-            // InputStringForButton 값을 가져오는 델리게이트를 전달합니다.
-            return await _robotMissionService.InitiateRobotMissionProcess(
+            if (_robotMissionServiceInternal == null)
+            {
+                Debug.WriteLine("[MainViewModel] RobotMissionService is not initialized.");
+                ShowAutoClosingMessage("로봇 미션 서비스를 초기화할 수 없습니다. 관리자에게 문의하세요.");
+                return null;
+            }
+
+            return await _robotMissionServiceInternal.InitiateRobotMissionProcess(
                 processType,
                 missionSteps,
-                sourceRack,
-                destinationRack,
+                sourceRack, // 여전히 인터페이스 호환을 위해 전달하지만, RobotMissionService에서 사용하지 않음
+                destinationRack, // 여전히 인터페이스 호환을 위해 전달하지만, RobotMissionService에서 사용하지 않음
                 destinationLine,
-                () => InputStringForButton // InputStringForButton 값을 가져오는 델리게이트
+                () => InputStringForButton,
+                racksLockedAtStart,
+                racksToProcess
             );
         }
 
@@ -864,7 +916,7 @@ namespace WPF_WMS01.ViewModels
             _modbusReadTimer.Tick -= ModbusReadTimer_Tick;
 
             _modbusService?.Dispose(); // Modbus 서비스 자원 해제
-            _robotMissionService?.Dispose(); // 로봇 미션 서비스 자원 해제
+            _robotMissionServiceInternal?.Dispose(); // 로봇 미션 서비스 자원 해제
         }
 
         private void ShowAutoClosingMessage(string message)
@@ -949,27 +1001,25 @@ namespace WPF_WMS01.ViewModels
                     }
 
                     ShowAutoClosingMessage($"랙 {waitRackVm.Title} 에서 랙 {targetRackVm.Title} 로 미포장 입고를 시작합니다. 잠금 중...");
+                    List<int> lockedRackIds = new List<int>(); 
                     try
                     {
                         await _databaseService.UpdateIsLockedAsync(targetRackVm.Id, true);
                         Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = true);
+                        lockedRackIds.Add(targetRackVm.Id);
 
-                        if (waitRackVm != null)
-                        {
-                            await _databaseService.UpdateIsLockedAsync(waitRackVm.Id, true);
-                            Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = true);
-                        }
+                        await _databaseService.UpdateIsLockedAsync(waitRackVm.Id, true);
+                        Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = true);
+                        lockedRackIds.Add(waitRackVm.Id);
                     }
                     catch (Exception ex)
                     {
                         MessageBox.Show($"랙 잠금 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
                         // 오류 발생 시 작업 취소 및 잠금 해제 시도
-                        await _databaseService.UpdateIsLockedAsync(targetRackVm.Id, false);
-                        Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
-                        if (waitRackVm != null)
+                        foreach (var id in lockedRackIds)
                         {
-                            await _databaseService.UpdateIsLockedAsync(waitRackVm.Id, false);
-                            Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = false);
+                            await _databaseService.UpdateIsLockedAsync(id, false);
+                            Application.Current.Dispatcher.Invoke(() => (RackList?.FirstOrDefault(r => r.Id == id)).IsLocked = false);
                         }
                         return; // 더 이상 진행하지 않음
                     }
@@ -992,7 +1042,10 @@ namespace WPF_WMS01.ViewModels
                             // 4. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
                             new MissionStepDefinition { ProcessStepDescription = $"{targetRackVm.Title} 운반 완료", MissionType = "8", ToNode = "Turn_Rack_29", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
                             // 5.
-                            new MissionStepDefinition { ProcessStepDescription = $"{targetRackVm.Title} 복귀 완료", MissionType = "8", ToNode = "Charge1", Payload = "AMR_2", IsLinkable = false, LinkWaitTimeout = 3600 }
+                            new MissionStepDefinition {
+                                ProcessStepDescription = $"{targetRackVm.Title} 복귀 완료", MissionType = "8", ToNode = "Charge1", Payload = "AMR_2", IsLinkable = false, LinkWaitTimeout = 3600,
+                                SourceRackId = waitRackVm.Id, DestinationRackId = targetRackVm.Id
+                            }
                         };
                     }
                     else //if (destinationRack.LocationArea == 2 || sourceRackViewModel.LocationArea == 1)
@@ -1004,7 +1057,10 @@ namespace WPF_WMS01.ViewModels
                             // 2. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
                             new MissionStepDefinition { ProcessStepDescription = $"{waitRackVm.Title} 제품 픽업 & 드롭", MissionType = "7", FromNode = "Palette_OUT_PickUP", ToNode = $"Rack_{shelf}_Drop", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
                             // 3. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
-                            new MissionStepDefinition { ProcessStepDescription = $"{targetRackVm.Title} 복귀 완료", MissionType = "8", ToNode = "Charge1", Payload = "AMR_2", IsLinkable = false, LinkWaitTimeout = 3600 }
+                            new MissionStepDefinition {
+                                ProcessStepDescription = $"{targetRackVm.Title} 복귀 완료", MissionType = "8", ToNode = "Charge1", Payload = "AMR_2", IsLinkable = false, LinkWaitTimeout = 3600,
+                                SourceRackId = waitRackVm.Id, DestinationRackId = targetRackVm.Id
+                            }
                         };
                     }
 
@@ -1014,21 +1070,21 @@ namespace WPF_WMS01.ViewModels
                         string processId = await InitiateRobotMissionProcess(
                             "ExecuteInboundProduct", // 미션 프로세스 유형
                             missionSteps,
-                            waitRackVm,
-                            targetRackVm //wrapRackViewModel // 목적지 랙 (WRAP 랙) 정보 전달
+                            null, // SourceRack은 이제 MissionStepDefinition의 ID로 관리
+                            null, // DestinationRack은 이제 MissionStepDefinition의 ID로 관리
+                            null,
+                            lockedRackIds // 잠긴 랙 ID 목록 전달
                         );
                         ShowAutoClosingMessage($"로봇 미션 프로세스 시작됨: {processId}");
                     }
                     catch (Exception ex)
                     {
                         MessageBox.Show($"로봇 미션 시작 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
-                        await _databaseService.UpdateIsLockedAsync(waitRackVm.Id, false);
-                        await _databaseService.UpdateIsLockedAsync(targetRackVm.Id, false);
-                        Application.Current.Dispatcher.Invoke(() =>
+                        foreach (var id in lockedRackIds)
                         {
-                            waitRackVm.IsLocked = false;
-                            targetRackVm.IsLocked = false; // wrapRackViewModel.IsLocked = false;
-                        });
+                            await _databaseService.UpdateIsLockedAsync(id, false);
+                            Application.Current.Dispatcher.Invoke(() => (RackList?.FirstOrDefault(r => r.Id == id)).IsLocked = false);
+                        }
                     }
                 }
             }
@@ -1122,28 +1178,26 @@ namespace WPF_WMS01.ViewModels
                     }
 
                     ShowAutoClosingMessage($"랙 {waitRackVm.Title}에서 랙 {targetRackVm.Title} 로 미포장 입고를 시작합니다. 잠금 중...");
+                    List<int> lockedRackIds = new List<int>();
                     try
                     {
                         await _databaseService.UpdateIsLockedAsync(targetRackVm.Id, true);
                         Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = true);
+                        lockedRackIds.Add(targetRackVm.Id);
 
-                        if (waitRackVm != null)
-                        {
-                            await _databaseService.UpdateIsLockedAsync(waitRackVm.Id, true);
-                            Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = true);
-                        }
+                        await _databaseService.UpdateIsLockedAsync(waitRackVm.Id, true);
+                        Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = true);
+                        lockedRackIds.Add(waitRackVm.Id);
 
                     }
                     catch (Exception ex)
                     {
                         MessageBox.Show($"랙 잠금 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
                         // 오류 발생 시 작업 취소 및 잠금 해제 시도
-                        await _databaseService.UpdateIsLockedAsync(targetRackVm.Id, false);
-                        Application.Current.Dispatcher.Invoke(() => targetRackVm.IsLocked = false);
-                        if (waitRackVm != null)
+                        foreach (var id in lockedRackIds)
                         {
-                            await _databaseService.UpdateIsLockedAsync(waitRackVm.Id, false);
-                            Application.Current.Dispatcher.Invoke(() => waitRackVm.IsLocked = false);
+                            await _databaseService.UpdateIsLockedAsync(id, false);
+                            Application.Current.Dispatcher.Invoke(() => (RackList?.FirstOrDefault(r => r.Id == id)).IsLocked = false);
                         }
                         return; // 더 이상 진행하지 않음
                     }
@@ -1166,7 +1220,10 @@ namespace WPF_WMS01.ViewModels
                             // 4. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
                             new MissionStepDefinition { ProcessStepDescription = $"{targetRackVm.Title} 운반 완료", MissionType = "8", ToNode = "Turn_Rack_29", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
                             // 5.
-                            new MissionStepDefinition { ProcessStepDescription = $"{targetRackVm.Title} 복귀 완료", MissionType = "8", ToNode = "Charge1", Payload = "AMR_2", IsLinkable = false, LinkWaitTimeout = 3600 }
+                            new MissionStepDefinition {
+                                ProcessStepDescription = $"{targetRackVm.Title} 복귀 완료", MissionType = "8", ToNode = "Charge1", Payload = "AMR_2", IsLinkable = false, LinkWaitTimeout = 3600,
+                                SourceRackId = waitRackVm.Id, DestinationRackId = targetRackVm.Id
+                            }
                         };
                     }
                     else //if (destinationRack.LocationArea == 2 || sourceRackViewModel.LocationArea == 1)
@@ -1178,7 +1235,10 @@ namespace WPF_WMS01.ViewModels
                             // 1. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
                             new MissionStepDefinition { ProcessStepDescription = $"{waitRackVm.Title} 제품 픽업 & 드롭", MissionType = "7", FromNode = "Palette_OUT_PickUP", ToNode = $"Rack_{shelf}_Drop", Payload = "AMR_2", IsLinkable = true, LinkWaitTimeout = 3600 },
                             // 3. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
-                            new MissionStepDefinition { ProcessStepDescription = $"{targetRackVm.Title} 복귀 완료", MissionType = "8", ToNode = "Charge1", Payload = "AMR_2", IsLinkable = false, LinkWaitTimeout = 3600 }
+                            new MissionStepDefinition {
+                                ProcessStepDescription = $"{targetRackVm.Title} 복귀 완료", MissionType = "8", ToNode = "Charge1", Payload = "AMR_2", IsLinkable = false, LinkWaitTimeout = 3600,
+                                SourceRackId = waitRackVm.Id, DestinationRackId = targetRackVm.Id
+                            }
                         };
                     }
 
@@ -1188,21 +1248,21 @@ namespace WPF_WMS01.ViewModels
                         string processId = await InitiateRobotMissionProcess(
                             "FakeExecuteInboundProduct", // 미션 프로세스 유형
                             missionSteps,
-                            waitRackVm,
-                            targetRackVm //wrapRackViewModel // 목적지 랙 (WRAP 랙) 정보 전달
+                            null, // SourceRack은 이제 MissionStepDefinition의 ID로 관리
+                            null, // DestinationRack은 이제 MissionStepDefinition의 ID로 관리
+                            null,
+                            lockedRackIds // 잠긴 랙 ID 목록 전달
                         );
                         ShowAutoClosingMessage($"로봇 미션 프로세스 시작됨: {processId}");
                     }
                     catch (Exception ex)
                     {
                         MessageBox.Show($"로봇 미션 시작 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
-                        await _databaseService.UpdateIsLockedAsync(waitRackVm.Id, false);
-                        await _databaseService.UpdateIsLockedAsync(targetRackVm.Id, false);
-                        Application.Current.Dispatcher.Invoke(() =>
+                        foreach (var id in lockedRackIds)
                         {
-                            waitRackVm.IsLocked = false;
-                            targetRackVm.IsLocked = false; // wrapRackViewModel.IsLocked = false;
-                        });
+                            await _databaseService.UpdateIsLockedAsync(id, false);
+                            Application.Current.Dispatcher.Invoke(() => (RackList?.FirstOrDefault(r => r.Id == id)).IsLocked = false);
+                        }
                     }
                 }
             }

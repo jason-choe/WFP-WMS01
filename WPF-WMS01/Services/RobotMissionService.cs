@@ -10,6 +10,7 @@ using WPF_WMS01.ViewModels; // RackViewModel 참조를 위해 필요
 using System.Net.Http; // HttpRequestException을 위해 필요
 using Newtonsoft.Json; // JsonConvert를 위해 필요
 using JsonException = Newtonsoft.Json.JsonException; // 충돌 방지를 위해 별칭 사용
+using System.Windows; // Application.Current.Dispatcher.Invoke를 위해 추가
 
 namespace WPF_WMS01.Services
 {
@@ -31,8 +32,11 @@ namespace WPF_WMS01.Services
         private readonly string _waitRackTitle;
         private readonly char[] _militaryCharacter;
         private Func<string> _getInputStringForButtonFunc; // MainViewModel의 InputStringForButton 값을 가져오는 델리게이트
+        private Func<int, RackViewModel> _getRackViewModelByIdFunc; // MainViewModel에서 RackViewModel을 ID로 가져오는 델리게이트
 
-        // MainViewModel로 상태를 다시 보고하기 위한 이벤트
+        /// <summary>
+        /// MainViewModel로 상태를 다시 보고하기 위한 이벤트
+        /// </summary>
         public event Action<string> OnShowAutoClosingMessage;
         public event Action<int, bool> OnRackLockStateChanged;
         public event Action OnInputStringForButtonCleared;
@@ -44,12 +48,14 @@ namespace WPF_WMS01.Services
         /// <param name="databaseService">데이터베이스 접근을 위한 서비스 인스턴스.</param>
         /// <param name="waitRackTitle">WAIT 랙의 타이틀 문자열.</param>
         /// <param name="militaryCharacter">군수품 문자 배열.</param>
-        public RobotMissionService(HttpService httpService, DatabaseService databaseService, string waitRackTitle, char[] militaryCharacter)
+        /// <param name="getRackViewModelByIdFunc">Rack ID로 RackViewModel을 가져오는 함수.</param>
+        public RobotMissionService(HttpService httpService, DatabaseService databaseService, string waitRackTitle, char[] militaryCharacter, Func<int, RackViewModel> getRackViewModelByIdFunc)
         {
             _httpService = httpService ?? throw new ArgumentNullException(nameof(httpService));
             _databaseService = databaseService ?? throw new ArgumentNullException(nameof(databaseService));
             _waitRackTitle = waitRackTitle;
             _militaryCharacter = militaryCharacter;
+            _getRackViewModelByIdFunc = getRackViewModelByIdFunc ?? throw new ArgumentNullException(nameof(getRackViewModelByIdFunc));
 
             SetupRobotMissionPollingTimer(); // 로봇 미션 폴링 타이머 설정 및 시작
         }
@@ -109,13 +115,14 @@ namespace WPF_WMS01.Services
                             MissionStatusEnum currentStatus;
                             switch (latestMissionDetail.NavigationState)
                             {
-                                case 0: currentStatus = MissionStatusEnum.RECEIVED; break;  //  Accepted (=planned).
+                                case 0: currentStatus = MissionStatusEnum.RECEIVED; break;
                                 case 1: currentStatus = MissionStatusEnum.ACCEPTED; break;
                                 case 2: currentStatus = MissionStatusEnum.REJECTED; break;
-                                case 3: currentStatus = MissionStatusEnum.STARTED; break;   // Started (=running)
-                                case 4: currentStatus = MissionStatusEnum.COMPLETED; break; // navigationstate 4를 COMPLETED로 처리 // Terminated (=successful).
+                                case 3: currentStatus = MissionStatusEnum.STARTED; break;
+                                case 4: currentStatus = MissionStatusEnum.COMPLETED; break; // 4로 명확히 정의된 COMPLETED
                                 case 5: currentStatus = MissionStatusEnum.CANCELLED; break;
-                                default: currentStatus = MissionStatusEnum.FAILED; break;  // 지원하지 않는 알 수 없는 상태
+                                case 7: currentStatus = MissionStatusEnum.FAILED; break;
+                                default: currentStatus = MissionStatusEnum.PENDING; break; // 알 수 없는 상태는 PENDING으로 처리
                             }
                             processInfo.HmiStatus.Status = currentStatus.ToString();
 
@@ -125,25 +132,19 @@ namespace WPF_WMS01.Services
                             processInfo.HmiStatus.ProgressPercentage = (int)((progressNumerator / processInfo.TotalSteps) * 100);
 
                             // 현재 진행 중인 미션 단계의 설명
-                            if (currentStatus == MissionStatusEnum.COMPLETED && processInfo.CurrentStepIndex < processInfo.TotalSteps)
+                            if (processInfo.CurrentStepIndex < processInfo.MissionSteps.Count) // 현재 단계가 유효한 범위 내에 있을 때
                             {
-                                // 현재 미션이 완료되었고 다음 미션이 남아있다면, 다음 미션 설명을 표시
                                 processInfo.HmiStatus.CurrentStepDescription = processInfo.MissionSteps[processInfo.CurrentStepIndex].ProcessStepDescription;
                             }
-                            else if (processInfo.CurrentStepIndex > 0 && processInfo.CurrentStepIndex <= processInfo.TotalSteps)
+                            else if (processInfo.CurrentStepIndex == processInfo.MissionSteps.Count && currentStatus == MissionStatusEnum.COMPLETED)
                             {
-                                // 현재 미션이 아직 완료되지 않았거나 마지막 미션인 경우, 현재 미션 설명을 표시
-                                processInfo.HmiStatus.CurrentStepDescription = processInfo.MissionSteps[processInfo.CurrentStepIndex - 1].ProcessStepDescription;
-                            }
-                            else if (processInfo.TotalSteps > 0 && processInfo.CurrentStepIndex == 0 && currentStatus != MissionStatusEnum.COMPLETED)
-                            {
-                                // 아직 첫 미션이 진행중 (Accepted/Started)
-                                processInfo.HmiStatus.CurrentStepDescription = processInfo.MissionSteps[0].ProcessStepDescription;
+                                processInfo.HmiStatus.CurrentStepDescription = "모든 미션 단계 완료";
                             }
                             else
                             {
-                                processInfo.HmiStatus.CurrentStepDescription = "No mission steps defined or process completed.";
+                                processInfo.HmiStatus.CurrentStepDescription = "미션 대기 중 또는 정보 없음";
                             }
+
                             OnShowAutoClosingMessage?.Invoke($"로봇 미션 단계 업데이트: {processInfo.HmiStatus.CurrentStepDescription} ({processInfo.HmiStatus.ProgressPercentage}%)");
 
 
@@ -157,8 +158,8 @@ namespace WPF_WMS01.Services
                             Debug.WriteLine($"  AssignedTo: {latestMissionDetail.AssignedTo}");
                             Debug.WriteLine($"  ParametersJson: {latestMissionDetail.ParametersJson}");
 
-                            // 현재 폴링 중인 미션이 완료되면, 다음 미션을 전송
-                            if (latestMissionDetail.NavigationState == (int)MissionStatusEnum.COMPLETED || latestMissionDetail.NavigationState == 4)
+                            // 현재 폴링 중인 미션이 완료되면, 다음 미션을 전송하거나 전체 프로세스 완료 처리
+                            if (latestMissionDetail.NavigationState == (int)MissionStatusEnum.COMPLETED) // 4로 정의된 COMPLETED 사용
                             {
                                 // === 중단점: 개별 미션 완료 시점 ===
                                 Debug.WriteLine($"[RobotMissionService - BREAKPOINT] Mission {latestMissionDetail.MissionId} completed for Process {processInfo.ProcessId}. Proceeding to next step.");
@@ -174,14 +175,32 @@ namespace WPF_WMS01.Services
                                     processInfo.LastCompletedMissionId = null; // 파싱 실패 시 null
                                 }
 
+                                // 현재 완료된 미션 단계의 정의를 가져옵니다.
+                                var completedStepDefinition = processInfo.MissionSteps[processInfo.CurrentStepIndex];
+
+                                // IsLinkable이 false인 미션이 성공적으로 완료되면 DB 업데이트 및 랙 잠금 해제
+                                if (!completedStepDefinition.IsLinkable)
+                                {
+                                    await PerformDbUpdateForCompletedStep(processInfo, completedStepDefinition);
+                                }
+
                                 // 미션 단계 인덱스 증가
                                 processInfo.CurrentStepIndex++;
                                 OnShowAutoClosingMessage?.Invoke($"로봇 미션 단계 완료: {processInfo.HmiStatus.CurrentStepDescription}");
 
-                                Debug.WriteLine($"[RobotMissionService] Process {processInfo.ProcessId} - CurrentStepIndex incremented to: {processInfo.CurrentStepIndex}. Total steps: {processInfo.TotalSteps}. Calling SendAndTrackMissionStepsForProcess.");
+                                Debug.WriteLine($"[RobotMissionService] Process {processInfo.ProcessId} - CurrentStepIndex incremented to: {processInfo.CurrentStepIndex}. Total steps: {processInfo.TotalSteps}.");
 
-                                // 다음 단계로 진행 (다음 미션 전송)
-                                await SendAndTrackMissionStepsForProcess(processInfo);
+                                if (processInfo.CurrentStepIndex >= processInfo.TotalSteps)
+                                {
+                                    // 모든 미션 단계가 완료됨
+                                    processInfo.IsFinished = true;
+                                    await HandleRobotMissionCompletion(processInfo);
+                                }
+                                else
+                                {
+                                    // 다음 단계로 진행 (다음 미션 전송)
+                                    await SendAndTrackMissionStepsForProcess(processInfo);
+                                }
                             }
                             else if (latestMissionDetail.NavigationState == (int)MissionStatusEnum.FAILED || latestMissionDetail.NavigationState == (int)MissionStatusEnum.REJECTED || latestMissionDetail.NavigationState == (int)MissionStatusEnum.CANCELLED)
                             {
@@ -241,28 +260,34 @@ namespace WPF_WMS01.Services
         /// </summary>
         /// <param name="processType">미션 프로세스의 유형 (예: "WaitToWrapTransfer", "RackTransfer").</param>
         /// <param name="missionSteps">이 프로세스를 구성하는 순차적인 미션 단계 목록.</param>
-        /// <param name="sourceRack">원본 랙 ViewModel.</param>
-        /// <param name="destinationRack">목적지 랙 ViewModel.</param>
-        /// <param name="destinationLine">목적지 생산 라인.</param>
-        /// <param name="getInputStringForButtonFunc">MainViewModel에서 InputStringForButton 값을 가져오는 함수.</param>
+        /// <param name="sourceRack">원본 랙 ViewModel (더 이상 사용되지 않음, MissionStepDefinition의 SourceRackId 사용).</param>
+        /// <param name="destinationRack">목적지 랙 ViewModel (더 이상 사용되지 않음, MissionStepDefinition의 DestinationRackId 사용).</param>
+        /// <param name="destinationLine">목적지 생산 라인 (선택 사항).</param>
+        /// <param name="getInputStringForButtonFunc">MainViewModel의 InputStringForButton 값을 가져오는 델리게이트.</param>
+        /// <param name="racksLockedByProcess">이 프로세스 시작 시 잠긴 모든 랙의 ID 목록.</param>
+        /// <param name="racksToProcess">여러 랙을 처리할 경우 (예: 출고) 해당 랙들의 ViewModel 목록.</param>
         /// <returns>시작된 미션 프로세스의 고유 ID.</returns>
         public async Task<string> InitiateRobotMissionProcess(
             string processType,
             List<MissionStepDefinition> missionSteps,
-            RackViewModel sourceRack,
-            RackViewModel destinationRack,
+            RackViewModel sourceRack, // 이 파라미터는 더 이상 사용되지 않지만, IRobotMissionService 인터페이스 호환을 위해 유지.
+            RackViewModel destinationRack, // 이 파라미터는 더 이상 사용되지 않지만, IRobotMissionService 인터페이스 호환을 위해 유지.
             Location destinationLine,
-            Func<string> getInputStringForButtonFunc)
+            Func<string> getInputStringForButtonFunc,
+            List<int> racksLockedByProcess, // 새로 추가된 파라미터
+            List<RackViewModel> racksToProcess = null) // 새로 추가된 파라미터
         {
             // MainViewModel로부터 받은 델리게이트를 저장하여 필요할 때 사용합니다.
             _getInputStringForButtonFunc = getInputStringForButtonFunc;
 
             string processId = Guid.NewGuid().ToString(); // 고유한 프로세스 ID 생성
-            var newMissionProcess = new RobotMissionInfo(processId, processType, missionSteps)
+            var newMissionProcess = new RobotMissionInfo(processId, processType, missionSteps, racksLockedByProcess) // 생성자에 racksLockedByProcess 전달
             {
-                SourceRack = sourceRack,
-                DestinationRack = destinationRack,
-                DestinationLine = destinationLine
+                // SourceRack과 DestinationRack은 이제 MissionStepDefinition 내에서 ID로 관리됩니다.
+                // 여기에 직접 ViewModel을 할당하지 않습니다.
+                // SourceRack = sourceRack, // 제거
+                // DestinationRack = destinationRack, // 제거
+                RacksToProcess = racksToProcess ?? new List<RackViewModel>() // racksToProcess 설정
             };
 
             lock (_activeRobotProcessesLock) // _activeRobotProcesses에 대한 스레드 안전한 접근
@@ -309,10 +334,9 @@ namespace WPF_WMS01.Services
             if (missionInfo.CurrentStepIndex > 0)
             {
                 var previousStepDefinition = missionInfo.MissionSteps[missionInfo.CurrentStepIndex - 1];
-                if (previousStepDefinition.IsLinkable)
+                if (previousStepDefinition.IsLinkable) // 이전 단계가 연결 가능했다면
                 {
-                    // 이전 단계가 연결 가능했다면, 이전에 완료된 미션 ID를 연결
-                    linkedMissionId = missionInfo.LastCompletedMissionId;
+                    linkedMissionId = missionInfo.LastCompletedMissionId; // 이전에 완료된 미션 ID를 연결
                 }
                 // else: previousStepDefinition.IsLinkable이 false인 경우 linkedMissionId는 기본값인 null 유지
             }
@@ -335,9 +359,9 @@ namespace WPF_WMS01.Services
                         Value = new MissionRequestParameterValue
                         {
                             Payload = currentStep.Payload,
-                            IsLinkable = currentStep.IsLinkable,
+                            IsLinkable = currentStep.IsLinkable, // 이 미션 자체가 다음 미션과 연결될 수 있는지 여부
                             LinkWaitTimeout = currentStep.LinkWaitTimeout,
-                            LinkedMission = linkedMissionId // 이전 미션의 ID를 연결
+                            LinkedMission = linkedMissionId // 이 미션이 이전 미션과 연결되는지 여부
                         },
                         Description = "Mission extension", // 기본값 설정
                         Type = "org.json.JSONObject",      // 기본값 설정
@@ -386,7 +410,7 @@ namespace WPF_WMS01.Services
                 missionInfo.HmiStatus.Status = MissionStatusEnum.FAILED.ToString();
                 OnShowAutoClosingMessage?.Invoke($"로봇 미션 단계 전송 HTTP 오류: {httpEx.Message.Substring(0, Math.Min(100, httpEx.Message.Length))}");
                 Debug.WriteLine($"[RobotMissionService] Process {missionInfo.ProcessId}: HTTP Request Error sending mission step {currentStep.ProcessStepDescription}: {httpEx.Message}");
-                missionInfo.IsFailed = true; // 프로세스 실패로 마크
+                missionInfo.IsFailed = true; // 프로세스 실패로 간주
                 await HandleRobotMissionCompletion(missionInfo); // 실패 처리
             }
             catch (Exception ex)
@@ -394,7 +418,7 @@ namespace WPF_WMS01.Services
                 missionInfo.HmiStatus.Status = MissionStatusEnum.FAILED.ToString();
                 OnShowAutoClosingMessage?.Invoke($"로봇 미션 단계 전송 중 예상치 못한 오류: {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}");
                 Debug.WriteLine($"[RobotMissionService] Process {missionInfo.ProcessId}: Unexpected Error sending mission step {currentStep.ProcessStepDescription}: {ex.Message}");
-                missionInfo.IsFailed = true; // 프로세스 실패로 마크
+                missionInfo.IsFailed = true; // 예상치 못한 오류도 프로세스 실패로 간주
                 await HandleRobotMissionCompletion(missionInfo); // 실패 처리
             }
         }
@@ -409,98 +433,218 @@ namespace WPF_WMS01.Services
             // === 중단점: 로봇 미션 프로세스 최종 완료/실패 시점 ===
             Debug.WriteLine($"[RobotMissionService - BREAKPOINT] Handling completion for process {missionInfo.ProcessId}. Final Status: {missionInfo.HmiStatus.Status}. IsFailed: {missionInfo.IsFailed}");
 
-            // 현재는 "WaitToWrapTransfer" 프로세스에 대한 완료 처리만 포함.
-            // 다른 프로세스 유형에 대한 완료 로직은 필요에 따라 추가
-            //if (missionInfo.ProcessType == "WaitToWrapTransfer" || missionInfo.ProcessType == "HandleRackTransfer" || missionInfo.ProcessType == "HandleRackShipout")
+            try
             {
-                var sourceRackVm = missionInfo.SourceRack;
-                var destinationRackVm = missionInfo.DestinationRack; // WRAP 랙 또는 다른 저장 랙
-
-                if (sourceRackVm != null)
+                if (missionInfo.IsFinished) // 프로세스 성공 시 (모든 개별 IsLinkable=false 단계가 이미 처리됨)
                 {
-                    // 미션이 성공적으로 완료되었을 때만 DB 업데이트 수행
-                    if (missionInfo.HmiStatus.Status == MissionStatusEnum.COMPLETED.ToString() && !missionInfo.IsFailed)
+                    OnShowAutoClosingMessage?.Invoke($"로봇 미션 프로세스 성공적으로 완료: {missionInfo.ProcessType} (ID: {missionInfo.ProcessId})");
+                    // 모든 랙 잠금 해제 (전체 프로세스 시작 시 잠긴 모든 랙)
+                    await UnlockAllRacksInProcess(missionInfo.RacksLockedByProcess);
+                }
+                else if (missionInfo.IsFailed) // 프로세스 실패 시
+                {
+                    OnShowAutoClosingMessage?.Invoke($"로봇 미션 프로세스 실패! 관련된 모든 랙 잠금 해제 중...");
+                    await UnlockAllRacksInProcess(missionInfo.RacksLockedByProcess);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[RobotMissionService] Error in HandleRobotMissionCompletion: {ex.Message}");
+                OnShowAutoClosingMessage?.Invoke($"로봇 미션 최종 처리 중 오류 발생: {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}");
+            }
+            finally
+            {
+                // 프로세스가 최종적으로 완료되거나 실패하면, activeRobotProcesses에서 제거
+                lock (_activeRobotProcessesLock)
+                {
+                    if (_activeRobotProcesses.ContainsKey(missionInfo.ProcessId))
                     {
-                        try
-                        {
-                            if (destinationRackVm != null)
-                            {
-                                // 1) WRAP 랙으로 제품 정보 이동 (BulletType, LotNumber)
-                                // WAIT 랙의 LotNumber는 InputStringForButton에서 가져옴.
-                                string originalSourceLotNumber = sourceRackVm.Title.Equals(_waitRackTitle) ?
-                                    _getInputStringForButtonFunc?.Invoke().TrimStart().TrimEnd(_militaryCharacter) : sourceRackVm.LotNumber;
-                                int originalSourceBulletType = sourceRackVm.BulletType;
-
-                                await _databaseService.UpdateRackStateAsync(
-                                    destinationRackVm.Id,
-                                    missionInfo.ProcessType == "FakeExecuteInboundProduct" ? 3 : destinationRackVm.RackType,
-                                    originalSourceBulletType
-                                );
-                                await _databaseService.UpdateLotNumberAsync(
-                                    destinationRackVm.Id,
-                                    originalSourceLotNumber
-                                );
-                                Debug.WriteLine($"[RobotMissionService] DB Update: Rack {destinationRackVm.Title} updated with BulletType {originalSourceBulletType}, LotNumber {originalSourceLotNumber}.");
-
-                                // 2) 원본 랙 비우기
-                                await _databaseService.UpdateRackStateAsync(
-                                    sourceRackVm.Id,
-                                    missionInfo.ProcessType == "HandleHalfPalletExport" ? 1 : sourceRackVm.RackModel.RackType,
-                                    0 // BulletType을 0으로 설정 (비움)
-                                );
-                                await _databaseService.UpdateLotNumberAsync(
-                                    sourceRackVm.Id,
-                                    String.Empty // LotNumber 비움
-                                );
-                                // WAIT 랙이 비워지면 입력 필드도 초기화 (WAIT 랙에 대해서만)
-                                if (sourceRackVm.Title.Equals(_waitRackTitle))
-                                {
-                                    OnInputStringForButtonCleared?.Invoke(); // MainViewModel에 InputStringForButton 초기화 요청
-                                    Debug.WriteLine($"[RobotMissionService] DB Update: WAIT rack {sourceRackVm.Title} cleared.");
-                                }
-
-                                OnShowAutoClosingMessage?.Invoke($"로봇 미션 완료! 랙 {sourceRackVm.Title}에서 랙 {destinationRackVm.Title}으로 이동 성공.");
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            Debug.WriteLine($"[RobotMissionService] DB update failed after robot mission completion: {ex.Message}");
-                            OnShowAutoClosingMessage?.Invoke($"로봇 미션 완료 후 DB 업데이트 실패: {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}");
-                        }
-                    }
-                    else // 미션 실패 시
-                    {
-                        OnShowAutoClosingMessage?.Invoke($"로봇 미션 실패! 랙 {sourceRackVm.Title}에서 랙 {destinationRackVm.Title}으로 이동 실패..");
-                    }
-
-                    // 미션 완료/실패 여부와 관계없이 랙 잠금 해제
-                    try
-                    {
-                        await _databaseService.UpdateIsLockedAsync(sourceRackVm.Id, false);
-                        OnRackLockStateChanged?.Invoke(sourceRackVm.Id, false); // MainViewModel에 잠금 해제 알림
-
-                        if (destinationRackVm != null)
-                        {
-                            await _databaseService.UpdateIsLockedAsync(destinationRackVm.Id, false);
-                            OnRackLockStateChanged?.Invoke(destinationRackVm.Id, false); // MainViewModel에 잠금 해제 알림
-                        }
-                        Debug.WriteLine($"[RobotMissionService] Racks {sourceRackVm.Title} and {(destinationRackVm != null ? destinationRackVm.Title : "N/A")} unlocked.");
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"[RobotMissionService] Failed to unlock racks after robot mission: {ex.Message}");
-                        OnShowAutoClosingMessage?.Invoke($"랙 잠금 해제 실패: {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}");
+                        _activeRobotProcesses.Remove(missionInfo.ProcessId);
+                        Debug.WriteLine($"[RobotMissionService] Process {missionInfo.ProcessId} explicitly removed from active processes.");
                     }
                 }
             }
+        }
 
-            // 프로세스가 최종적으로 완료되거나 실패하면, activeRobotProcesses에서 제거
-            lock (_activeRobotProcessesLock)
+        /// <summary>
+        /// IsLinkable이 false인 미션 단계가 성공적으로 완료되었을 때 DB 업데이트 및 랙 잠금 해제를 수행합니다.
+        /// </summary>
+        /// <param name="processInfo">현재 미션 프로세스 정보.</param>
+        /// <param name="completedStep">완료된 미션 단계의 정의.</param>
+        private async Task PerformDbUpdateForCompletedStep(RobotMissionInfo processInfo, MissionStepDefinition completedStep)
+        {
+            Debug.WriteLine($"[RobotMissionService] Performing DB update for completed step. ProcessType: {processInfo.ProcessType}, SourceRackId: {completedStep.SourceRackId}, DestinationRackId: {completedStep.DestinationRackId}");
+
+            RackViewModel sourceRackVm = null;
+            if (completedStep.SourceRackId.HasValue)
             {
-                if (_activeRobotProcesses.ContainsKey(missionInfo.ProcessId))
+                sourceRackVm = _getRackViewModelByIdFunc(completedStep.SourceRackId.Value);
+                if (sourceRackVm == null)
                 {
-                    _activeRobotProcesses.Remove(missionInfo.ProcessId);
-                    Debug.WriteLine($"[RobotMissionService] Process {missionInfo.ProcessId} explicitly removed from active processes.");
+                    Debug.WriteLine($"[RobotMissionService] Warning: SourceRackViewModel not found for ID {completedStep.SourceRackId.Value}.");
+                }
+            }
+
+            RackViewModel destinationRackVm = null;
+            if (completedStep.DestinationRackId.HasValue)
+            {
+                destinationRackVm = _getRackViewModelByIdFunc(completedStep.DestinationRackId.Value);
+                if (destinationRackVm == null)
+                {
+                    Debug.WriteLine($"[RobotMissionService] Warning: DestinationRackViewModel not found for ID {completedStep.DestinationRackId.Value}.");
+                }
+            }
+
+            try
+            {
+                // 모든 이동 작업의 결과는 source rack에서 destination rack으로의 파레트 이동이며,
+                // 이 때, source rack의 파레트 정보 (RackType, BulletType, Lot No.)를 destination rack의 파레트 정보로 copy하고
+                // source rack의 파레트 정보를 초기화 (BulletType = 0, Lot No. = null)하는 것이다.
+                // 특별한 경우는 1) source rack이 WAIT rack일 경우는 BulletType과 Lot No.를 InputStringForButton으로 부터 얻는 것과,
+                // 2) ProcessType이 "FakeExecuteInboundProduct" 또는 "HandleHalfPalletExport" RackType이 바뀌는 경우 뿐이다.
+
+                if (sourceRackVm != null && destinationRackVm != null)
+                {
+                    // 1. Destination Rack에 Source Rack의 제품 정보 복사
+                    string sourceLotNumber;
+                    int sourceBulletType = sourceRackVm.BulletType;
+                    int newDestinationRackType = destinationRackVm.RackType; // 기본적으로 목적지 랙의 현재 RackType 유지
+                    int newSourceRackType = sourceRackVm.RackType; // 기본적으로 현재 RackType 유지
+
+                    // 특별한 경우 1): source rack이 WAIT rack일 경우
+                    if (sourceRackVm.Title.Equals(_waitRackTitle) && _getInputStringForButtonFunc != null)
+                    {
+                        sourceLotNumber = _getInputStringForButtonFunc.Invoke().TrimStart().TrimEnd(_militaryCharacter);
+                        // BulletType은 이미 MainViewModel에서 WAIT 랙에 설정된 상태이므로 sourceRackVm.BulletType 사용
+                    }
+                    else
+                    {
+                        sourceLotNumber = sourceRackVm.LotNumber;
+                    }
+
+                    // 특별한 경우 2): ProcessType이 "FakeExecuteInboundProduct"일 경우 RackType 변경
+                    if (processInfo.ProcessType == "FakeExecuteInboundProduct")
+                    {
+                        newDestinationRackType = 3; // 재공품 랙 타입으로 변경 (완제품 랙에서 재공품 랙으로)
+                    } else if (processInfo.ProcessType == "HandleHalfPalletExport")
+                    {
+                        newSourceRackType = 1;
+                    }
+
+                    await _databaseService.UpdateRackStateAsync(
+                        destinationRackVm.Id,
+                        newDestinationRackType,
+                        sourceBulletType
+                    );
+                    await _databaseService.UpdateLotNumberAsync(
+                        destinationRackVm.Id,
+                        sourceLotNumber
+                    );
+                    Debug.WriteLine($"[RobotMissionService] DB Update: Rack {destinationRackVm.Title} (ID: {destinationRackVm.Id}) updated with BulletType {sourceBulletType}, LotNumber '{sourceLotNumber}', RackType {newDestinationRackType}.");
+
+                    // 2. Source Rack의 파레트 정보 초기화 (BulletType = 0, Lot No. = null)
+                    // Source Rack의 RackType은 유지
+                    await _databaseService.UpdateRackStateAsync(
+                        sourceRackVm.Id,
+                        newSourceRackType,
+                        0 // BulletType을 0으로 설정 (비움)
+                    );
+                    await _databaseService.UpdateLotNumberAsync(
+                        sourceRackVm.Id,
+                        String.Empty // LotNumber 비움
+                    );
+                    if (sourceRackVm.Title.Equals(_waitRackTitle))
+                    {
+                        OnInputStringForButtonCleared?.Invoke(); // WAIT 랙 비우면 입력 필드 초기화
+                        Debug.WriteLine($"[RobotMissionService] DB Update: WAIT rack {sourceRackVm.Title} cleared.");
+                    }
+                    Debug.WriteLine($"[RobotMissionService] DB Update: Source Rack {sourceRackVm.Title} (ID: {sourceRackVm.Id}) cleared.");
+
+                    // 3. 랙 잠금 해제 (이동 완료된 랙만 해제)
+                    await _databaseService.UpdateIsLockedAsync(sourceRackVm.Id, false);
+                    Application.Current.Dispatcher.Invoke(() => OnRackLockStateChanged?.Invoke(sourceRackVm.Id, false));
+                    await _databaseService.UpdateIsLockedAsync(destinationRackVm.Id, false);
+                    Application.Current.Dispatcher.Invoke(() => OnRackLockStateChanged?.Invoke(destinationRackVm.Id, false));
+                    Debug.WriteLine($"[RobotMissionService] Racks {sourceRackVm.Title} and {destinationRackVm.Title} unlocked.");
+
+                    OnShowAutoClosingMessage?.Invoke($"랙 {sourceRackVm.Title}에서 랙 {destinationRackVm.Title}으로 이동 및 업데이트 성공.");
+                }
+                else if (sourceRackVm != null && destinationRackVm == null) // DestinationRackId가 null인 경우 (예: 출고, 반출)
+                {
+                    // HandleHalfPalletExport 또는 HandleRackShipout (단일 랙 출고)
+                    // 랙 비우기 (BulletType = 0, LotNumber = String.Empty)
+                    int newSourceRackType = sourceRackVm.RackType;
+                    if (processInfo.ProcessType == "HandleHalfPalletExport")
+                    {
+                        // 반출의 경우 RackType은 1 (완제품)으로 유지
+                        newSourceRackType = 1;
+                    }
+
+                    await _databaseService.UpdateRackStateAsync(
+                        sourceRackVm.Id,
+                        newSourceRackType,
+                        0 // BulletType을 0으로 설정 (비움)
+                    );
+                    await _databaseService.UpdateLotNumberAsync(
+                        sourceRackVm.Id,
+                        String.Empty // LotNumber 비움
+                    );
+                    Debug.WriteLine($"[RobotMissionService] DB Update: Rack {sourceRackVm.Title} (ID: {sourceRackVm.Id}) cleared for {processInfo.ProcessType}.");
+
+                    // 랙 잠금 해제
+                    await _databaseService.UpdateIsLockedAsync(sourceRackVm.Id, false);
+                    Application.Current.Dispatcher.Invoke(() => OnRackLockStateChanged?.Invoke(sourceRackVm.Id, false));
+                    Debug.WriteLine($"[RobotMissionService] Rack {sourceRackVm.Title} unlocked.");
+
+                    OnShowAutoClosingMessage?.Invoke($"랙 {sourceRackVm.Title} {processInfo.ProcessType} 성공.");
+                }
+                else if (processInfo.RacksToProcess != null && processInfo.RacksToProcess.Any() && processInfo.ProcessType == "ExecuteCheckoutProduct")
+                {
+                    // 다중 랙 출고 (ExecuteCheckoutProduct) - RacksToProcess 목록을 기반으로 처리
+                    // 이 시나리오는 각 랙에 대한 개별 미션 완료 시점이 아니라, 전체 출고 프로세스 완료 시점에
+                    // 일괄적으로 처리되는 것이 더 적합할 수 있으나, 현재 요청에 따라 개별 IsLinkable=false 단계에서 처리.
+                    // 만약 ExecuteCheckoutProduct가 단일 IsLinkable=false 스텝으로 끝나지 않고 각 랙마다 IsLinkable=false 스텝이 있다면 이 로직이 맞음.
+                    // 현재 MainViewModel의 ExecuteCheckoutProduct를 보면, 각 랙마다 마지막 스텝에 SourceRackId가 설정되어 있으므로 이 로직이 맞음.
+                    Debug.WriteLine($"[RobotMissionService] Processing ExecuteCheckoutProduct completion for racks in RacksToProcess.");
+                    // 이 부분은 이미 위에서 sourceRackVm != null && destinationRackVm == null 로직으로 처리될 것임.
+                    // RacksToProcess는 InitiateRobotMissionProcess 시점에 전달되지만,
+                    // PerformDbUpdateForCompletedStep은 단일 SourceRackId/DestinationRackId를 기반으로 동작하므로,
+                    // ExecuteCheckoutProduct의 경우 각 랙에 대한 마지막 미션 단계가 완료될 때마다 이 로직이 트리거되어야 함.
+                    // 따라서 이 else if 블록은 필요 없으며, 위의 sourceRackVm != null && destinationRackVm == null 블록이 처리해야 함.
+                }
+                else
+                {
+                    Debug.WriteLine($"[RobotMissionService] PerformDbUpdateForCompletedStep: No specific rack handling logic for ProcessType '{processInfo.ProcessType}' with provided rack IDs. SourceRackId: {completedStep.SourceRackId}, DestinationRackId: {completedStep.DestinationRackId}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[RobotMissionService] Error performing DB update for completed step: {ex.Message}");
+                OnShowAutoClosingMessage?.Invoke($"미션 완료 후 DB 업데이트 중 오류 발생: {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}");
+            }
+        }
+
+        /// <summary>
+        /// 주어진 랙 ID 목록에 대해 잠금을 해제합니다.
+        /// </summary>
+        /// <param name="rackIds">잠금을 해제할 랙 ID 목록.</param>
+        private async Task UnlockAllRacksInProcess(List<int> rackIds)
+        {
+            foreach (var rackId in rackIds.Distinct()) // 중복 ID 제거
+            {
+                try
+                {
+                    await _databaseService.UpdateIsLockedAsync(rackId, false);
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        OnRackLockStateChanged?.Invoke(rackId, false); // MainViewModel에 잠금 해제 알림
+                    });
+                    Debug.WriteLine($"[RobotMissionService] Rack {rackId} unlocked.");
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[RobotMissionService] Failed to unlock rack {rackId}: {ex.Message}");
+                    OnShowAutoClosingMessage?.Invoke($"랙 {rackId} 잠금 해제 실패: {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}");
                 }
             }
         }

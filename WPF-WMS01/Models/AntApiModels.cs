@@ -7,6 +7,11 @@ using WPF_WMS01.ViewModels;
 
 namespace WPF_WMS01.Models
 {
+    // ViewModelBase for common INotifyPropertyChanged implementation
+    // 이 파일에 ViewModelBase가 중복 정의되어 있었으나,
+    // ViewModelBase.cs 파일로 분리되었으므로 여기서는 제거합니다.
+    // 만약 이 파일에 ViewModelBase가 필요하다면, WPF_WMS01.ViewModels 네임스페이스를 using하여 사용합니다.
+
     // ====== 1. Login (POST) - Appendix G.1 (p. 427) ======
     public class ApiVersion
     {
@@ -314,14 +319,18 @@ namespace WPF_WMS01.Models
 
         // 특정 프로세스와 관련된 랙 또는 라인 정보 (선택 사항)
         // RackViewModel은 Models가 아닌 ViewModels 네임스페이스에 있으므로 여기에 ViewModels.RackViewModel 타입으로 선언합니다.
-        public ViewModels.RackViewModel SourceRack { get; set; } // 원본 랙
-        public ViewModels.RackViewModel DestinationRack { get; set; } // 목적지 랙
-        public Location DestinationLine { get; set; } // 목적지 생산 라인
+        // SourceRack과 DestinationRack은 이제 MissionStepDefinition 내에서 ID로 관리됩니다.
+        // public ViewModels.RackViewModel SourceRack { get; set; } // 제거
+        // public ViewModels.RackViewModel DestinationRack { get; set; } // 제거
+        public List<ViewModels.RackViewModel> RacksToProcess { get; set; } // 여러 랙을 처리할 경우 (예: 출고)
+
+        // 프로세스 시작 시 잠긴 모든 랙의 ID 목록. 미션 실패 시 이 목록의 랙들을 잠금 해제합니다.
+        public List<int> RacksLockedByProcess { get; set; }
 
         // 미션 폴링을 취소하기 위한 CancellationTokenSource
         public CancellationTokenSource CancellationTokenSource { get; } = new CancellationTokenSource();
 
-        public RobotMissionInfo(string processId, string processType, List<MissionStepDefinition> missionSteps)
+        public RobotMissionInfo(string processId, string processType, List<MissionStepDefinition> missionSteps, List<int> racksLockedByProcess)
         {
             ProcessId = processId;
             ProcessType = processType;
@@ -332,6 +341,8 @@ namespace WPF_WMS01.Models
             HmiStatus = new HmiStatusInfo { Status = MissionStatusEnum.FAILED.ToString(), ProgressPercentage = 0, CurrentStepDescription = "미션 대기 중" };
             IsFinished = false;
             IsFailed = false;
+            RacksLockedByProcess = racksLockedByProcess ?? new List<int>();
+            RacksToProcess = new List<ViewModels.RackViewModel>(); // 초기화
         }
     }
 
@@ -348,6 +359,10 @@ namespace WPF_WMS01.Models
         public bool IsLinkable { get; set; }
         public int? LinkedMission { get; set; }
         public int LinkWaitTimeout { get; set; }
+
+        // 랙 업데이트 관련 필드: IsLinkable이 false일 때만 유효
+        public int? SourceRackId { get; set; }
+        public int? DestinationRackId { get; set; }
     }
 
     /// <summary>
@@ -359,9 +374,10 @@ namespace WPF_WMS01.Models
         ACCEPTED = 1,
         REJECTED = 2,
         STARTED = 3,
-        COMPLETED = 4,
+        COMPLETED = 4, // 4로 명확히 정의
         CANCELLED = 5,
-        FAILED // UNKNOWN X 커스텀 상태: ANT 서버에 아직 전송되지 않았거나 초기 상태
+        FAILED = 7,
+        PENDING // 커스텀 상태: ANT 서버에 아직 전송되지 않았거나 초기 상태
     }
 
     /// <summary>
