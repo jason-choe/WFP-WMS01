@@ -48,6 +48,11 @@ namespace WPF_WMS01
             string waitRackTitle = ConfigurationManager.AppSettings["WaitRackTitle"] ?? "WAIT";
             char[] militaryCharacter = (ConfigurationManager.AppSettings["MilitaryCharacters"] ?? "abc ").ToCharArray();
 
+            // 새로운 AMR Payload 값 읽기
+            string warehousePayload = ConfigurationManager.AppSettings["WarehouseAMR"] ?? "AMR_1";
+            string productionLinePayload = ConfigurationManager.AppSettings["ProductionLineAMR"] ?? "AMR_2";
+
+
             Debug.WriteLine("[App.ConfigureServices] Registering HttpService, DatabaseService, ModbusClientService...");
             services.AddSingleton<HttpService>(new HttpService(baseApiUrl));
             services.AddSingleton<DatabaseService>();
@@ -59,17 +64,21 @@ namespace WPF_WMS01
                 ));
 
             Debug.WriteLine("[App.ConfigureServices] Registering MainViewModel (initial)...");
-            // MainViewModel 등록: 이제 생성자에서 IRobotMissionService를 받지 않습니다.
-            services.AddSingleton<MainViewModel>();
+            // MainViewModel 등록: 이제 생성자에서 AMR payload 값들을 받습니다.
+            services.AddSingleton<MainViewModel>(provider =>
+                new MainViewModel(
+                    provider.GetRequiredService<DatabaseService>(),
+                    provider.GetRequiredService<HttpService>(),
+                    provider.GetRequiredService<ModbusClientService>(),
+                    warehousePayload, // App.config에서 읽은 값 전달
+                    productionLinePayload // App.config에서 읽은 값 전달
+                ));
 
             Debug.WriteLine("[App.ConfigureServices] Registering IRobotMissionService factory...");
             // IRobotMissionService와 RobotMissionService 등록
-            // RobotMissionService는 MainViewModel의 GetRackViewModelById 메서드를 필요로 하므로,
-            // MainViewModel 인스턴스가 이미 DI 컨테이너에 존재한다고 가정하고 가져와 전달합니다.
             services.AddSingleton<IRobotMissionService, RobotMissionService>(provider =>
             {
                 Debug.WriteLine("[App.ConfigureServices] IRobotMissionService factory: Getting MainViewModel instance...");
-                // MainViewModel 인스턴스를 가져옵니다. 이 시점에는 MainViewModel이 이미 생성되어 있어야 합니다.
                 var mainViewModelInstance = provider.GetRequiredService<MainViewModel>();
                 Debug.WriteLine("[App.ConfigureServices] IRobotMissionService factory: MainViewModel instance obtained. Creating RobotMissionService...");
                 return new RobotMissionService(
@@ -92,7 +101,6 @@ namespace WPF_WMS01
             Debug.WriteLine("[App.ConfigureServices] ServiceProvider Built.");
 
             // ServiceProvider 빌드 후, MainViewModel에 RobotMissionService 주입
-            // 이는 MainViewModel과 RobotMissionService 간의 순환 참조를 해결하는 핵심 단계입니다.
             Debug.WriteLine("[App.ConfigureServices] Performing late injection of RobotMissionService into MainViewModel...");
             var resolvedMainViewModel = ServiceProvider.GetRequiredService<MainViewModel>();
             var resolvedRobotMissionService = ServiceProvider.GetRequiredService<IRobotMissionService>();
