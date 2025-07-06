@@ -13,7 +13,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Configuration;
 using System.Net.Http;
-using System.Text.Json; // System.Text.Json은 사용되지 않으므로 제거 가능
 using System.Diagnostics;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
@@ -213,6 +212,23 @@ namespace WPF_WMS01.ViewModels
             }
         }
 
+        // AutoClosingMessage 팝업을 위한 속성 추가
+        private AutoClosingMessagePopupViewModel _currentMessagePopupViewModel;
+        public AutoClosingMessagePopupViewModel CurrentMessagePopupViewModel
+        {
+            get => _currentMessagePopupViewModel;
+            set => SetProperty(ref _currentMessagePopupViewModel, value);
+        }
+
+        private bool _isMessagePopupVisible;
+        public bool IsMessagePopupVisible
+        {
+            get => _isMessagePopupVisible;
+            set => SetProperty(ref _isMessagePopupVisible, value);
+        }
+
+        private DispatcherTimer _messagePopupTimer; // 메시지 팝업 자동 닫힘 타이머
+
         public ICommand LoginCommand { get; private set; }
         public ICommand OpenMenuCommand { get; }
         public ICommand CloseMenuCommand { get; }
@@ -288,6 +304,12 @@ namespace WPF_WMS01.ViewModels
             IsLoggedIn = false;
             IsLoginAttempting = false;
             LoginStatusMessage = "로그인 필요";
+
+            // 팝업 메시지 초기화
+            // CurrentMessagePopupViewModel을 생성자에서 초기화하도록 보장
+            CurrentMessagePopupViewModel = new AutoClosingMessagePopupViewModel(string.Empty);
+            IsMessagePopupVisible = false;
+            SetupMessagePopupTimer(); // 메시지 팝업 타이머 설정
 
             InitializeCommands(); // 기존의 다른 명령 초기화
 
@@ -920,14 +942,39 @@ namespace WPF_WMS01.ViewModels
             _robotMissionServiceInternal?.Dispose(); // 로봇 미션 서비스 자원 해제
         }
 
-        private void ShowAutoClosingMessage(string message)
+        // AutoClosingMessagePopupView를 표시하는 새로운 로직
+        public void ShowAutoClosingMessage(string message)
         {
             Application.Current.Dispatcher.Invoke(() =>
             {
-                var viewModel = new AutoClosingMessagePopupViewModel(message);
-                var view = new AutoClosingMessagePopupView { DataContext = viewModel };
-                view.Show();
+                if (CurrentMessagePopupViewModel == null)
+                {
+                    CurrentMessagePopupViewModel = new AutoClosingMessagePopupViewModel(message);
+                }
+                else
+                {
+                    CurrentMessagePopupViewModel.Message = message;
+                }
+                IsMessagePopupVisible = true;
+                _messagePopupTimer.Stop(); // 기존 타이머 중지
+                _messagePopupTimer.Start(); // 새 메시지로 타이머 재시작
             });
+        }
+
+        // 메시지 팝업 자동 닫힘 타이머 설정
+        private void SetupMessagePopupTimer()
+        {
+            _messagePopupTimer = new DispatcherTimer();
+            _messagePopupTimer.Interval = TimeSpan.FromSeconds(3); // 3초 후 자동 닫힘 (조정 가능)
+            _messagePopupTimer.Tick += MessagePopupTimer_Tick;
+        }
+
+        // 메시지 팝업 타이머 틱 이벤트 핸들러
+        private void MessagePopupTimer_Tick(object sender, EventArgs e)
+        {
+            _messagePopupTimer.Stop();
+            IsMessagePopupVisible = false;
+            CurrentMessagePopupViewModel.Message = string.Empty; // 메시지 초기화
         }
 
         private string _inputStringForButton;

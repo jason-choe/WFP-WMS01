@@ -948,12 +948,13 @@ namespace WPF_WMS01.ViewModels
 
         private void ShowAutoClosingMessage(string message)
         {
-            Application.Current.Dispatcher.Invoke(() =>
+            _mainViewModel.ShowAutoClosingMessage(message);
+/*            Application.Current.Dispatcher.Invoke(() =>
             {
                 var viewModel = new AutoClosingMessagePopupViewModel(message);
                 var view = new AutoClosingMessagePopupView { DataContext = viewModel };
                 view.Show();
-            });
+            });*/
         }
     }
 }

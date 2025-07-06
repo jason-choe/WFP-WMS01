@@ -1,4 +1,5 @@
-﻿<Window x:Class="WPF_WMS01.MainWindow"
+﻿<!-- MainWindow.xaml -->
+<Window x:Class="WPF_WMS01.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -6,14 +7,19 @@
         xmlns:local="clr-namespace:WPF_WMS01"
         xmlns:vm="clr-namespace:WPF_WMS01.ViewModels"
         xmlns:cnv="clr-namespace:WPF_WMS01.Converters"
+        xmlns:popups="clr-namespace:WPF_WMS01.Views.Popups"
         mc:Ignorable="d"
         Title="랙 관리 시스템" Height="1040" Width="1920" Left="0" Top="0" >
     <!-- Height="768" Width="1024" WindowState="Maximized" -->
 
     <Window.Resources>
-        <cnv:BackgroundColorConverter x:Key="BackgroundColorConverter" />
-        <cnv:ImageIndexToImagePathConverter x:Key="ImageIndexToImagePathConverter"/>
-        <cnv:BooleanToVisibilityConverterForHidden x:Key="BooleanToVisibilityConverterForHidden"/>
+        <!-- App.xaml에 이미 선언된 컨버터는 여기서 중복 선언하지 않습니다. -->
+        <!-- <cnv:BackgroundColorConverter x:Key="BackgroundColorConverter" /> -->
+        <!-- <cnv:ImageIndexToImagePathConverter x:Key="ImageIndexToImagePathConverter"/> -->
+        <!-- <cnv:BooleanToVisibilityConverterForHidden x:Key="BooleanToVisibilityConverterForHidden"/> -->
+        <!-- <cnv:LoginStatusToColorConverter x:Key="LoginStatusToColorConverter"/> -->
+        <!-- <cnv:ProgressToWidthConverter x:Key="ProgressToWidthConverter"/> -->
+        
         <Style x:Key="NoChromeButton" TargetType="Button">
             <Setter Property="Template">
                 <Setter.Value>
@@ -187,10 +193,6 @@
                                     </Setter.Value>
                                 </Setter>
                             </Trigger>
-                            <!-- IsEnabled는 ViewModel의 IsEnabled에 바인딩되므로 여기서는 제거 -->
-                            <!-- <Trigger Property="IsEnabled" Value="False">
-                                <Setter TargetName="border" Property="Opacity" Value="0.6"/>
-                            </Trigger> -->
                             <!-- IsProcessing 상태에 따른 배경색 변경 -->
                             <DataTrigger Binding="{Binding IsProcessing}" Value="True">
                                 <Setter TargetName="border" Property="Background" Value="#FFD700"/>
@@ -206,15 +208,6 @@
                 </Setter.Value>
             </Setter>
         </Style>
-
-        <!-- BooleanToVisibilityConverter (Visible/Collapsed) -->
-        <!-- BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/ -->
-        <!-- Inverted BooleanToVisibilityConverter (Hidden/Visible) -->
-        <!-- cnv:InvertBooleanConverter x:Key="InvertBooleanConverter"/ -->
-        <cnv:LoginStatusToColorConverter x:Key="LoginStatusToColorConverter"/>
-
-        <!-- ProgressToWidthConverter: ProgressBar의 너비를 진행률에 맞춰 조절하는 컨버터 -->
-        <cnv:ProgressToWidthConverter x:Key="ProgressToWidthConverter"/>
 
         <!-- 햄버거 버튼 스타일 -->
         <Style x:Key="HamburgerButtonStyle" TargetType="Button">
@@ -657,6 +650,12 @@
             </ItemsControl>
         </ScrollViewer>
 
+        <!-- AutoClosingMessagePopupView를 표시할 컨테이너 (Grid.Row="2"의 중앙에 오버레이) -->
+        <Border Grid.Row="2" HorizontalAlignment="Center" VerticalAlignment="Center" Panel.ZIndex="999"
+                Visibility="{Binding IsMessagePopupVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <popups:AutoClosingMessagePopupView DataContext="{Binding CurrentMessagePopupViewModel}" />
+        </Border>
+        
         <Grid Grid.Row="3" Margin="40,0,40,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>

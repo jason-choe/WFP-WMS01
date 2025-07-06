@@ -389,7 +389,7 @@ namespace WPF_WMS01.Services
                         // Discrete input이 1이므로 미션 단계 실패 처리
                         Application.Current.Dispatcher.Invoke(() =>
                         {
-                            MessageBox.Show($"Modbus Discrete Input {currentStep.ModbusDiscreteInputAddressToCheck.Value}이(가) 1입니다. 미션 단계 '{currentStep.ProcessStepDescription}'을(를) 시작할 수 없습니다. 미션 프로세스를 취소합니다.", "미션 취소", MessageBoxButton.OK, MessageBoxImage.Warning);
+                            MessageBox.Show(Application.Current.MainWindow, $"Modbus Discrete Input {currentStep.ModbusDiscreteInputAddressToCheck.Value}이(가) 1입니다. 미션 단계 '{currentStep.ProcessStepDescription}'을(를) 시작할 수 없습니다. 미션 프로세스를 취소합니다.", "미션 취소", MessageBoxButton.OK, MessageBoxImage.Warning);
                         });
                         Debug.WriteLine($"[RobotMissionService] Modbus Discrete Input {currentStep.ModbusDiscreteInputAddressToCheck.Value} is 1. Cancelling mission process {missionInfo.ProcessId}.");
                         missionInfo.CurrentStatus = MissionStatusEnum.FAILED;
@@ -409,7 +409,7 @@ namespace WPF_WMS01.Services
                 {
                     Application.Current.Dispatcher.Invoke(() =>
                     {
-                        MessageBox.Show($"Modbus 연결 오류: {ex.Message}. 미션 프로세스를 취소합니다.", "미션 취소", MessageBoxButton.OK, MessageBoxImage.Error);
+                        MessageBox.Show(Application.Current.MainWindow, $"Modbus 연결 오류: {ex.Message}. AMR 모드버스를 확인하세요. AMT 복귀 명령 취소", "Modbus 연결 오류", MessageBoxButton.OK, MessageBoxImage.Error);
                     });
                     Debug.WriteLine($"[RobotMissionService] Modbus Connection Error during check: {ex.Message}. Cancelling mission process {missionInfo.ProcessId}.");
                     missionInfo.CurrentStatus = MissionStatusEnum.FAILED;
@@ -425,7 +425,7 @@ namespace WPF_WMS01.Services
                     // Modbus 읽기 중 오류 발생 시 미션 취소
                     Application.Current.Dispatcher.Invoke(() =>
                     {
-                        MessageBox.Show($"Modbus Discrete Input {currentStep.ModbusDiscreteInputAddressToCheck.Value} 읽기 중 오류 발생: {ex.Message}. 미션 프로세스를 취소합니다.", "미션 취소", MessageBoxButton.OK, MessageBoxImage.Error);
+                        MessageBox.Show(Application.Current.MainWindow, $"Modbus Discrete Input {currentStep.ModbusDiscreteInputAddressToCheck.Value} 읽기 중 오류 발생: {ex.Message}. 미션 프로세스를 취소합니다.", "미션 취소", MessageBoxButton.OK, MessageBoxImage.Error);
                     });
                     Debug.WriteLine($"[RobotMissionService] Error reading Modbus Discrete Input {currentStep.ModbusDiscreteInputAddressToCheck.Value}: {ex.Message}. Cancelling mission process {missionInfo.ProcessId}.");
                     missionInfo.CurrentStatus = MissionStatusEnum.FAILED;
