@@ -11,6 +11,7 @@ using System.Net.Http; // HttpRequestException을 위해 필요
 using Newtonsoft.Json; // JsonConvert를 위해 필요
 using JsonException = Newtonsoft.Json.JsonException; // 충돌 방지를 위해 별칭 사용
 using System.Windows; // Application.Current.Dispatcher.Invoke를 위해 추가
+using System.Configuration; // ConfigurationManager를 위해 추가
 
 namespace WPF_WMS01.Services
 {
@@ -23,6 +24,7 @@ namespace WPF_WMS01.Services
         private readonly HttpService _httpService;
         private readonly DatabaseService _databaseService;
         private DispatcherTimer _robotMissionPollingTimer;
+        private readonly ModbusClientService _missionCheckModbusService; // 미션 실패 확인용 ModbusClientService 추가
 
         // 현재 진행 중인 로봇 미션 프로세스들을 추적 (Key: ProcessId)
         private readonly Dictionary<string, RobotMissionInfo> _activeRobotProcesses = new Dictionary<string, RobotMissionInfo>();
@@ -33,6 +35,11 @@ namespace WPF_WMS01.Services
         private readonly char[] _militaryCharacter;
         private Func<string> _getInputStringForButtonFunc; // MainViewModel의 InputStringForButton 값을 가져오는 델리게이트
         private Func<int, RackViewModel> _getRackViewModelByIdFunc; // MainViewModel에서 RackViewModel을 ID로 가져오는 델리게이트
+
+        // 미션 실패 확인용 Modbus 서버 설정 값
+        private readonly string _missionModbusIp;
+        private readonly int _missionModbusPort;
+        private readonly byte _missionModbusSlaveId;
 
         /// <summary>
         /// MainViewModel로 상태를 다시 보고하기 위한 이벤트
@@ -49,13 +56,32 @@ namespace WPF_WMS01.Services
         /// <param name="waitRackTitle">WAIT 랙의 타이틀 문자열.</param>
         /// <param name="militaryCharacter">군수품 문자 배열.</param>
         /// <param name="getRackViewModelByIdFunc">Rack ID로 RackViewModel을 가져오는 함수.</param>
-        public RobotMissionService(HttpService httpService, DatabaseService databaseService, string waitRackTitle, char[] militaryCharacter, Func<int, RackViewModel> getRackViewModelByIdFunc)
+        /// <param name="missionModbusIp">미션 실패 확인용 Modbus 서버 IP 주소.</param>
+        /// <param name="missionModbusPort">미션 실패 확인용 Modbus 서버 포트.</param>
+        /// <param name="missionModbusSlaveId">미션 실패 확인용 Modbus 서버 슬레이브 ID.</param>
+        public RobotMissionService(
+            HttpService httpService,
+            DatabaseService databaseService,
+            string waitRackTitle,
+            char[] militaryCharacter,
+            Func<int, RackViewModel> getRackViewModelByIdFunc,
+            string missionModbusIp, // 새로운 Modbus 설정 파라미터
+            int missionModbusPort,   // 새로운 Modbus 설정 파라미터
+            byte missionModbusSlaveId) // 새로운 Modbus 설정 파라미터
         {
             _httpService = httpService ?? throw new ArgumentNullException(nameof(httpService));
             _databaseService = databaseService ?? throw new ArgumentNullException(nameof(databaseService));
             _waitRackTitle = waitRackTitle;
             _militaryCharacter = militaryCharacter;
             _getRackViewModelByIdFunc = getRackViewModelByIdFunc ?? throw new ArgumentNullException(nameof(getRackViewModelByIdFunc));
+
+            // 미션 실패 확인용 ModbusClientService 인스턴스 직접 생성
+            _missionModbusIp = missionModbusIp;
+            _missionModbusPort = missionModbusPort;
+            _missionModbusSlaveId = missionModbusSlaveId;
+            _missionCheckModbusService = new ModbusClientService(_missionModbusIp, _missionModbusPort, _missionModbusSlaveId);
+            Debug.WriteLine($"[RobotMissionService] Mission Check Modbus Service Initialized for TCP: {_missionModbusIp}:{_missionModbusPort}, Slave ID: {_missionModbusSlaveId}");
+
 
             SetupRobotMissionPollingTimer(); // 로봇 미션 폴링 타이머 설정 및 시작
         }
@@ -342,6 +368,77 @@ namespace WPF_WMS01.Services
             }
             // 첫 번째 단계 (CurrentStepIndex == 0)는 항상 linkedMissionId가 null입니다.
 
+            // Modbus Discrete Input 체크 로직 추가 (새로운 _missionCheckModbusService 사용)
+            if (currentStep.CheckModbusDiscreteInput && currentStep.ModbusDiscreteInputAddressToCheck.HasValue)
+            {
+                try
+                {
+                    Debug.WriteLine($"[RobotMissionService] Checking Modbus Discrete Input {currentStep.ModbusDiscreteInputAddressToCheck.Value} before sending mission step.");
+
+                    // 미션 체크용 Modbus 서비스 연결 시도 (필요 시)
+                    if (!_missionCheckModbusService.IsConnected)
+                    {
+                        await _missionCheckModbusService.ConnectAsync().ConfigureAwait(false);
+                    }
+
+                    // Modbus 연결이 여전히 안 되어 있다면 예외 발생 (ModbusClientService에서 이미 던지도록 수정됨)
+                    bool[] discreteInputStates = await _missionCheckModbusService.ReadDiscreteInputStatesAsync(currentStep.ModbusDiscreteInputAddressToCheck.Value, 1).ConfigureAwait(false);
+
+                    if (discreteInputStates != null && discreteInputStates.Length > 0 && discreteInputStates[0])
+                    {
+                        // Discrete input이 1이므로 미션 단계 실패 처리
+                        Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            MessageBox.Show($"Modbus Discrete Input {currentStep.ModbusDiscreteInputAddressToCheck.Value}이(가) 1입니다. 미션 단계 '{currentStep.ProcessStepDescription}'을(를) 시작할 수 없습니다. 미션 프로세스를 취소합니다.", "미션 취소", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        });
+                        Debug.WriteLine($"[RobotMissionService] Modbus Discrete Input {currentStep.ModbusDiscreteInputAddressToCheck.Value} is 1. Cancelling mission process {missionInfo.ProcessId}.");
+                        missionInfo.CurrentStatus = MissionStatusEnum.FAILED;
+                        missionInfo.HmiStatus.Status = "FAILED";
+                        missionInfo.HmiStatus.ProgressPercentage = 100;
+                        missionInfo.IsFailed = true; // 프로세스 실패 플래그 설정
+                        missionInfo.CancellationTokenSource.Cancel(); // 미션 취소 요청
+                        await HandleRobotMissionCompletion(missionInfo);
+                        return; // 미션 단계 전송 중단
+                    }
+                    else
+                    {
+                        Debug.WriteLine($"[RobotMissionService] Modbus Discrete Input {currentStep.ModbusDiscreteInputAddressToCheck.Value} is 0. Proceeding with mission step.");
+                    }
+                }
+                catch (InvalidOperationException ex) // ModbusClientService에서 던지는 연결 오류 예외
+                {
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        MessageBox.Show($"Modbus 연결 오류: {ex.Message}. 미션 프로세스를 취소합니다.", "미션 취소", MessageBoxButton.OK, MessageBoxImage.Error);
+                    });
+                    Debug.WriteLine($"[RobotMissionService] Modbus Connection Error during check: {ex.Message}. Cancelling mission process {missionInfo.ProcessId}.");
+                    missionInfo.CurrentStatus = MissionStatusEnum.FAILED;
+                    missionInfo.HmiStatus.Status = "FAILED";
+                    missionInfo.HmiStatus.ProgressPercentage = 100;
+                    missionInfo.IsFailed = true; // 프로세스 실패 플래그 설정
+                    missionInfo.CancellationTokenSource.Cancel(); // 미션 취소 요청
+                    await HandleRobotMissionCompletion(missionInfo);
+                    return; // 미션 단계 전송 중단
+                }
+                catch (Exception ex)
+                {
+                    // Modbus 읽기 중 오류 발생 시 미션 취소
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        MessageBox.Show($"Modbus Discrete Input {currentStep.ModbusDiscreteInputAddressToCheck.Value} 읽기 중 오류 발생: {ex.Message}. 미션 프로세스를 취소합니다.", "미션 취소", MessageBoxButton.OK, MessageBoxImage.Error);
+                    });
+                    Debug.WriteLine($"[RobotMissionService] Error reading Modbus Discrete Input {currentStep.ModbusDiscreteInputAddressToCheck.Value}: {ex.Message}. Cancelling mission process {missionInfo.ProcessId}.");
+                    missionInfo.CurrentStatus = MissionStatusEnum.FAILED;
+                    missionInfo.HmiStatus.Status = "FAILED";
+                    missionInfo.HmiStatus.ProgressPercentage = 100;
+                    missionInfo.IsFailed = true; // 프로세스 실패 플래그 설정
+                    missionInfo.CancellationTokenSource.Cancel(); // 미션 취소 요청
+                    await HandleRobotMissionCompletion(missionInfo);
+                    return; // 미션 단계 전송 중단
+                }
+            }
+
+
             var missionRequest = new MissionRequest
             {
                 RequestPayload = new MissionRequestPayload
@@ -379,7 +476,8 @@ namespace WPF_WMS01.Services
                 Debug.WriteLine($"  Endpoint: {requestEndpoint}");
                 Debug.WriteLine($"  Payload: {requestPayloadJson}");
 
-                var missionResponse = await _httpService.PostAsync<MissionRequest, MissionResponse>(requestEndpoint, missionRequest).ConfigureAwait(false);
+                // CancellationToken을 PostAsync에 전달
+                var missionResponse = await _httpService.PostAsync<MissionRequest, MissionResponse>(requestEndpoint, missionRequest, missionInfo.CancellationTokenSource.Token).ConfigureAwait(false);
 
                 if (missionResponse?.ReturnCode == 0 && missionResponse.Payload?.AcceptedMissions != null && missionResponse.Payload.AcceptedMissions.Any())
                 {
@@ -404,6 +502,16 @@ namespace WPF_WMS01.Services
                     missionInfo.IsFailed = true; // 프로세스 실패로 마크
                     await HandleRobotMissionCompletion(missionInfo); // 실패 처리
                 }
+            }
+            catch (OperationCanceledException) // 취소 예외 처리
+            {
+                Debug.WriteLine($"[RobotMissionService] Process {missionInfo.ProcessId} cancelled during mission step send.");
+                missionInfo.CurrentStatus = MissionStatusEnum.CANCELLED;
+                missionInfo.HmiStatus.Status = MissionStatusEnum.CANCELLED.ToString();
+                missionInfo.HmiStatus.ProgressPercentage = (int)(((double)(missionInfo.CurrentStepIndex + 1) / missionInfo.TotalSteps) * 100);
+                OnShowAutoClosingMessage?.Invoke($"로봇 미션 프로세스 취소됨: {currentStep.ProcessStepDescription}");
+                missionInfo.IsFailed = true; // 취소도 실패로 간주하여 처리
+                await HandleRobotMissionCompletion(missionInfo);
             }
             catch (HttpRequestException httpEx)
             {
@@ -526,7 +634,8 @@ namespace WPF_WMS01.Services
                     if (processInfo.ProcessType == "FakeExecuteInboundProduct")
                     {
                         newDestinationRackType = 3; // 재공품 랙 타입으로 변경 (완제품 랙에서 재공품 랙으로)
-                    } else if (processInfo.ProcessType == "HandleHalfPalletExport")
+                    }
+                    else if (processInfo.ProcessType == "HandleHalfPalletExport")
                     {
                         newSourceRackType = 1;
                     }
@@ -666,7 +775,53 @@ namespace WPF_WMS01.Services
                 }
                 _activeRobotProcesses.Clear(); // 딕셔너리 비우기
             }
+            _missionCheckModbusService?.Dispose(); // 새로 생성한 Modbus 서비스도 해제
             Debug.WriteLine("[RobotMissionService] Disposed.");
+        }
+
+        // IRobotMissionService 인터페이스의 나머지 메서드 구현
+        public Task UpdateHmiStatus(string processId, string status, int progressPercentage)
+        {
+            lock (_activeRobotProcessesLock)
+            {
+                if (_activeRobotProcesses.TryGetValue(processId, out var processInfo))
+                {
+                    processInfo.HmiStatus.Status = status;
+                    processInfo.HmiStatus.ProgressPercentage = progressPercentage;
+                    // UI 업데이트를 위해 MainViewModel에 이벤트를 발생시킬 수 있음
+                    // 예: OnShowAutoClosingMessage?.Invoke($"HMI Status Update: {status} {progressPercentage}%");
+                }
+            }
+            return Task.CompletedTask;
+        }
+
+        public Task CompleteMissionStep(string processId, int stepIndex, MissionStatusEnum status, string message = null)
+        {
+            lock (_activeRobotProcessesLock)
+            {
+                if (_activeRobotProcesses.TryGetValue(processId, out var processInfo))
+                {
+                    // 이 메서드는 외부에서 강제로 단계를 완료/실패 처리할 때 사용될 수 있습니다.
+                    // 현재 폴링 로직에서 대부분의 상태 변경을 처리하므로, 필요에 따라 구현을 조정합니다.
+                    Debug.WriteLine($"[RobotMissionService] External CompleteMissionStep called for Process {processId}, Step {stepIndex} with status {status}. Message: {message}");
+                    processInfo.CurrentStepIndex = stepIndex; // 강제로 단계 인덱스 설정
+                    processInfo.HmiStatus.Status = status.ToString();
+                    processInfo.HmiStatus.CurrentStepDescription = message ?? $"단계 {stepIndex} 완료/실패";
+                    processInfo.HmiStatus.ProgressPercentage = (int)(((double)(stepIndex + 1) / processInfo.TotalSteps) * 100);
+
+                    if (status == MissionStatusEnum.COMPLETED && stepIndex >= processInfo.TotalSteps - 1) // 마지막 단계 완료
+                    {
+                        processInfo.IsFinished = true;
+                        // HandleRobotMissionCompletion(processInfo); // 여기서 호출하면 중복될 수 있으므로 주의
+                    }
+                    else if (status == MissionStatusEnum.FAILED || status == MissionStatusEnum.CANCELLED || status == MissionStatusEnum.REJECTED)
+                    {
+                        processInfo.IsFailed = true;
+                        // HandleRobotMissionCompletion(processInfo); // 여기서 호출하면 중복될 수 있으므로 주의
+                    }
+                }
+            }
+            return Task.CompletedTask;
         }
     }
 }

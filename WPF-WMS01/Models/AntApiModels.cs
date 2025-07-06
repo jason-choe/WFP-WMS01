@@ -303,6 +303,13 @@ namespace WPF_WMS01.Models
             set => SetProperty(ref _hmiStatus, value);
         }
 
+        private MissionStatusEnum _currentStatus; // 현재 프로세스의 전체 상태 (RECEIVED, ACCEPTED, FAILED 등)
+        public MissionStatusEnum CurrentStatus
+        {
+            get => _currentStatus;
+            set => SetProperty(ref _currentStatus, value);
+        }
+        
         private bool _isFinished;
         public bool IsFinished // 전체 프로세스 완료 여부 (성공적으로 모든 단계 완료)
         {
@@ -339,6 +346,7 @@ namespace WPF_WMS01.Models
             LastSentMissionId = null;
             LastCompletedMissionId = null;
             HmiStatus = new HmiStatusInfo { Status = MissionStatusEnum.FAILED.ToString(), ProgressPercentage = 0, CurrentStepDescription = "미션 대기 중" };
+            CurrentStatus = MissionStatusEnum.PENDING; // 초기 상태 설정
             IsFinished = false;
             IsFailed = false;
             RacksLockedByProcess = racksLockedByProcess ?? new List<int>();
@@ -363,6 +371,15 @@ namespace WPF_WMS01.Models
         // 랙 업데이트 관련 필드: IsLinkable이 false일 때만 유효
         public int? SourceRackId { get; set; }
         public int? DestinationRackId { get; set; }
+
+        /// <summary>
+        /// 이 미션 단계에서 Modbus Discrete Input 검사를 수행할지 여부입니다.
+        /// </summary>
+        public bool CheckModbusDiscreteInput { get; set; } = false;
+        /// <summary>
+        /// 검사할 Modbus Discrete Input의 주소입니다. CheckModbusDiscreteInput이 true일 때만 유효합니다.
+        /// </summary>
+        public ushort? ModbusDiscreteInputAddressToCheck { get; set; } = null;
     }
 
     /// <summary>
@@ -404,6 +421,20 @@ namespace WPF_WMS01.Models
         {
             get => _currentStepDescription;
             set => SetProperty(ref _currentStepDescription, value);
+        }
+
+        private int _currentStepIndex;
+        public int CurrentStepIndex
+        {
+            get => _currentStepIndex;
+            set => SetProperty(ref _currentStepIndex, value);
+        }
+
+        private int _totalSteps;
+        public int TotalSteps
+        {
+            get => _totalSteps;
+            set => SetProperty(ref _totalSteps, value);
         }
     }
 }

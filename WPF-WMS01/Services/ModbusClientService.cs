@@ -1,4 +1,5 @@
-﻿using Modbus.Device; // NModbus4 라이브러리
+﻿// Services/ModbusClientService.cs
+using Modbus.Device; // NModbus4 라이브러리
 using System.Net.Sockets;
 using System.Threading.Tasks;
 using System;
@@ -172,17 +173,14 @@ namespace WPF_WMS01.Services
         /// <param name="startAddress">읽기 시작할 Discrete Input 주소</param>
         /// <param name="numberOfPoints">읽을 Discrete Input의 개수</param>
         /// <returns>읽은 Discrete Input 값들의 배열 (bool[]), 오류 발생 시 null</returns>
+        /// <exception cref="InvalidOperationException">Modbus 서비스가 연결되지 않은 경우 발생.</exception>
         public async Task<bool[]> ReadDiscreteInputStatesAsync(ushort startAddress, ushort numberOfPoints)
         {
-            if (!IsConnected)
+            if (!IsConnected || _master == null)
             {
-                Debug.WriteLine("[ModbusService] Read Discrete Input request: Not Connected. Attempting to reconnect...");
-                await ConnectAsync().ConfigureAwait(false);
-                if (!IsConnected)
-                {
-                    Debug.WriteLine("[ModbusService] Read Discrete Input request: Reconnection failed. Cannot read discrete inputs.");
-                    return null;
-                }
+                Debug.WriteLine($"[ModbusService] ReadDiscreteInputStatesAsync: Not connected or master is null. Cannot read.");
+                // 연결이 안 된 상태에서 읽기 시도 시 명시적으로 예외 발생
+                throw new InvalidOperationException("Modbus service is not connected. Cannot read discrete input states.");
             }
 
             try
@@ -195,8 +193,8 @@ namespace WPF_WMS01.Services
             catch (Exception ex)
             {
                 Debug.WriteLine($"[ModbusService] Error reading discrete inputs from {startAddress}: {ex.GetType().Name} - {ex.Message}. StackTrace: {ex.StackTrace}");
-                Dispose();
-                return null;
+                Dispose(); // 통신 오류 발생 시 연결 해제
+                throw; // 예외 다시 던지기
             }
         }
 
@@ -206,13 +204,14 @@ namespace WPF_WMS01.Services
         /// </summary>
         /// <param name="address">읽을 코일 주소</param>
         /// <returns>코일 값 (bool), 오류 발생 시 false</returns>
+        /// <exception cref="InvalidOperationException">Modbus 서비스가 연결되지 않은 경우 발생.</exception>
         public async Task<bool> ReadSingleCoilAsync(ushort address)
         {
-            if (!IsConnected)
+            if (!IsConnected || _master == null)
             {
-                Debug.WriteLine($"[ModbusService] Read single coil request: Not Connected. Attempting to reconnect for address {address}...");
-                await ConnectAsync().ConfigureAwait(false);
-                if (!IsConnected) return false;
+                Debug.WriteLine($"[ModbusService] Read single coil request: Not Connected. Cannot read.");
+                // 연결이 안 된 상태에서 읽기 시도 시 명시적으로 예외 발생
+                throw new InvalidOperationException("Modbus service is not connected. Cannot read single coil.");
             }
 
             try
@@ -224,7 +223,7 @@ namespace WPF_WMS01.Services
             {
                 Debug.WriteLine($"[ModbusService] Error reading single coil at address {address}: {ex.GetType().Name} - {ex.Message}. StackTrace: {ex.StackTrace}");
                 Dispose();
-                return false;
+                throw; // 예외 다시 던지기
             }
         }
 
@@ -236,17 +235,14 @@ namespace WPF_WMS01.Services
         /// <param name="address">쓸 코일의 주소</param>
         /// <param name="value">설정할 값 (true/false)</param>
         /// <returns>쓰기 작업 성공 여부</returns>
+        /// <exception cref="InvalidOperationException">Modbus 서비스가 연결되지 않은 경우 발생.</exception>
         public async Task<bool> WriteSingleCoilAsync(ushort address, bool value)
         {
-            if (!IsConnected)
+            if (!IsConnected || _master == null)
             {
-                Debug.WriteLine($"[ModbusService] Write request for address {address}: Not Connected. Attempting to reconnect...");
-                await ConnectAsync().ConfigureAwait(false); // ConnectAsync 호출
-                if (!IsConnected)
-                {
-                    Debug.WriteLine($"[ModbusService] Write request for address {address}: Reconnection failed. Cannot write coil.");
-                    return false; // 재연결 실패 시 false 반환
-                }
+                Debug.WriteLine($"[ModbusService] Write request for address {address}: Not Connected. Cannot write.");
+                // 연결이 안 된 상태에서 쓰기 시도 시 명시적으로 예외 발생
+                throw new InvalidOperationException("Modbus service is not connected. Cannot write single coil.");
             }
 
             try
@@ -260,7 +256,7 @@ namespace WPF_WMS01.Services
             {
                 Debug.WriteLine($"[ModbusService] Error writing coil to address {address}: {ex.GetType().Name} - {ex.Message}. StackTrace: {ex.StackTrace}");
                 Dispose(); // 통신 오류 발생 시 연결 끊고 재연결 준비
-                return false;
+                throw; // 예외 다시 던지기
             }
         }
 

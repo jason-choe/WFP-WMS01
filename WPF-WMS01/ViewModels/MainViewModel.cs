@@ -675,7 +675,7 @@ namespace WPF_WMS01.ViewModels
                 sourceRack, // 여전히 인터페이스 호환을 위해 전달하지만, RobotMissionService에서 사용하지 않음
                 destinationRack, // 여전히 인터페이스 호환을 위해 전달하지만, RobotMissionService에서 사용하지 않음
                 destinationLine,
-                () => InputStringForButton,
+                () => InputStringForButton, // InputStringForButton 값을 가져오는 델리게이트 전달
                 racksLockedAtStart,
                 racksToProcess
             );
@@ -1044,7 +1044,7 @@ namespace WPF_WMS01.ViewModels
                             new MissionStepDefinition { ProcessStepDescription = $"{targetRackVm.Title} 운반 완료", MissionType = "8", ToNode = "Turn_Rack_29", Payload = _warehousePayload, IsLinkable = true, LinkWaitTimeout = 3600 },
                             // 5.
                             new MissionStepDefinition {
-                                ProcessStepDescription = $"{targetRackVm.Title} 복귀 완료", MissionType = "8", ToNode = "Charge1", Payload = _warehousePayload, IsLinkable = false, LinkWaitTimeout = 3600,
+                                ProcessStepDescription = $"{targetRackVm.Title} 복귀 완료", MissionType = "8", ToNode = "Charge1", Payload = _warehousePayload, IsLinkable = false, LinkWaitTimeout = 3600, CheckModbusDiscreteInput = true, ModbusDiscreteInputAddressToCheck = 13,
                                 SourceRackId = waitRackVm.Id, DestinationRackId = targetRackVm.Id
                             }
                         };
@@ -1059,7 +1059,7 @@ namespace WPF_WMS01.ViewModels
                             new MissionStepDefinition { ProcessStepDescription = $"{waitRackVm.Title} 제품 픽업 & 드롭", MissionType = "7", FromNode = "Palette_OUT_PickUP", ToNode = $"Rack_{shelf}_Drop", Payload = _warehousePayload, IsLinkable = true, LinkWaitTimeout = 3600 },
                             // 3. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
                             new MissionStepDefinition {
-                                ProcessStepDescription = $"{targetRackVm.Title} 복귀 완료", MissionType = "8", ToNode = "Charge1", Payload = _warehousePayload, IsLinkable = false, LinkWaitTimeout = 3600,
+                                ProcessStepDescription = $"{targetRackVm.Title} 복귀 완료", MissionType = "8", ToNode = "Charge1", Payload = _warehousePayload, IsLinkable = false, LinkWaitTimeout = 3600, CheckModbusDiscreteInput = true, ModbusDiscreteInputAddressToCheck = 13,
                                 SourceRackId = waitRackVm.Id, DestinationRackId = targetRackVm.Id
                             }
                         };

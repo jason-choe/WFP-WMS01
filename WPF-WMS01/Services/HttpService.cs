@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using WPF_WMS01.Models; // RobotMissionModels.cs에 정의된 모델들 포함
+using System.Threading; // CancellationToken을 위해 추가
 
 namespace WPF_WMS01.Services
 {
@@ -95,19 +96,31 @@ namespace WPF_WMS01.Services
             }
         }
 
-        // HTTP POST 요청을 보내고 응답을 역직렬화
+        // HTTP POST 요청을 보내고 응답을 역직렬화 (CancellationToken 없음)
         public async Task<TResponse> PostAsync<TRequest, TResponse>(string endpoint, TRequest data)
+        {
+            // CancellationToken.None을 사용하여 CancellationToken을 받는 오버로드를 호출
+            return await PostAsync<TRequest, TResponse>(endpoint, data, CancellationToken.None);
+        }
+
+        // HTTP POST 요청을 보내고 응답을 역직렬화 (CancellationToken 포함)
+        public async Task<TResponse> PostAsync<TRequest, TResponse>(string endpoint, TRequest data, CancellationToken cancellationToken)
         {
             try
             {
                 string jsonContent = JsonConvert.SerializeObject(data, _jsonSettings); // static _jsonSettings 사용
                 StringContent content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
 
-                HttpResponseMessage response = await _httpClient.PostAsync(endpoint, content);
+                HttpResponseMessage response = await _httpClient.PostAsync(endpoint, content, cancellationToken); // CancellationToken 전달
                 response.EnsureSuccessStatusCode();
 
                 string responseBody = await response.Content.ReadAsStringAsync();
                 return JsonConvert.DeserializeObject<TResponse>(responseBody, _jsonSettings); // static _jsonSettings 사용
+            }
+            catch (OperationCanceledException ex)
+            {
+                Debug.WriteLine($"POST request to {endpoint} was cancelled: {ex.Message}");
+                throw; // 취소 예외는 그대로 다시 던짐
             }
             catch (HttpRequestException ex)
             {
@@ -129,13 +142,25 @@ namespace WPF_WMS01.Services
         // HTTP POST 요청 (응답 본문이 없는 경우)
         public async Task PostAsync<TRequest>(string endpoint, TRequest data)
         {
+            // CancellationToken.None을 사용하여 CancellationToken을 받는 오버로드를 호출
+            await PostAsync(endpoint, data, CancellationToken.None);
+        }
+
+        // HTTP POST 요청 (응답 본문이 없는 경우, CancellationToken 포함)
+        public async Task PostAsync<TRequest>(string endpoint, TRequest data, CancellationToken cancellationToken)
+        {
             try
             {
                 string jsonContent = JsonConvert.SerializeObject(data, _jsonSettings); // static _jsonSettings 사용
                 StringContent content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
 
-                HttpResponseMessage response = await _httpClient.PostAsync(endpoint, content);
+                HttpResponseMessage response = await _httpClient.PostAsync(endpoint, content, cancellationToken);
                 response.EnsureSuccessStatusCode();
+            }
+            catch (OperationCanceledException ex)
+            {
+                Debug.WriteLine($"POST request to {endpoint} was cancelled: {ex.Message}");
+                throw; // 취소 예외는 그대로 다시 던짐
             }
             catch (HttpRequestException ex)
             {

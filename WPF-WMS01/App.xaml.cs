@@ -29,6 +29,7 @@ namespace WPF_WMS01
 
             // DI 컨테이너에서 인스턴스를 가져와 필드에 할당 (Dispose를 위해)
             _mainViewModelInstance = ServiceProvider.GetRequiredService<MainViewModel>();
+            // MainViewModel에 주입된 ModbusClientService는 콜 버튼용이므로, _modbusServiceInstance에 할당
             _modbusServiceInstance = ServiceProvider.GetRequiredService<ModbusClientService>();
             _robotMissionServiceInstance = (RobotMissionService)ServiceProvider.GetRequiredService<IRobotMissionService>();
 
@@ -52,15 +53,26 @@ namespace WPF_WMS01
             string warehousePayload = ConfigurationManager.AppSettings["WarehouseAMR"] ?? "AMR_1";
             string productionLinePayload = ConfigurationManager.AppSettings["ProductionLineAMR"] ?? "AMR_2";
 
+            // 콜 버튼용 Modbus 설정 읽기
+            string callButtonModbusIp = ConfigurationManager.AppSettings["ModbusIpAddress"];
+            int callButtonModbusPort = int.Parse(ConfigurationManager.AppSettings["ModbusPort"]);
+            byte callButtonModbusSlaveId = byte.Parse(ConfigurationManager.AppSettings["ModbusSlaveId"]);
+
+            // 미션 실패 확인용 Modbus 설정 읽기
+            string missionCheckModbusIp = ConfigurationManager.AppSettings["MissionCheckModbusIpAddress"];
+            int missionCheckModbusPort = int.Parse(ConfigurationManager.AppSettings["MissionCheckModbusPort"]);
+            byte missionCheckModbusSlaveId = byte.Parse(ConfigurationManager.AppSettings["MissionCheckModbusSlaveId"]);
+
 
             Debug.WriteLine("[App.ConfigureServices] Registering HttpService, DatabaseService, ModbusClientService...");
             services.AddSingleton<HttpService>(new HttpService(baseApiUrl));
             services.AddSingleton<DatabaseService>();
+            // 콜 버튼용 ModbusClientService 등록
             services.AddSingleton<ModbusClientService>(provider =>
                 new ModbusClientService(
-                    ConfigurationManager.AppSettings["ModbusIpAddress"],
-                    int.Parse(ConfigurationManager.AppSettings["ModbusPort"]),
-                    byte.Parse(ConfigurationManager.AppSettings["ModbusSlaveId"])
+                    callButtonModbusIp,
+                    callButtonModbusPort,
+                    callButtonModbusSlaveId
                 ));
 
             Debug.WriteLine("[App.ConfigureServices] Registering MainViewModel (initial)...");
@@ -69,7 +81,7 @@ namespace WPF_WMS01
                 new MainViewModel(
                     provider.GetRequiredService<DatabaseService>(),
                     provider.GetRequiredService<HttpService>(),
-                    provider.GetRequiredService<ModbusClientService>(),
+                    provider.GetRequiredService<ModbusClientService>(), // 콜 버튼용 ModbusClientService 주입
                     warehousePayload, // App.config에서 읽은 값 전달
                     productionLinePayload // App.config에서 읽은 값 전달
                 ));
@@ -86,7 +98,10 @@ namespace WPF_WMS01
                     provider.GetRequiredService<DatabaseService>(),
                     waitRackTitle,
                     militaryCharacter,
-                    mainViewModelInstance.GetRackViewModelById // MainViewModel의 메서드를 델리게이트로 전달
+                    mainViewModelInstance.GetRackViewModelById, // MainViewModel의 메서드를 델리게이트로 전달
+                    missionCheckModbusIp, // 미션 실패 확인용 Modbus IP 전달
+                    missionCheckModbusPort, // 미션 실패 확인용 Modbus Port 전달
+                    missionCheckModbusSlaveId // 미션 실패 확인용 Modbus Slave ID 전달
                 );
             });
 
@@ -113,8 +128,8 @@ namespace WPF_WMS01
             base.OnExit(e);
             Debug.WriteLine("[App] OnExit: Disposing services...");
             _mainViewModelInstance?.Dispose();
-            _modbusServiceInstance?.Dispose();
-            _robotMissionServiceInstance?.Dispose();
+            _modbusServiceInstance?.Dispose(); // 콜 버튼용 Modbus 서비스 해제
+            _robotMissionServiceInstance?.Dispose(); // 로봇 미션 서비스 해제 (내부적으로 미션 체크 Modbus 서비스도 해제)
 
             if (ServiceProvider is IDisposable disposableProvider)
             {
