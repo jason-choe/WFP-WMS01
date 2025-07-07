@@ -394,7 +394,8 @@ namespace WPF_WMS01.Models
         COMPLETED = 4, // 4로 명확히 정의
         CANCELLED = 5,
         FAILED = 7,
-        PENDING // 커스텀 상태: ANT 서버에 아직 전송되지 않았거나 초기 상태
+        PENDING = 6, // 커스텀 상태: ANT 서버에 아직 전송되지 않았거나 초기 상태
+        UNKNOWN = 99 // 정의되지 않은 상태
     }
 
     /// <summary>

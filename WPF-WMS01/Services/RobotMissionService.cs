@@ -5,16 +5,61 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Threading; // DispatcherTimer 사용을 위해 필요
 using System.Diagnostics; // Debug.WriteLine을 위해 필요
+using System.Threading; // CancellationTokenSource 사용을 위해 추가
 using WPF_WMS01.Models; // RobotMissionInfo, MissionStepDefinition 등 모델 참조
 using WPF_WMS01.ViewModels; // RackViewModel 참조를 위해 필요
 using System.Net.Http; // HttpRequestException을 위해 필요
 using Newtonsoft.Json; // JsonConvert를 위해 필요
 using JsonException = Newtonsoft.Json.JsonException; // 충돌 방지를 위해 별칭 사용
-using System.Windows; // Application.Current.Dispatcher.Invoke를 위해 추가
+using System.Windows; // Application.Current.Dispatcher.Invoke, MessageBox, MessageBoxImage를 위해 추가
 using System.Configuration; // ConfigurationManager를 위해 추가
 
 namespace WPF_WMS01.Services
 {
+    // RobotMissionInfo 클래스 수정: 폴링 재시도 관련 필드 추가
+    public class RobotMissionInfo
+    {
+        public string ProcessId { get; }
+        public string ProcessType { get; }
+        public List<MissionStepDefinition> MissionSteps { get; }
+        public int TotalSteps => MissionSteps.Count;
+        public int CurrentStepIndex { get; set; } = 0; // 현재 진행 중인 미션 단계의 인덱스 (0부터 시작)
+        public int? LastSentMissionId { get; set; } // ANT 서버에 마지막으로 전송한 미션의 ID
+        public int? LastCompletedMissionId { get; set; } // ANT 서버에서 마지막으로 완료된 미션의 ID
+        public HmiStatusInfo HmiStatus { get; } // HMI에 표시될 상태 정보
+        public MissionStatusEnum CurrentStatus { get; set; } = MissionStatusEnum.UNKNOWN; // 내부 상태 추적
+        public bool IsFinished { get; set; } = false; // 전체 프로세스 완료 여부
+        public bool IsFailed { get; set; } = false; // 전체 프로세스 실패 여부
+        public CancellationTokenSource CancellationTokenSource { get; } // 미션 취소를 위한 CancellationTokenSource
+        public List<int> RacksLockedByProcess { get; } // 이 프로세스에 의해 잠긴 랙 ID 목록
+        public List<RackViewModel> RacksToProcess { get; set; } // (출고 등) 처리할 랙 ViewModel 목록
+
+        // 폴링 재시도 관련 필드 추가
+        public int PollingRetryCount { get; set; } = 0;
+        public DateTime LastPollingAttemptTime { get; set; } = DateTime.MinValue;
+        public const int MaxPollingRetries = 3; // 최대 재시도 횟수
+        public const int PollingRetryDelaySeconds = 2; // 재시도 간 지연 시간 (초)
+
+        // CurrentMissionDetail 속성 추가
+        public MissionDetail CurrentMissionDetail { get; set; }
+
+        public RobotMissionInfo(string processId, string processType, List<MissionStepDefinition> missionSteps, List<int> racksLockedByProcess)
+        {
+            ProcessId = processId;
+            ProcessType = processType;
+            MissionSteps = missionSteps ?? new List<MissionStepDefinition>();
+            HmiStatus = new HmiStatusInfo
+            {
+                Status = "INITIATED",
+                ProgressPercentage = 0,
+                CurrentStepDescription = "미션 시작 대기 중"
+            };
+            CancellationTokenSource = new CancellationTokenSource();
+            RacksLockedByProcess = racksLockedByProcess ?? new List<int>();
+        }
+    }
+
+
     /// <summary>
     /// 로봇 미션의 시작, 상태 폴링, 완료/실패 처리를 담당하는 서비스 클래스입니다.
     /// MainViewModel로부터 로봇 미션 관련 로직이 분리되었습니다.
@@ -128,12 +173,23 @@ namespace WPF_WMS01.Services
                 // 현재 추적 중인 미션 (LastSentMissionId)이 있을 경우에만 폴링을 시도
                 if (processInfo.LastSentMissionId.HasValue)
                 {
+                    // 재시도 로직: 너무 자주 폴링하지 않도록 시간 체크
+                    if (DateTime.Now - processInfo.LastPollingAttemptTime < TimeSpan.FromSeconds(RobotMissionInfo.PollingRetryDelaySeconds) && processInfo.PollingRetryCount > 0)
+                    {
+                        Debug.WriteLine($"[RobotMissionService] Process {processInfo.ProcessId}: Skipping polling due to retry delay. Retries: {processInfo.PollingRetryCount}");
+                        continue;
+                    }
+
+                    processInfo.LastPollingAttemptTime = DateTime.Now; // 마지막 폴링 시도 시간 업데이트
+
                     try
                     {
                         var missionInfoResponse = await _httpService.GetAsync<GetMissionInfoResponse>($"wms/rest/v{_httpService.CurrentApiVersionMajor}.{_httpService.CurrentApiVersionMinor}/missions/{processInfo.LastSentMissionId.Value}").ConfigureAwait(false);
 
                         if (missionInfoResponse?.Payload?.Missions != null && missionInfoResponse.Payload.Missions.Any())
                         {
+                            processInfo.PollingRetryCount = 0; // 성공적으로 응답 받으면 재시도 카운트 리셋
+
                             var latestMissionDetail = missionInfoResponse.Payload.Missions.First();
                             processInfo.CurrentMissionDetail = latestMissionDetail;
 
@@ -241,32 +297,49 @@ namespace WPF_WMS01.Services
                         }
                         else
                         {
-                            Debug.WriteLine($"[RobotMissionService] Mission {processInfo.LastSentMissionId} not found or no missions in payload. Potentially completed or invalid ID.");
-                            // 미션이 없거나 페이로드가 비어있지만, 프로세스 전체가 완료되지 않았다면 오류로 간주
-                            if (processInfo.LastSentMissionId.HasValue && !processInfo.IsFinished && !processInfo.IsFailed)
+                            // 미션 정보를 찾을 수 없는 경우 (아직 생성되지 않았거나, 이미 너무 오래되어 조회 불가능)
+                            // 재시도 횟수 증가
+                            processInfo.PollingRetryCount++;
+                            Debug.WriteLine($"[RobotMissionService] Mission {processInfo.LastSentMissionId} not found or no missions in payload. Process {processInfo.ProcessId}. Retry count: {processInfo.PollingRetryCount}/{RobotMissionInfo.MaxPollingRetries}.");
+
+                            if (processInfo.PollingRetryCount >= RobotMissionInfo.MaxPollingRetries)
                             {
+                                Debug.WriteLine($"[RobotMissionService] Max retries reached for Process {processInfo.ProcessId}. Marking as FAILED.");
                                 processInfo.HmiStatus.Status = MissionStatusEnum.FAILED.ToString();
-                                OnShowAutoClosingMessage?.Invoke($"로봇 미션 {processInfo.ProcessType} (ID: {processInfo.ProcessId}) 폴링 실패: 미션 {processInfo.LastSentMissionId.Value} 정보를 찾을 수 없습니다.");
+                                OnShowAutoClosingMessage?.Invoke($"로봇 미션 {processInfo.ProcessType} (ID: {processInfo.ProcessId}) 폴링 실패: 미션 {processInfo.LastSentMissionId.Value} 정보를 찾을 수 없습니다. (최대 재시도 횟수 초과)");
                                 processInfo.IsFailed = true;
                                 await HandleRobotMissionCompletion(processInfo);
                             }
+                            // 재시도 횟수가 MaxPollingRetries 미만이면 다음 틱에서 다시 시도
                         }
                     }
                     catch (HttpRequestException httpEx)
                     {
-                        Debug.WriteLine($"[RobotMissionService] HTTP Request Error for mission {processInfo.LastSentMissionId}: {httpEx.Message}");
-                        processInfo.HmiStatus.Status = MissionStatusEnum.FAILED.ToString();
-                        OnShowAutoClosingMessage?.Invoke($"로봇 미션 상태 폴링 실패 (HTTP 오류): {httpEx.Message.Substring(0, Math.Min(100, httpEx.Message.Length))}");
-                        processInfo.IsFailed = true; // 폴링 실패도 프로세스 실패로 간주
-                        await HandleRobotMissionCompletion(processInfo);
+                        processInfo.PollingRetryCount++;
+                        Debug.WriteLine($"[RobotMissionService] HTTP Request Error for mission {processInfo.LastSentMissionId}: {httpEx.Message}. Process {processInfo.ProcessId}. Retry count: {processInfo.PollingRetryCount}/{RobotMissionInfo.MaxPollingRetries}.");
+
+                        if (processInfo.PollingRetryCount >= RobotMissionInfo.MaxPollingRetries)
+                        {
+                            Debug.WriteLine($"[RobotMissionService] Max retries reached for Process {processInfo.ProcessId} due to HTTP error. Marking as FAILED.");
+                            processInfo.HmiStatus.Status = MissionStatusEnum.FAILED.ToString();
+                            OnShowAutoClosingMessage?.Invoke($"로봇 미션 상태 폴링 실패 (HTTP 오류, 최대 재시도 횟수 초과): {httpEx.Message.Substring(0, Math.Min(100, httpEx.Message.Length))}");
+                            processInfo.IsFailed = true; // 폴링 실패도 프로세스 실패로 간주
+                            await HandleRobotMissionCompletion(processInfo);
+                        }
                     }
                     catch (Exception ex)
                     {
-                        Debug.WriteLine($"[RobotMissionService] Error polling mission status for process {processInfo.ProcessId}: {ex.Message}");
-                        processInfo.HmiStatus.Status = MissionStatusEnum.FAILED.ToString();
-                        OnShowAutoClosingMessage?.Invoke($"로봇 미션 상태 폴링 중 예상치 못한 오류: {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}");
-                        processInfo.IsFailed = true; // 예상치 못한 오류도 프로세스 실패로 간주
-                        await HandleRobotMissionCompletion(processInfo);
+                        processInfo.PollingRetryCount++;
+                        Debug.WriteLine($"[RobotMissionService] Error polling mission status for process {processInfo.ProcessId}: {ex.Message}. Retry count: {processInfo.PollingRetryCount}/{RobotMissionInfo.MaxPollingRetries}.");
+
+                        if (processInfo.PollingRetryCount >= RobotMissionInfo.MaxPollingRetries)
+                        {
+                            Debug.WriteLine($"[RobotMissionService] Max retries reached for Process {processInfo.ProcessId} due to unexpected error. Marking as FAILED.");
+                            processInfo.HmiStatus.Status = MissionStatusEnum.FAILED.ToString();
+                            OnShowAutoClosingMessage?.Invoke($"로봇 미션 상태 폴링 중 예상치 못한 오류 (최대 재시도 횟수 초과): {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}");
+                            processInfo.IsFailed = true; // 예상치 못한 오류도 프로세스 실패로 간주
+                            await HandleRobotMissionCompletion(processInfo);
+                        }
                     }
                 }
                 else
@@ -389,6 +462,7 @@ namespace WPF_WMS01.Services
                         // Discrete input이 1이므로 미션 단계 실패 처리
                         Application.Current.Dispatcher.Invoke(() =>
                         {
+                            // MessageBox.Show()에 ownerWindow를 명시적으로 전달
                             MessageBox.Show(Application.Current.MainWindow, $"Modbus Discrete Input {currentStep.ModbusDiscreteInputAddressToCheck.Value}이(가) 1입니다. 미션 단계 '{currentStep.ProcessStepDescription}'을(를) 시작할 수 없습니다. 미션 프로세스를 취소합니다.", "미션 취소", MessageBoxButton.OK, MessageBoxImage.Warning);
                         });
                         Debug.WriteLine($"[RobotMissionService] Modbus Discrete Input {currentStep.ModbusDiscreteInputAddressToCheck.Value} is 1. Cancelling mission process {missionInfo.ProcessId}.");
@@ -409,7 +483,8 @@ namespace WPF_WMS01.Services
                 {
                     Application.Current.Dispatcher.Invoke(() =>
                     {
-                        MessageBox.Show(Application.Current.MainWindow, $"Modbus 연결 오류: {ex.Message}. AMR 모드버스를 확인하세요. AMT 복귀 명령 취소", "Modbus 연결 오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                        // MessageBox.Show()에 ownerWindow를 명시적으로 전달
+                        MessageBox.Show(Application.Current.MainWindow, $"Modbus 연결 오류: {ex.Message}. 미션 프로세스를 취소합니다.", "미션 취소", MessageBoxButton.OK, MessageBoxImage.Error);
                     });
                     Debug.WriteLine($"[RobotMissionService] Modbus Connection Error during check: {ex.Message}. Cancelling mission process {missionInfo.ProcessId}.");
                     missionInfo.CurrentStatus = MissionStatusEnum.FAILED;
@@ -425,6 +500,7 @@ namespace WPF_WMS01.Services
                     // Modbus 읽기 중 오류 발생 시 미션 취소
                     Application.Current.Dispatcher.Invoke(() =>
                     {
+                        // MessageBox.Show()에 ownerWindow를 명시적으로 전달
                         MessageBox.Show(Application.Current.MainWindow, $"Modbus Discrete Input {currentStep.ModbusDiscreteInputAddressToCheck.Value} 읽기 중 오류 발생: {ex.Message}. 미션 프로세스를 취소합니다.", "미션 취소", MessageBoxButton.OK, MessageBoxImage.Error);
                     });
                     Debug.WriteLine($"[RobotMissionService] Error reading Modbus Discrete Input {currentStep.ModbusDiscreteInputAddressToCheck.Value}: {ex.Message}. Cancelling mission process {missionInfo.ProcessId}.");
