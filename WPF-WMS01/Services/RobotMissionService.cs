@@ -33,6 +33,7 @@ namespace WPF_WMS01.Services
         public CancellationTokenSource CancellationTokenSource { get; } // 미션 취소를 위한 CancellationTokenSource
         public List<int> RacksLockedByProcess { get; } // 이 프로세스에 의해 잠긴 랙 ID 목록
         public List<RackViewModel> RacksToProcess { get; set; } // (출고 등) 처리할 랙 ViewModel 목록
+        public ushort? InitiatingCoilAddress { get; set; } // 이 미션을 시작한 Modbus Coil의 주소 (경광등 제어용)
 
         // 폴링 재시도 관련 필드 추가
         public int PollingRetryCount { get; set; } = 0;
@@ -43,7 +44,7 @@ namespace WPF_WMS01.Services
         // CurrentMissionDetail 속성 추가
         public MissionDetail CurrentMissionDetail { get; set; }
 
-        public RobotMissionInfo(string processId, string processType, List<MissionStepDefinition> missionSteps, List<int> racksLockedByProcess)
+        public RobotMissionInfo(string processId, string processType, List<MissionStepDefinition> missionSteps, List<int> racksLockedByProcess, ushort? initiatingCoilAddress)
         {
             ProcessId = processId;
             ProcessType = processType;
@@ -56,6 +57,7 @@ namespace WPF_WMS01.Services
             };
             CancellationTokenSource = new CancellationTokenSource();
             RacksLockedByProcess = racksLockedByProcess ?? new List<int>();
+            InitiatingCoilAddress = initiatingCoilAddress;
         }
     }
 
@@ -92,6 +94,7 @@ namespace WPF_WMS01.Services
         public event Action<string> OnShowAutoClosingMessage;
         public event Action<int, bool> OnRackLockStateChanged;
         public event Action OnInputStringForButtonCleared;
+        public event Action<ushort> OnTurnOffAlarmLightRequest; // 새로운 이벤트 추가
 
         /// <summary>
         /// RobotMissionService의 새 인스턴스를 초기화합니다.
@@ -126,7 +129,6 @@ namespace WPF_WMS01.Services
             _missionModbusSlaveId = missionModbusSlaveId;
             _missionCheckModbusService = new ModbusClientService(_missionModbusIp, _missionModbusPort, _missionModbusSlaveId);
             Debug.WriteLine($"[RobotMissionService] Mission Check Modbus Service Initialized for TCP: {_missionModbusIp}:{_missionModbusPort}, Slave ID: {_missionModbusSlaveId}");
-
 
             SetupRobotMissionPollingTimer(); // 로봇 미션 폴링 타이머 설정 및 시작
         }
@@ -365,6 +367,7 @@ namespace WPF_WMS01.Services
         /// <param name="getInputStringForButtonFunc">MainViewModel의 InputStringForButton 값을 가져오는 델리게이트.</param>
         /// <param name="racksLockedByProcess">이 프로세스 시작 시 잠긴 모든 랙의 ID 목록.</param>
         /// <param name="racksToProcess">여러 랙을 처리할 경우 (예: 출고) 해당 랙들의 ViewModel 목록.</param>
+        /// <param name="initiatingCoilAddress">이 미션을 시작한 Modbus Coil의 주소 (경광등 제어용).</param>
         /// <returns>시작된 미션 프로세스의 고유 ID.</returns>
         public async Task<string> InitiateRobotMissionProcess(
             string processType,
@@ -374,13 +377,14 @@ namespace WPF_WMS01.Services
             Location destinationLine,
             Func<string> getInputStringForButtonFunc,
             List<int> racksLockedByProcess, // 새로 추가된 파라미터
-            List<RackViewModel> racksToProcess = null) // 새로 추가된 파라미터
+            List<RackViewModel> racksToProcess = null, // 새로 추가된 파라미터
+            ushort? initiatingCoilAddress = null) // 새로운 파라미터 추가
         {
             // MainViewModel로부터 받은 델리게이트를 저장하여 필요할 때 사용합니다.
             _getInputStringForButtonFunc = getInputStringForButtonFunc;
 
             string processId = Guid.NewGuid().ToString(); // 고유한 프로세스 ID 생성
-            var newMissionProcess = new RobotMissionInfo(processId, processType, missionSteps, racksLockedByProcess) // 생성자에 racksLockedByProcess 전달
+            var newMissionProcess = new RobotMissionInfo(processId, processType, missionSteps, racksLockedByProcess, initiatingCoilAddress) // 생성자에 racksLockedByProcess 전달
             {
                 // SourceRack과 DestinationRack은 이제 MissionStepDefinition 내에서 ID로 관리됩니다.
                 // 여기에 직접 ViewModel을 할당하지 않습니다.
@@ -638,6 +642,13 @@ namespace WPF_WMS01.Services
             }
             finally
             {
+                // 미션이 시작된 콜 버튼의 경광등을 끕니다. (MainViewModel에게 이벤트로 요청)
+                if (missionInfo.InitiatingCoilAddress.HasValue)
+                {
+                    OnTurnOffAlarmLightRequest?.Invoke(missionInfo.InitiatingCoilAddress.Value);
+                    Debug.WriteLine($"[RobotMissionService] Requested MainViewModel to turn OFF Alarm Light Coil {missionInfo.InitiatingCoilAddress.Value}.");
+                }
+
                 // 프로세스가 최종적으로 완료되거나 실패하면, activeRobotProcesses에서 제거
                 lock (_activeRobotProcessesLock)
                 {

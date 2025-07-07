@@ -689,7 +689,7 @@ namespace WPF_WMS01.ViewModels
                 .ToList();
             if (!targetRacks.Any())
             {
-                MessageBox.Show("완제품릏 보관할 랙이 없습니다.", "알림", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show("완제품을 보관할 랙이 없습니다.", "알림", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
@@ -760,7 +760,7 @@ namespace WPF_WMS01.ViewModels
                         // 5.
                         new MissionStepDefinition {
                             ProcessStepDescription = $"{destinationRack.Title} 복귀 완료", MissionType = "8", ToNode = "Charge1", Payload = _warehousePayload, IsLinkable = false, LinkedMission = null, LinkWaitTimeout = 3600,
-                            SourceRackId = null, DestinationRackId = null
+                            CheckModbusDiscreteInput = true, ModbusDiscreteInputAddressToCheck = 13, SourceRackId = null, DestinationRackId = null
                         }
                     };
                 }
@@ -776,7 +776,7 @@ namespace WPF_WMS01.ViewModels
                         // 2. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
                         new MissionStepDefinition {
                             ProcessStepDescription = $"{destinationRack.Title} 복귀 완료", MissionType = "8", ToNode = "Charge1", Payload = _warehousePayload, IsLinkable = false, LinkedMission = null, LinkWaitTimeout = 3600,
-                            SourceRackId = null, DestinationRackId = null
+                            CheckModbusDiscreteInput = true, ModbusDiscreteInputAddressToCheck = 13, SourceRackId = null, DestinationRackId = null
                         }
                     };
                 }
