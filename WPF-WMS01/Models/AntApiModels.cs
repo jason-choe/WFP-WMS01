@@ -337,7 +337,16 @@ namespace WPF_WMS01.Models
         // 미션 폴링을 취소하기 위한 CancellationTokenSource
         public CancellationTokenSource CancellationTokenSource { get; } = new CancellationTokenSource();
 
-        public RobotMissionInfo(string processId, string processType, List<MissionStepDefinition> missionSteps, List<int> racksLockedByProcess)
+        // 폴링 재시도 관련 필드
+        public int PollingRetryCount { get; set; }
+        public DateTime LastPollingAttemptTime { get; set; }
+        public const int MaxPollingRetries = 3; // 최대 재시도 횟수
+        public const int PollingRetryDelaySeconds = 2; // 재시도 간 지연 시간 (초)
+
+        // 이 미션을 시작한 Modbus Coil의 주소 (경광등 제어용)
+        public ushort? InitiatingCoilAddress { get; set; }
+        
+        public RobotMissionInfo(string processId, string processType, List<MissionStepDefinition> missionSteps, List<int> racksLockedByProcess, ushort? initiatingCoilAddress = null)
         {
             ProcessId = processId;
             ProcessType = processType;
@@ -351,6 +360,12 @@ namespace WPF_WMS01.Models
             IsFailed = false;
             RacksLockedByProcess = racksLockedByProcess ?? new List<int>();
             RacksToProcess = new List<ViewModels.RackViewModel>(); // 초기화
+
+            // Polling 관련 필드 초기화
+            PollingRetryCount = 0;
+            LastPollingAttemptTime = DateTime.MinValue;
+
+            InitiatingCoilAddress = initiatingCoilAddress; // 경광등 Coil 주소 저장
         }
     }
 

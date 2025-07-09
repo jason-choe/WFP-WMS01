@@ -16,52 +16,6 @@ using System.Configuration; // ConfigurationManager를 위해 추가
 
 namespace WPF_WMS01.Services
 {
-    // RobotMissionInfo 클래스 수정: 폴링 재시도 관련 필드 추가
-    public class RobotMissionInfo
-    {
-        public string ProcessId { get; }
-        public string ProcessType { get; }
-        public List<MissionStepDefinition> MissionSteps { get; }
-        public int TotalSteps => MissionSteps.Count;
-        public int CurrentStepIndex { get; set; } = 0; // 현재 진행 중인 미션 단계의 인덱스 (0부터 시작)
-        public int? LastSentMissionId { get; set; } // ANT 서버에 마지막으로 전송한 미션의 ID
-        public int? LastCompletedMissionId { get; set; } // ANT 서버에서 마지막으로 완료된 미션의 ID
-        public HmiStatusInfo HmiStatus { get; } // HMI에 표시될 상태 정보
-        public MissionStatusEnum CurrentStatus { get; set; } = MissionStatusEnum.UNKNOWN; // 내부 상태 추적
-        public bool IsFinished { get; set; } = false; // 전체 프로세스 완료 여부
-        public bool IsFailed { get; set; } = false; // 전체 프로세스 실패 여부
-        public CancellationTokenSource CancellationTokenSource { get; } // 미션 취소를 위한 CancellationTokenSource
-        public List<int> RacksLockedByProcess { get; } // 이 프로세스에 의해 잠긴 랙 ID 목록
-        public List<RackViewModel> RacksToProcess { get; set; } // (출고 등) 처리할 랙 ViewModel 목록
-        public ushort? InitiatingCoilAddress { get; set; } // 이 미션을 시작한 Modbus Coil의 주소 (경광등 제어용)
-
-        // 폴링 재시도 관련 필드 추가
-        public int PollingRetryCount { get; set; } = 0;
-        public DateTime LastPollingAttemptTime { get; set; } = DateTime.MinValue;
-        public const int MaxPollingRetries = 3; // 최대 재시도 횟수
-        public const int PollingRetryDelaySeconds = 2; // 재시도 간 지연 시간 (초)
-
-        // CurrentMissionDetail 속성 추가
-        public MissionDetail CurrentMissionDetail { get; set; }
-
-        public RobotMissionInfo(string processId, string processType, List<MissionStepDefinition> missionSteps, List<int> racksLockedByProcess, ushort? initiatingCoilAddress = null)
-        {
-            ProcessId = processId;
-            ProcessType = processType;
-            MissionSteps = missionSteps ?? new List<MissionStepDefinition>();
-            HmiStatus = new HmiStatusInfo
-            {
-                Status = "INITIATED",
-                ProgressPercentage = 0,
-                CurrentStepDescription = "미션 시작 대기 중"
-            };
-            CancellationTokenSource = new CancellationTokenSource();
-            RacksLockedByProcess = racksLockedByProcess ?? new List<int>();
-            InitiatingCoilAddress = initiatingCoilAddress; // 경광등 Coil 주소 저장
-        }
-    }
-
-
     /// <summary>
     /// 로봇 미션의 시작, 상태 폴링, 완료/실패 처리를 담당하는 서비스 클래스입니다.
     /// MainViewModel로부터 로봇 미션 관련 로직이 분리되었습니다.

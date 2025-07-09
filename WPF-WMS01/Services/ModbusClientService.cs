@@ -6,6 +6,7 @@ using System;
 using System.IO.Ports; // 시리얼 포트 통신을 위해 사용
 using System.Diagnostics; // Debug.WriteLine을 위해 추가
 using System.Linq; // for .Select() in logging
+using System.Threading; // CancellationTokenSource 추가
 
 namespace WPF_WMS01.Services
 {
@@ -39,6 +40,7 @@ namespace WPF_WMS01.Services
         private StopBits _stopBits; // 스톱 비트 (RTU용)
         private int _dataBits; // 데이터 비트 (RTU용)
         private byte _slaveId; // Modbus 슬레이브 ID (Unit ID)
+        private CancellationTokenSource _cancellationTokenSource; // 연결 취소 토큰 소스
 
         /// <summary>
         /// ModbusClientService의 새 인스턴스를 TCP 모드로 초기화합니다.
@@ -105,15 +107,34 @@ namespace WPF_WMS01.Services
         /// </summary>
         public async Task ConnectAsync() // 메서드 이름을 ConnectAsync로 변경하고 Task 반환
         {
+            if (IsConnected)
+            {
+                Debug.WriteLine("[ModbusService] Already connected. Skipping new connection attempt.");
+                return;
+            }
+
             Dispose(); // 기존 연결이 있다면 해제
+
             try
             {
+                _cancellationTokenSource = new CancellationTokenSource();
+                CancellationToken token = _cancellationTokenSource.Token;
+
                 if (_currentMode == ModbusMode.TCP)
                 {
                     Debug.WriteLine($"[ModbusService] Attempting to connect via TCP to {_ipAddress}:{_port}...");
                     _tcpClient = new TcpClient();
-                    // ConnectAsync를 사용하여 비동기적으로 연결 시도
-                    await _tcpClient.ConnectAsync(_ipAddress, _port).ConfigureAwait(false);
+
+                    // 연결 타임아웃을 설정 (예: 5초)
+                    var connectTask = _tcpClient.ConnectAsync(_ipAddress, _port);
+                    var timeoutTask = Task.Delay(TimeSpan.FromSeconds(5), token);
+
+                    var completedTask = await Task.WhenAny(connectTask, timeoutTask).ConfigureAwait(false);
+
+                    if (completedTask == timeoutTask)
+                    {
+                        token.ThrowIfCancellationRequested(); // TimeoutException 발생
+                    }
 
                     if (_tcpClient.Connected)
                     {
@@ -122,15 +143,16 @@ namespace WPF_WMS01.Services
                     }
                     else
                     {
-                        Debug.WriteLine($"[ModbusService] Failed to connect to {_ipAddress}:{_port}. TcpClient not connected.");
+                        throw new InvalidOperationException($"Failed to connect to {_ipAddress}:{_port}. TcpClient not connected.");
                     }
                 }
                 else // ModbusMode.RTU
                 {
                     Debug.WriteLine($"[ModbusService] Attempting to connect via RTU to {_comPortName} at {_baudRate} baud...");
                     _serialPort = new SerialPort(_comPortName, _baudRate, _parity, _dataBits, _stopBits);
+
                     // SerialPort.Open()은 동기 메서드이므로 Task.Run을 사용하여 백그라운드 스레드에서 실행
-                    await Task.Run(() => _serialPort.Open()).ConfigureAwait(false);
+                    await Task.Run(() => _serialPort.Open(), token).ConfigureAwait(false);
 
                     if (_serialPort.IsOpen)
                     {
@@ -139,7 +161,7 @@ namespace WPF_WMS01.Services
                     }
                     else
                     {
-                        Debug.WriteLine($"[ModbusService] Failed to open serial port {_comPortName}. SerialPort not open.");
+                        throw new InvalidOperationException($"Failed to open serial port {_comPortName}. SerialPort not open.");
                     }
                 }
 
@@ -150,10 +172,17 @@ namespace WPF_WMS01.Services
                     Debug.WriteLine("[ModbusService] Modbus master transport timeouts set.");
                 }
             }
+            catch (OperationCanceledException)
+            {
+                Debug.WriteLine($"[ModbusService] Connection attempt to {_ipAddress ?? _comPortName} was cancelled (timeout).");
+                Dispose(); // 자원 정리
+                throw new InvalidOperationException($"Modbus connection to {_ipAddress ?? _comPortName} was cancelled (timeout).");
+            }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[ModbusService] Connection Error: {ex.GetType().Name} - {ex.Message}. StackTrace: {ex.StackTrace}");
                 Dispose(); // 오류 발생 시 자원 해제
+                throw; // 예외 다시 던지기
             }
         }
 
@@ -163,7 +192,7 @@ namespace WPF_WMS01.Services
         /// </summary>
         public void Disconnect()
         {
-            Dispose();
+            Dispose(); // Dispose 메서드를 호출하여 자원 해제 로직을 재사용
         }
 
         /// <summary>
@@ -261,12 +290,83 @@ namespace WPF_WMS01.Services
         }
 
         /// <summary>
+        /// Modbus Holding Register의 값을 비동기적으로 읽습니다.
+        /// </summary>
+        /// <param name="startAddress">시작 Holding Register 주소.</param>
+        /// <param name="numberOfPoints">읽을 Holding Register 개수.</param>
+        /// <returns>Holding Register 값 배열.</returns>
+        /// <exception cref="InvalidOperationException">Modbus 서비스가 연결되지 않은 경우 발생.</exception>
+        public async Task<ushort[]> ReadHoldingRegistersAsync(ushort startAddress, ushort numberOfPoints)
+        {
+            if (!IsConnected || _master == null)
+            {
+                Debug.WriteLine($"[ModbusService] ReadHoldingRegistersAsync: Not connected or master is null. Cannot read.");
+                throw new InvalidOperationException("Modbus service is not connected. Cannot read holding registers.");
+            }
+            try
+            {
+                ushort[] registers = await _master.ReadHoldingRegistersAsync(_slaveId, startAddress, numberOfPoints).ConfigureAwait(false);
+                return registers;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[ModbusService] Error reading holding registers from {startAddress}: {ex.GetType().Name} - {ex.Message}. StackTrace: {ex.StackTrace}");
+                Dispose(); // 통신 오류 발생 시 연결 끊고 재연결 준비
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Modbus Holding Register에 단일 값을 비동기적으로 씁니다.
+        /// </summary>
+        /// <param name="address">Holding Register 주소.</param>
+        /// <param name="value">설정할 값.</param>
+        /// <returns>쓰기 성공 여부.</returns>
+        /// <exception cref="InvalidOperationException">Modbus 서비스가 연결되지 않은 경우 발생.</exception>
+        public async Task<bool> WriteSingleHoldingRegisterAsync(ushort address, ushort value)
+        {
+            if (!IsConnected || _master == null)
+            {
+                Debug.WriteLine($"[ModbusService] WriteSingleHoldingRegisterAsync: Not connected or master is null. Cannot write.");
+                throw new InvalidOperationException("Modbus service is not connected. Cannot write single holding register.");
+            }
+
+            try
+            {
+                await _master.WriteSingleRegisterAsync(_slaveId, address, value).ConfigureAwait(false);
+                Debug.WriteLine($"[ModbusService] Register at address {address} set to {value}. Write successful.");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[ModbusService] Error writing holding register {address}: {ex.GetType().Name} - {ex.Message}. StackTrace: {ex.StackTrace}");
+                Dispose(); // 통신 오류 발생 시 연결 끊고 재연결 준비
+                throw;
+            }
+        }
+
+        /// <summary>
         /// 자원을 해제합니다.
         /// Releases resources.
         /// </summary>
         public void Dispose()
         {
             Debug.WriteLine("[ModbusService] Disposing Modbus resources...");
+            // CancellationTokenSource 먼저 취소 및 해제
+            try
+            {
+                _cancellationTokenSource?.Cancel();
+                _cancellationTokenSource?.Dispose();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[ModbusService] Error disposing CancellationTokenSource: {ex.GetType().Name} - {ex.Message}");
+            }
+            finally
+            {
+                _cancellationTokenSource = null;
+            }
+
             try
             {
                 // Dispose Modbus master first
@@ -282,7 +382,7 @@ namespace WPF_WMS01.Services
             }
             finally
             {
-                _master = null;
+                _master = null; // null로 명확히 설정
             }
 
             try
@@ -305,7 +405,7 @@ namespace WPF_WMS01.Services
             }
             finally
             {
-                _tcpClient = null;
+                _tcpClient = null; // null로 명확히 설정
             }
 
             try
