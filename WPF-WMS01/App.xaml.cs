@@ -17,6 +17,7 @@ namespace WPF_WMS01
         private MainViewModel _mainViewModelInstance;
         private ModbusClientService _modbusServiceInstance;
         private RobotMissionService _robotMissionServiceInstance;
+        // private McProtocolService _mcProtocolServiceInstance; // MC Protocol 서비스 인스턴스 필드 (현재 사용 안함)
 
         public static IServiceProvider ServiceProvider { get; private set; }
 
@@ -32,6 +33,7 @@ namespace WPF_WMS01
             // MainViewModel에 주입된 ModbusClientService는 콜 버튼용이므로, _modbusServiceInstance에 할당
             _modbusServiceInstance = ServiceProvider.GetRequiredService<ModbusClientService>();
             _robotMissionServiceInstance = (RobotMissionService)ServiceProvider.GetRequiredService<IRobotMissionService>();
+            // _mcProtocolServiceInstance = (McProtocolService)ServiceProvider.GetService<IMcProtocolService>(); // MC Protocol 서비스 인스턴스 할당 (현재 사용 안함)
 
             Debug.WriteLine("[App] OnStartup: Creating MainWindow...");
             // MainWindow를 생성하고 ViewModel을 주입
@@ -63,6 +65,13 @@ namespace WPF_WMS01
             int missionCheckModbusPort = int.Parse(ConfigurationManager.AppSettings["MissionCheckModbusPort"]);
             byte missionCheckModbusSlaveId = byte.Parse(ConfigurationManager.AppSettings["MissionCheckModbusSlaveId"]);
 
+            // MC Protocol 설정 읽기 (현재 사용 안함)
+            // string mcProtocolIp = ConfigurationManager.AppSettings["McProtocolIpAddress"] ?? "127.0.0.1";
+            // int mcProtocolPort = int.Parse(ConfigurationManager.AppSettings["McProtocolPort"] ?? "5000");
+            // byte mcProtocolCpuType = byte.Parse(ConfigurationManager.AppSettings["McProtocolCpuType"] ?? "144"); // Default to 0x90 (QCPU)
+            // byte mcProtocolNetworkNo = byte.Parse(ConfigurationManager.AppSettings["McProtocolNetworkNo"] ?? "0");
+            // byte mcProtocolPcNo = byte.Parse(ConfigurationManager.AppSettings["McProtocolPcNo"] ?? "255");
+
 
             Debug.WriteLine("[App.ConfigureServices] Registering HttpService, DatabaseService, ModbusClientService...");
             services.AddSingleton<HttpService>(new HttpService(baseApiUrl));
@@ -75,6 +84,10 @@ namespace WPF_WMS01
                     callButtonModbusSlaveId
                 ));
 
+            // MC Protocol 서비스 등록 (현재 사용 안함)
+            // services.AddSingleton<IMcProtocolService>(s => new McProtocolService(mcProtocolIp, mcProtocolPort, mcProtocolCpuType, mcProtocolNetworkNo, mcProtocolPcNo));
+
+
             Debug.WriteLine("[App.ConfigureServices] Registering MainViewModel (initial)...");
             // MainViewModel 등록: 이제 생성자에서 AMR payload 값들을 받습니다.
             services.AddSingleton<MainViewModel>(provider =>
@@ -84,6 +97,7 @@ namespace WPF_WMS01
                     provider.GetRequiredService<ModbusClientService>(), // 콜 버튼용 ModbusClientService 주입
                     warehousePayload, // App.config에서 읽은 값 전달
                     productionLinePayload // App.config에서 읽은 값 전달
+                    // provider.GetService<IMcProtocolService>() // MC Protocol 서비스 주입 (현재 사용 안함)
                 ));
 
             Debug.WriteLine("[App.ConfigureServices] Registering IRobotMissionService factory...");
@@ -130,6 +144,7 @@ namespace WPF_WMS01
             _mainViewModelInstance?.Dispose();
             _modbusServiceInstance?.Dispose(); // 콜 버튼용 Modbus 서비스 해제
             _robotMissionServiceInstance?.Dispose(); // 로봇 미션 서비스 해제 (내부적으로 미션 체크 Modbus 서비스도 해제)
+            // _mcProtocolServiceInstance?.Dispose(); // MC Protocol 서비스 해제 (현재 사용 안함)
 
             if (ServiceProvider is IDisposable disposableProvider)
             {

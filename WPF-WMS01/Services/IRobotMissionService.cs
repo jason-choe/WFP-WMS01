@@ -36,6 +36,12 @@ namespace WPF_WMS01.Services
         event Action<ushort> OnTurnOffAlarmLightRequest; // 새로운 이벤트 추가
 
         /// <summary>
+        /// 로봇 미션 프로세스의 상태가 업데이트될 때 발생합니다.
+        /// (업데이트된 RobotMissionInfo 객체)
+        /// </summary>
+        event Action<RobotMissionInfo> OnMissionProcessUpdated; // 새로운 이벤트 추가
+
+        /// <summary>
         /// 새로운 로봇 미션 프로세스를 시작합니다.
         /// </summary>
         /// <param name="processType">미션 프로세스의 유형 (예: "WaitToWrapTransfer").</param>

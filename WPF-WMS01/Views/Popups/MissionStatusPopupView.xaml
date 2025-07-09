@@ -1,0 +1,92 @@
+﻿<!-- Views/Popups/MissionStatusPopupView.xaml -->
+<Window x:Class="WPF_WMS01.Views.Popups.MissionStatusPopupView"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:WPF_WMS01.Views.Popups"
+        xmlns:vm="clr-namespace:WPF_WMS01.ViewModels.Popups"
+        mc:Ignorable="d"
+        Title="로봇 미션 진행 상황" Height="600" Width="400"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Background="#F0F0F0"
+        BorderBrush="#CCCCCC"
+        BorderThickness="1">
+    <Window.DataContext>
+        <vm:MissionStatusPopupViewModel d:DataContext="{d:DesignInstance vm:MissionStatusPopupViewModel}"/>
+    </Window.DataContext>
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- 제목 -->
+        <TextBlock Text="로봇 미션 진행 상황" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,10" Grid.Row="0"/>
+
+        <!-- 미션 정보 -->
+        <Border BorderBrush="#D0D0D0" BorderThickness="1" CornerRadius="5" Padding="10" Margin="0,0,0,10" Grid.Row="1" Background="White">
+            <StackPanel>
+                <TextBlock FontWeight="Bold" FontSize="16" Margin="0,0,0,5">
+                    <Run Text="미션 유형:"/>
+                    <Run Text="{Binding ProcessType}"/>
+                </TextBlock>
+                <TextBlock FontWeight="Bold" FontSize="16" Margin="0,0,0,5">
+                    <Run Text="프로세스 ID:"/>
+                    <Run Text="{Binding ProcessId}"/>
+                </TextBlock>
+                <TextBlock FontWeight="Bold" FontSize="16" Margin="0,0,0,5">
+                    <Run Text="현재 상태:"/>
+                    <Run Text="{Binding OverallStatusText}" Foreground="{Binding OverallStatusColor}"/>
+                </TextBlock>
+                <TextBlock FontWeight="Bold" FontSize="16" Margin="0,0,0,5">
+                    <Run Text="진행률:"/>
+                    <Run Text="{Binding OverallProgressPercentage}"/>
+                    <Run Text="%"/>
+                </TextBlock>
+                <TextBlock FontWeight="Bold" FontSize="16">
+                    <Run Text="현재 단계:"/>
+                    <Run Text="{Binding CurrentStepDescription}"/>
+                </TextBlock>
+            </StackPanel>
+        </Border>
+
+        <!-- 진행 바 -->
+        <ProgressBar Value="{Binding OverallProgressPercentage}" Height="20" Margin="0,0,0,10" Grid.Row="2"
+                     Foreground="{Binding OverallStatusColor}" Background="#E0E0E0" BorderBrush="#B0B0B0" BorderThickness="1"/>
+
+        <!-- 단계별 목록 제목 -->
+        <TextBlock Text="단계별 진행 상황" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,5" Grid.Row="3"/>
+
+        <!-- 단계별 진행 상황 목록 -->
+        <Border BorderBrush="#D0D0D0" BorderThickness="1" CornerRadius="5" Padding="5" Grid.Row="4" Background="White">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding MissionStepsStatus}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border BorderBrush="#E0E0E0" BorderThickness="0,0,0,1" Padding="5">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding Description}" FontSize="14" VerticalAlignment="Center" Grid.Column="0"/>
+                                    <TextBlock Text="{Binding StatusText}" Foreground="{Binding StatusColor}" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" Grid.Column="1"/>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+
+        <!-- 확인 버튼 -->
+        <Button Content="확인" Command="{Binding CloseCommand}" Style="{StaticResource ModernButtonStyle}" Grid.Row="5" HorizontalAlignment="Center" Margin="0,15,0,0" Width="100" Height="35"/>
+    </Grid>
+</Window>
