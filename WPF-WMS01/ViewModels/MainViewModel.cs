@@ -998,11 +998,11 @@ namespace WPF_WMS01.ViewModels
 
             // 작업이 이미 진행 중인 경우 중복 실행 방지
             // 이중 체크: ModbusReadTimer_Tick에서 이미 설정하지만, 만약을 위해 다시 확인
-            if (buttonVm.IsProcessing)
-            {
-                Debug.WriteLine($"[Modbus] Task for {buttonVm.Content} is already processing. Skipping new initiation.");
-                return;
-            }
+            // if (buttonVm.IsProcessing)
+            // {
+            //     Debug.WriteLine($"[Modbus] Task for {buttonVm.Content} is already processing. Skipping new initiation.");
+            //     return;
+            // }
 
             // 여기서 IsProcessing 및 CurrentProgress를 설정하는 것은 ModbusReadTimer_Tick에서 이미 했으므로 제거
             // Application.Current.Dispatcher.Invoke(() =>
@@ -1021,7 +1021,7 @@ namespace WPF_WMS01.ViewModels
                 switch (buttonVm.Content)
                 {
                     case "팔레트 공급":
-                        processType = "PalletSupply";
+                        processType = "공 팔레트 더미 공급 작업";
                         missionSteps.Add(new MissionStepDefinition
                         {
                             ProcessStepDescription = "충전소에서 나오는 중...",
@@ -1058,7 +1058,7 @@ namespace WPF_WMS01.ViewModels
                         break;
 
                     case "단프라 공급":
-                        processType = "DanplaSupply";
+                        processType = "단프라 시트 더미 공급 작업";
                         missionSteps.Add(new MissionStepDefinition
                         {
                             ProcessStepDescription = "충전소에서 나오는 중...",
@@ -1097,7 +1097,7 @@ namespace WPF_WMS01.ViewModels
                     // For other product-specific call buttons, let's define a simple "robot moves to station" mission.
                     // This avoids complex product lookup and transfer logic for now.
                     case "특수 포장":
-                        processType = "SpecialPackaging";
+                        processType = "특수 포장 제품 입고 작업";
                         missionSteps.Add(new MissionStepDefinition
                         {
                             ProcessStepDescription = "충전소에서 나오는 중...",
@@ -1188,16 +1188,16 @@ namespace WPF_WMS01.ViewModels
                             workPoint = "223_2_Bypass";
                             swapPoint = "223_2";
                         }
-                        processType = $"ProductCallStationFrom{buttonVm.Content}";
-                        missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"{buttonVm.Content} 충전소에서 나오는 중...", MissionType = "8", ToNode = "Turn_Charge2", Payload = _productionLinePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
-                        missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"{buttonVm.Content} 빈 파레트 픽업 & 드롭...", MissionType = "7", FromNode = "MZ_DanPra_Palette_PickUP", ToNode = $"Empty_{swapPoint}_Drop", Payload = _productionLinePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
-                        missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"{buttonVm.Content} 제품 팔레트 픽업 & 드롭...", MissionType = "7", FromNode = $"Work_{workPoint}_PickUP", ToNode = $"Full_{swapPoint}_Drop", Payload = _productionLinePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
-                        missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"{buttonVm.Content} 빈 파레트 픽업 & 투입...", MissionType = "7", FromNode = $"Empty_{swapPoint}_PickUP", ToNode = $"Work_{workPoint}_Drop", Payload = _productionLinePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
-                        missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"{buttonVm.Content} 제품 팔레트 픽업...", MissionType = "7", FromNode = $"Full_{swapPoint}_PickUP", ToNode = $"Return_{swapPoint}", Payload = _productionLinePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
-                        missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"{buttonVm.Content} 제품 팔레트 입고...", MissionType = "8", ToNode = "Palette_IN_Drop", Payload = _productionLinePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
+                        processType = $"{buttonVm.Content} 제품 입고 작업";
+                        missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"충전소에서 이동", MissionType = "8", ToNode = "Turn_Charge2", Payload = _productionLinePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
+                        missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"매거진에서 공 파레트 픽업, 교체 장소로 이동 & 드롭", MissionType = "7", FromNode = "MZ_DanPra_Palette_PickUP", ToNode = $"Empty_{swapPoint}_Drop", Payload = _productionLinePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
+                        missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"{buttonVm.Content} 제품 팔레트 픽업, 교체 장소로 이동 & 드롭", MissionType = "7", FromNode = $"Work_{workPoint}_PickUP", ToNode = $"Full_{swapPoint}_Drop", Payload = _productionLinePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
+                        missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"공 파레트 픽업, {buttonVm.Content}(으)로 이동 & 투입", MissionType = "7", FromNode = $"Empty_{swapPoint}_PickUP", ToNode = $"Work_{workPoint}_Drop", Payload = _productionLinePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
+                        missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"{buttonVm.Content} 제품 팔레트 픽업 & 이동", MissionType = "7", FromNode = $"Full_{swapPoint}_PickUP", ToNode = $"Return_{swapPoint}", Payload = _productionLinePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
+                        missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"{buttonVm.Content} 제품 팔레트 이동 & 입고", MissionType = "8", ToNode = "Palette_IN_Drop", Payload = _productionLinePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = $"{buttonVm.Content} 충전소 복귀 중...",
+                            ProcessStepDescription = $"충전소 복귀",
                             MissionType = "8",
                             ToNode = "Charge2",
                             Payload = _productionLinePayload,
@@ -1549,7 +1549,7 @@ namespace WPF_WMS01.ViewModels
                             // 3. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
                             new MissionStepDefinition { ProcessStepDescription = $"{targetRackVm.Title}(으)로 이동 & 제품 드롭", MissionType = "8", ToNode = $"Rack_{shelf}_Drop", Payload = _warehousePayload, IsLinkable = true, LinkWaitTimeout = 3600 },
                             // 4. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
-                            new MissionStepDefinition { ProcessStepDescription = $"충전소로 복귀", MissionType = "8", ToNode = "Turn_Rack_29", Payload = _warehousePayload, IsLinkable = true, LinkWaitTimeout = 3600 },
+                            new MissionStepDefinition { ProcessStepDescription = $"충전소로 복귀", MissionType = "8", ToNode = "Turn_Rack_29", Payload = _warehousePayload, IsLinkable = true, LinkWaitTimeout = 60 },
                             // 5.
                             new MissionStepDefinition {
                                 ProcessStepDescription = $"충전소로 복귀", MissionType = "8", ToNode = "Charge1", Payload = _warehousePayload, IsLinkable = false, LinkWaitTimeout = 3600, CheckModbusDiscreteInput = true, ModbusDiscreteInputAddressToCheck = 13,
@@ -1564,7 +1564,7 @@ namespace WPF_WMS01.ViewModels
                             // 1. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
                             new MissionStepDefinition { ProcessStepDescription = $"대기장소로 이동", MissionType = "8", ToNode = "Turn_Rack_27_32", Payload = _warehousePayload, IsLinkable = true, LinkWaitTimeout = 3600 },
                             // 2. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
-                            new MissionStepDefinition { ProcessStepDescription = $"{waitRackVm.Title} 제품 픽업, {targetRackVm.Title}(을)로 이동 & 드롭", MissionType = "7", FromNode = "Palette_OUT_PickUP", ToNode = $"Rack_{shelf}_Drop", Payload = _warehousePayload, IsLinkable = true, LinkWaitTimeout = 3600 },
+                            new MissionStepDefinition { ProcessStepDescription = $"{waitRackVm.Title} 제품 픽업, {targetRackVm.Title}(을)로 이동 & 드롭", MissionType = "7", FromNode = "Palette_OUT_PickUP", ToNode = $"Rack_{shelf}_Drop", Payload = _warehousePayload, IsLinkable = true, LinkWaitTimeout = 60 },
                             // 3. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
                             new MissionStepDefinition {
                                 ProcessStepDescription = $"충전소로 복귀", MissionType = "8", ToNode = "Charge1", Payload = _warehousePayload, IsLinkable = false, LinkWaitTimeout = 3600, CheckModbusDiscreteInput = true, ModbusDiscreteInputAddressToCheck = 13,
