@@ -6,6 +6,8 @@ using System;
 using WPF_WMS01.Services; // HttpService
 using WPF_WMS01.ViewModels; // MainViewModel
 using System.Diagnostics; // Debug.WriteLine을 위해 추가
+using System.Configuration; // ConfigurationManager를 위해 추가
+using System.IO.Ports; // Parity, StopBits를 위해 추가
 
 namespace WPF_WMS01
 {
@@ -72,17 +74,43 @@ namespace WPF_WMS01
             // byte mcProtocolNetworkNo = byte.Parse(ConfigurationManager.AppSettings["McProtocolNetworkNo"] ?? "0");
             // byte mcProtocolPcNo = byte.Parse(ConfigurationManager.AppSettings["McProtocolPcNo"] ?? "255");
 
+            // ModbusClientService 등록 (MainViewModel에서 사용)
+            // App.config의 ModbusMode 설정에 따라 TCP 또는 RTU 모드로 ModbusClientService를 인스턴스화합니다.
+            string modbusMode = ConfigurationManager.AppSettings["ModbusMode"] ?? "TCP"; // 기본값 TCP
 
             Debug.WriteLine("[App.ConfigureServices] Registering HttpService, DatabaseService, ModbusClientService...");
             services.AddSingleton<HttpService>(new HttpService(baseApiUrl));
             services.AddSingleton<DatabaseService>();
-            // 콜 버튼용 ModbusClientService 등록
+
+            if (modbusMode.Equals("RTU", StringComparison.OrdinalIgnoreCase))
+            {
+                string comPort = ConfigurationManager.AppSettings["ModbusComPort"] ?? "COM1";
+                int baudRate = int.Parse(ConfigurationManager.AppSettings["ModbusBaudRate"] ?? "9600");
+                Parity parity = (Parity)Enum.Parse(typeof(Parity), ConfigurationManager.AppSettings["ModbusParity"] ?? "None");
+                int dataBits = int.Parse(ConfigurationManager.AppSettings["ModbusDataBits"] ?? "8");
+                StopBits stopBits = (StopBits)Enum.Parse(typeof(StopBits), ConfigurationManager.AppSettings["ModbusStopBits"] ?? "One");
+                byte slaveId = byte.Parse(ConfigurationManager.AppSettings["ModbusSlaveId"] ?? "1");
+
+                services.AddSingleton(s => new ModbusClientService(comPort, baudRate, parity, stopBits, dataBits, slaveId));
+                Debug.WriteLine("[App.ConfigureServices] Main ModbusClientService registered as RTU mode.");
+            }
+            else // TCP 모드 (기본값)
+            {
+                string ipAddress = ConfigurationManager.AppSettings["ModbusIpAddress"] ?? "127.0.0.1";
+                int port = int.Parse(ConfigurationManager.AppSettings["ModbusPort"] ?? "502");
+                byte slaveId = byte.Parse(ConfigurationManager.AppSettings["ModbusSlaveId"] ?? "1");
+
+                services.AddSingleton(s => new ModbusClientService(ipAddress, port, slaveId));
+                Debug.WriteLine("[App.ConfigureServices] Main ModbusClientService registered as TCP mode.");
+            }
+
+            /*// 콜 버튼용 ModbusClientService 등록
             services.AddSingleton<ModbusClientService>(provider =>
                 new ModbusClientService(
                     callButtonModbusIp,
                     callButtonModbusPort,
                     callButtonModbusSlaveId
-                ));
+                ));*/
 
             // MC Protocol 서비스 등록 (현재 사용 안함)
             // services.AddSingleton<IMcProtocolService>(s => new McProtocolService(mcProtocolIp, mcProtocolPort, mcProtocolCpuType, mcProtocolNetworkNo, mcProtocolPcNo));

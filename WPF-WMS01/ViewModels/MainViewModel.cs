@@ -996,20 +996,6 @@ namespace WPF_WMS01.ViewModels
         {
             if (buttonVm == null) return;
 
-            // 작업이 이미 진행 중인 경우 중복 실행 방지
-            // 이중 체크: ModbusReadTimer_Tick에서 이미 설정하지만, 만약을 위해 다시 확인
-            // if (buttonVm.IsProcessing)
-            // {
-            //     Debug.WriteLine($"[Modbus] Task for {buttonVm.Content} is already processing. Skipping new initiation.");
-            //     return;
-            // }
-
-            // 여기서 IsProcessing 및 CurrentProgress를 설정하는 것은 ModbusReadTimer_Tick에서 이미 했으므로 제거
-            // Application.Current.Dispatcher.Invoke(() =>
-            // {
-            //     buttonVm.IsProcessing = true;
-            //     buttonVm.CurrentProgress = 0;
-            // });
             Debug.WriteLine($"[Modbus] Async task started for {buttonVm.Content} (Discrete Input: {buttonVm.DiscreteInputAddress}).");
 
             List<MissionStepDefinition> missionSteps = new List<MissionStepDefinition>();

@@ -13,6 +13,7 @@ using Newtonsoft.Json; // JsonConvert를 위해 필요
 using JsonException = Newtonsoft.Json.JsonException; // 충돌 방지를 위해 별칭 사용
 using System.Windows; // Application.Current.Dispatcher.Invoke, MessageBox, MessageBoxImage를 위해 추가
 using System.Configuration; // ConfigurationManager를 위해 추가
+using System.IO.Ports; // Parity, StopBits를 위해 추가 (더 이상 직접 사용되지 않지만, 다른 곳에서 필요할 수 있으므로 유지)
 
 namespace WPF_WMS01.Services
 {
@@ -30,7 +31,6 @@ namespace WPF_WMS01.Services
         // 현재 진행 중인 로봇 미션 프로세스들을 추적 (Key: ProcessId)
         private readonly Dictionary<string, RobotMissionInfo> _activeRobotProcesses = new Dictionary<string, RobotMissionInfo>();
         private readonly object _activeRobotProcessesLock = new object(); // _activeRobotProcesses 컬렉션에 대한 스레드 안전 잠금 객체
-        // private readonly object _sendingMissionLock = new object(); // 미션 전송 중복 방지를 위한 락 객체 - 제거
 
         // MainViewModel로부터 주입받을 종속성 (UI 업데이트 및 특정 값 조회용)
         private readonly string _waitRackTitle;
@@ -38,7 +38,9 @@ namespace WPF_WMS01.Services
         private Func<string> _getInputStringForButtonFunc; // MainViewModel의 InputStringForButton 값을 가져오는 델리게이트
         private Func<int, RackViewModel> _getRackViewModelByIdFunc; // MainViewModel에서 RackViewModel을 ID로 가져오는 델리게이트
 
-        // 미션 실패 확인용 Modbus 서버 설정 값 (기존)
+        // 미션 실패 확인용 Modbus 서버 설정 값 (TCP 고정)
+        // 이 값들은 App.config에서 읽어오거나, 필요에 따라 하드코딩할 수 있습니다.
+        // 현재는 App.config에서 읽어온 값을 생성자를 통해 주입받습니다.
         private readonly string _missionModbusIp;
         private readonly int _missionModbusPort;
         private readonly byte _missionModbusSlaveId;
@@ -55,6 +57,7 @@ namespace WPF_WMS01.Services
 
         /// <summary>
         /// RobotMissionService의 새 인스턴스를 초기화합니다.
+        /// 이 생성자는 미션 실패 확인을 위해 Modbus TCP 통신을 사용합니다.
         /// </summary>
         /// <param name="httpService">HTTP 통신을 위한 서비스 인스턴스.</param>
         /// <param name="databaseService">데이터베이스 접근을 위한 서비스 인스턴스.</param>
@@ -80,10 +83,12 @@ namespace WPF_WMS01.Services
             _militaryCharacter = militaryCharacter;
             _getRackViewModelByIdFunc = getRackViewModelByIdFunc ?? throw new ArgumentNullException(nameof(getRackViewModelByIdFunc));
 
-            // 미션 실패 확인용 ModbusClientService 인스턴스 생성
+            // 미션 실패 확인용 Modbus 설정 (항상 TCP)
             _missionModbusIp = missionModbusIp;
             _missionModbusPort = missionModbusPort;
             _missionModbusSlaveId = missionModbusSlaveId;
+
+            // 미션 실패 확인용 ModbusClientService 인스턴스 생성 (TCP 모드 고정)
             _missionCheckModbusService = new ModbusClientService(_missionModbusIp, _missionModbusPort, _missionModbusSlaveId);
             Debug.WriteLine($"[RobotMissionService] Mission Check Modbus Service Initialized for TCP: {_missionModbusIp}:{_missionModbusPort}, Slave ID: {_missionModbusSlaveId}");
 
