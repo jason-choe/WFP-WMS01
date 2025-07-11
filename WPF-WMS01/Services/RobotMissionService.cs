@@ -45,6 +45,9 @@ namespace WPF_WMS01.Services
         private readonly int _missionModbusPort;
         private readonly byte _missionModbusSlaveId;
 
+        // RobotMissionService에서 발생하는 중요한 Modbus 오류 MessageBox가 이미 표시되었는지 추적하는 플래그
+        private bool _hasMissionCriticalModbusErrorBeenDisplayed = false;
+
         /// <summary>
         /// MainViewModel로 상태를 다시 보고하기 위한 이벤트
         /// </summary>
@@ -359,6 +362,9 @@ namespace WPF_WMS01.Services
             // MainViewModel로부터 받은 델리게이트를 저장하여 필요할 때 사용합니다.
             _getInputStringForButtonFunc = getInputStringForButtonFunc;
 
+            // 새로운 미션이 시작될 때 Modbus 오류 플래그를 리셋합니다.
+            _hasMissionCriticalModbusErrorBeenDisplayed = false;
+
             string processId = Guid.NewGuid().ToString(); // 고유한 프로세스 ID 생성
             var newMissionProcess = new RobotMissionInfo(processId, processType, missionSteps, racksLockedByProcess, initiatingCoilAddress) // 생성자에 racksLockedByProcess와 initiatingCoilAddress 전달
             {
@@ -456,11 +462,14 @@ namespace WPF_WMS01.Services
                     if (discreteInputStates != null && discreteInputStates.Length > 0 && discreteInputStates[0])
                     {
                         // Discrete input이 1이므로 미션 단계 실패 처리
-                        Application.Current.Dispatcher.Invoke(() =>
+                        if (!_hasMissionCriticalModbusErrorBeenDisplayed) // 플래그 확인
                         {
-                            // MessageBox.Show()에 ownerWindow를 명시적으로 전달
-                            MessageBox.Show(Application.Current.MainWindow, $"Modbus Discrete Input {currentStep.ModbusDiscreteInputAddressToCheck.Value}이(가) 1입니다. 미션 단계 '{currentStep.ProcessStepDescription}'을(를) 시작할 수 없습니다. 미션 프로세스를 취소합니다.", "미션 취소", MessageBoxButton.OK, MessageBoxImage.Warning);
-                        });
+                            _hasMissionCriticalModbusErrorBeenDisplayed = true; // MessageBox 표시 후 플래그 설정
+                            await Application.Current.Dispatcher.Invoke(async () =>
+                            {
+                                MessageBox.Show(Application.Current.MainWindow, $"Modbus Discrete Input {currentStep.ModbusDiscreteInputAddressToCheck.Value}이(가) 1입니다. 미션 단계 '{currentStep.ProcessStepDescription}'을(를) 시작할 수 없습니다. 미션 프로세스를 취소합니다.", "미션 취소", MessageBoxButton.OK, MessageBoxImage.Warning);
+                            });
+                        }
                         Debug.WriteLine($"[RobotMissionService] Modbus Discrete Input {currentStep.ModbusDiscreteInputAddressToCheck.Value} is 1. Cancelling mission process {missionInfo.ProcessId}.");
                         missionInfo.CurrentStatus = MissionStatusEnum.FAILED;
                         missionInfo.HmiStatus.Status = "FAILED";
@@ -477,11 +486,14 @@ namespace WPF_WMS01.Services
                 }
                 catch (InvalidOperationException ex) // ModbusClientService에서 던지는 연결 오류 예외
                 {
-                    Application.Current.Dispatcher.Invoke(() =>
+                    if (!_hasMissionCriticalModbusErrorBeenDisplayed) // 플래그 확인
                     {
-                        // MessageBox.Show()에 ownerWindow를 명시적으로 전달
-                        MessageBox.Show(Application.Current.MainWindow, $"Modbus 연결 오류: {ex.Message}. 미션 프로세스를 취소합니다.", "미션 취소", MessageBoxButton.OK, MessageBoxImage.Error);
-                    });
+                        _hasMissionCriticalModbusErrorBeenDisplayed = true; // MessageBox 표시 후 플래그 설정
+                        await Application.Current.Dispatcher.Invoke(async () =>
+                        {
+                            MessageBox.Show(Application.Current.MainWindow, $"Modbus 연결 오류: {ex.Message}. 미션 프로세스를 취소합니다.", "미션 취소", MessageBoxButton.OK, MessageBoxImage.Error);
+                        });
+                    }
                     Debug.WriteLine($"[RobotMissionService] Modbus Connection Error during check: {ex.Message}. Cancelling mission process {missionInfo.ProcessId}.");
                     missionInfo.CurrentStatus = MissionStatusEnum.FAILED;
                     missionInfo.HmiStatus.Status = "FAILED";
@@ -494,11 +506,14 @@ namespace WPF_WMS01.Services
                 catch (Exception ex)
                 {
                     // Modbus 읽기 중 오류 발생 시 미션 취소
-                    Application.Current.Dispatcher.Invoke(() =>
+                    if (!_hasMissionCriticalModbusErrorBeenDisplayed) // 플래그 확인
                     {
-                        // MessageBox.Show()에 ownerWindow를 명시적으로 전달
-                        MessageBox.Show(Application.Current.MainWindow, $"Modbus Discrete Input {currentStep.ModbusDiscreteInputAddressToCheck.Value} 읽기 중 오류 발생: {ex.Message}. 미션 프로세스를 취소합니다.", "미션 취소", MessageBoxButton.OK, MessageBoxImage.Error);
-                    });
+                        _hasMissionCriticalModbusErrorBeenDisplayed = true; // MessageBox 표시 후 플래그 설정
+                        await Application.Current.Dispatcher.Invoke(async () =>
+                        {
+                            MessageBox.Show(Application.Current.MainWindow, $"Modbus Discrete Input {currentStep.ModbusDiscreteInputAddressToCheck.Value} 읽기 중 오류 발생: {ex.Message}. 미션 프로세스를 취소합니다.", "미션 취소", MessageBoxButton.OK, MessageBoxImage.Error);
+                        });
+                    }
                     Debug.WriteLine($"[RobotMissionService] Error reading Modbus Discrete Input {currentStep.ModbusDiscreteInputAddressToCheck.Value}: {ex.Message}. Cancelling mission process {missionInfo.ProcessId}.");
                     missionInfo.CurrentStatus = MissionStatusEnum.FAILED;
                     missionInfo.HmiStatus.Status = "FAILED";
