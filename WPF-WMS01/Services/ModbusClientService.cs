@@ -7,6 +7,7 @@ using System.IO.Ports; // 시리얼 포트 통신을 위해 사용
 using System.Diagnostics; // Debug.WriteLine을 위해 추가
 using System.Linq; // for .Select() in logging
 using System.Threading; // CancellationTokenSource 추가
+using System.IO; // IOException을 위해 추가
 
 namespace WPF_WMS01.Services
 {
@@ -42,6 +43,18 @@ namespace WPF_WMS01.Services
         private byte _slaveId; // Modbus 슬레이브 ID (Unit ID)
         private CancellationTokenSource _cancellationTokenSource; // 연결 취소 토큰 소스
 
+        private bool _isConnected; // 현재 연결 상태를 추적하는 내부 필드
+
+        /// <summary>
+        /// 현재 Modbus 서비스의 연결 상태를 가져옵니다.
+        /// Gets the current connection status of the Modbus service.
+        /// </summary>
+        public bool IsConnected
+        {
+            get => _isConnected;
+            private set => _isConnected = value; // 내부에서만 설정 가능하도록 private set
+        }
+
         /// <summary>
         /// ModbusClientService의 새 인스턴스를 TCP 모드로 초기화합니다.
         /// Initializes a new instance of ModbusClientService for TCP mode.
@@ -55,6 +68,7 @@ namespace WPF_WMS01.Services
             _ipAddress = ipAddress;
             _port = port;
             _slaveId = slaveId;
+            IsConnected = false; // 초기 연결 상태는 false
             Debug.WriteLine($"[ModbusService] Initialized for TCP: {ipAddress}:{port}, Slave ID: {slaveId}");
         }
 
@@ -77,43 +91,24 @@ namespace WPF_WMS01.Services
             _stopBits = stopBits;
             _dataBits = dataBits;
             _slaveId = slaveId;
+            IsConnected = false; // 초기 연결 상태는 false
             Debug.WriteLine($"[ModbusService] Initialized for RTU: {comPortName}, {baudRate}bps, Slave ID: {slaveId}");
-        }
-
-        /// <summary>
-        /// 현재 Modbus가 연결되어 있는지 여부를 나타냅니다.
-        /// Indicates whether Modbus is currently connected.
-        /// </summary>
-        public bool IsConnected
-        {
-            get
-            {
-                if (_master == null) return false;
-
-                if (_currentMode == ModbusMode.TCP)
-                {
-                    return _tcpClient != null && _tcpClient.Connected;
-                }
-                else // ModbusMode.RTU
-                {
-                    return _serialPort != null && _serialPort.IsOpen;
-                }
-            }
         }
 
         /// <summary>
         /// Modbus PLC에 비동기적으로 연결을 시도합니다. (현재 설정된 모드에 따라 TCP 또는 RTU)
         /// Attempts to connect to the Modbus PLC asynchronously (TCP or RTU depending on the current mode).
         /// </summary>
-        public async Task ConnectAsync() // 메서드 이름을 ConnectAsync로 변경하고 Task 반환
+        /// <returns>연결 성공 여부 (true: 성공, false: 실패).</returns>
+        public async Task<bool> ConnectAsync()
         {
             if (IsConnected)
             {
                 Debug.WriteLine("[ModbusService] Already connected. Skipping new connection attempt.");
-                return;
+                return true;
             }
 
-            Dispose(); // 기존 연결이 있다면 해제
+            Dispose(); // 기존 연결이 있다면 해제 (자원 정리)
 
             try
             {
@@ -133,23 +128,33 @@ namespace WPF_WMS01.Services
 
                     if (completedTask == timeoutTask)
                     {
-                        token.ThrowIfCancellationRequested(); // TimeoutException 발생
+                        // 타임아웃 발생 시 OperationCanceledException을 던지도록 함
+                        token.ThrowIfCancellationRequested();
                     }
 
                     if (_tcpClient.Connected)
                     {
                         _master = ModbusIpMaster.CreateIp(_tcpClient); // Modbus TCP 마스터 생성
+                        _master.Transport.ReadTimeout = 2000; // 응답 대기 시간 (ms)
+                        _master.Transport.WriteTimeout = 2000;
+                        IsConnected = true; // 연결 성공
                         Debug.WriteLine($"[ModbusService] Modbus TCP Connected to {_ipAddress}:{_port}");
+                        return true;
                     }
                     else
                     {
-                        throw new InvalidOperationException($"Failed to connect to {_ipAddress}:{_port}. TcpClient not connected.");
+                        // 연결은 되었으나 TcpClient.Connected가 false인 경우 (거의 발생하지 않음)
+                        Debug.WriteLine($"[ModbusService] Modbus TCP connection failed: TcpClient not connected to {_ipAddress}:{_port}.");
+                        IsConnected = false;
+                        return false;
                     }
                 }
                 else // ModbusMode.RTU
                 {
                     Debug.WriteLine($"[ModbusService] Attempting to connect via RTU to {_comPortName} at {_baudRate} baud...");
                     _serialPort = new SerialPort(_comPortName, _baudRate, _parity, _dataBits, _stopBits);
+                    _serialPort.ReadTimeout = 2000; // 응답 대기 시간 (ms)
+                    _serialPort.WriteTimeout = 2000;
 
                     // SerialPort.Open()은 동기 메서드이므로 Task.Run을 사용하여 백그라운드 스레드에서 실행
                     await Task.Run(() => _serialPort.Open(), token).ConfigureAwait(false);
@@ -157,32 +162,46 @@ namespace WPF_WMS01.Services
                     if (_serialPort.IsOpen)
                     {
                         _master = ModbusSerialMaster.CreateRtu(_serialPort); // Modbus RTU 마스터 생성
+                        IsConnected = true; // 연결 성공
                         Debug.WriteLine($"[ModbusService] Modbus RTU Connected to {_comPortName} at {_baudRate} baud.");
+                        return true;
                     }
                     else
                     {
-                        throw new InvalidOperationException($"Failed to open serial port {_comPortName}. SerialPort not open.");
+                        // SerialPort.Open()이 예외를 던지지 않았지만 IsOpen이 false인 경우 (거의 발생하지 않음)
+                        Debug.WriteLine($"[ModbusService] Modbus RTU connection failed: SerialPort not open on {_comPortName}.");
+                        IsConnected = false;
+                        return false;
                     }
-                }
-
-                if (_master != null)
-                {
-                    _master.Transport.ReadTimeout = 2000; // 응답 대기 시간 (ms)
-                    _master.Transport.WriteTimeout = 2000;
-                    Debug.WriteLine("[ModbusService] Modbus master transport timeouts set.");
                 }
             }
             catch (OperationCanceledException)
             {
                 Debug.WriteLine($"[ModbusService] Connection attempt to {_ipAddress ?? _comPortName} was cancelled (timeout).");
+                IsConnected = false; // 연결 실패
                 Dispose(); // 자원 정리
-                throw new InvalidOperationException($"Modbus connection to {_ipAddress ?? _comPortName} was cancelled (timeout).");
+                return false; // 연결 실패
             }
-            catch (Exception ex)
+            catch (IOException ex) // System.IO.FileNotFoundException도 IOException의 파생 클래스
+            {
+                Debug.WriteLine($"[ModbusService] Modbus RTU connection failed (IO Exception) to {_comPortName}: {ex.Message}. StackTrace: {ex.StackTrace}");
+                IsConnected = false; // 연결 실패
+                Dispose(); // 자원 정리
+                return false; // 연결 실패
+            }
+            catch (UnauthorizedAccessException ex) // 포트 사용 권한 오류
+            {
+                Debug.WriteLine($"[ModbusService] Modbus RTU connection failed (Unauthorized Access) to {_comPortName}: {ex.Message}. StackTrace: {ex.StackTrace}");
+                IsConnected = false; // 연결 실패
+                Dispose(); // 자원 정리
+                return false; // 연결 실패
+            }
+            catch (Exception ex) // 기타 모든 예외
             {
                 Debug.WriteLine($"[ModbusService] Connection Error: {ex.GetType().Name} - {ex.Message}. StackTrace: {ex.StackTrace}");
+                IsConnected = false; // 연결 실패
                 Dispose(); // 오류 발생 시 자원 해제
-                throw; // 예외 다시 던지기
+                return false; // 연결 실패
             }
         }
 
@@ -192,6 +211,7 @@ namespace WPF_WMS01.Services
         /// </summary>
         public void Disconnect()
         {
+            Debug.WriteLine("[ModbusService] Attempting to disconnect Modbus...");
             Dispose(); // Dispose 메서드를 호출하여 자원 해제 로직을 재사용
         }
 
@@ -201,7 +221,7 @@ namespace WPF_WMS01.Services
         /// </summary>
         /// <param name="startAddress">읽기 시작할 Discrete Input 주소</param>
         /// <param name="numberOfPoints">읽을 Discrete Input의 개수</param>
-        /// <returns>읽은 Discrete Input 값들의 배열 (bool[]), 오류 발생 시 null</returns>
+        /// <returns>읽은 Discrete Input 값들의 배열 (bool[]).</returns>
         /// <exception cref="InvalidOperationException">Modbus 서비스가 연결되지 않은 경우 발생.</exception>
         public async Task<bool[]> ReadDiscreteInputStatesAsync(ushort startAddress, ushort numberOfPoints)
         {
@@ -222,7 +242,8 @@ namespace WPF_WMS01.Services
             catch (Exception ex)
             {
                 Debug.WriteLine($"[ModbusService] Error reading discrete inputs from {startAddress}: {ex.GetType().Name} - {ex.Message}. StackTrace: {ex.StackTrace}");
-                Dispose(); // 통신 오류 발생 시 연결 해제
+                IsConnected = false; // 통신 오류 발생 시 연결 상태를 false로 설정
+                Dispose(); // 자원 정리
                 throw; // 예외 다시 던지기
             }
         }
@@ -232,7 +253,7 @@ namespace WPF_WMS01.Services
         /// Asynchronously reads the state of a single coil at the specified address. (For indicator lamp status)
         /// </summary>
         /// <param name="address">읽을 코일 주소</param>
-        /// <returns>코일 값 (bool), 오류 발생 시 false</returns>
+        /// <returns>코일 값 (bool).</returns>
         /// <exception cref="InvalidOperationException">Modbus 서비스가 연결되지 않은 경우 발생.</exception>
         public async Task<bool> ReadSingleCoilAsync(ushort address)
         {
@@ -251,7 +272,8 @@ namespace WPF_WMS01.Services
             catch (Exception ex)
             {
                 Debug.WriteLine($"[ModbusService] Error reading single coil at address {address}: {ex.GetType().Name} - {ex.Message}. StackTrace: {ex.StackTrace}");
-                Dispose();
+                IsConnected = false; // 통신 오류 발생 시 연결 상태를 false로 설정
+                Dispose(); // 자원 정리
                 throw; // 예외 다시 던지기
             }
         }
@@ -284,7 +306,8 @@ namespace WPF_WMS01.Services
             catch (Exception ex)
             {
                 Debug.WriteLine($"[ModbusService] Error writing coil to address {address}: {ex.GetType().Name} - {ex.Message}. StackTrace: {ex.StackTrace}");
-                Dispose(); // 통신 오류 발생 시 연결 끊고 재연결 준비
+                IsConnected = false; // 통신 오류 발생 시 연결 상태를 false로 설정
+                Dispose(); // 자원 정리
                 throw; // 예외 다시 던지기
             }
         }
@@ -311,7 +334,8 @@ namespace WPF_WMS01.Services
             catch (Exception ex)
             {
                 Debug.WriteLine($"[ModbusService] Error reading holding registers from {startAddress}: {ex.GetType().Name} - {ex.Message}. StackTrace: {ex.StackTrace}");
-                Dispose(); // 통신 오류 발생 시 연결 끊고 재연결 준비
+                IsConnected = false; // 통신 오류 발생 시 연결 상태를 false로 설정
+                Dispose(); // 자원 정리
                 throw;
             }
         }
@@ -340,14 +364,15 @@ namespace WPF_WMS01.Services
             catch (Exception ex)
             {
                 Debug.WriteLine($"[ModbusService] Error writing holding register {address}: {ex.GetType().Name} - {ex.Message}. StackTrace: {ex.StackTrace}");
-                Dispose(); // 통신 오류 발생 시 연결 끊고 재연결 준비
+                IsConnected = false; // 통신 오류 발생 시 연결 상태를 false로 설정
+                Dispose(); // 자원 정리
                 throw;
             }
         }
 
         /// <summary>
-        /// 자원을 해제합니다.
-        /// Releases resources.
+        /// ModbusClientService에서 사용하는 관리되지 않는 리소스 및 관리되는 리소스를 해제합니다.
+        /// Releases unmanaged and managed resources used by the ModbusClientService.
         /// </summary>
         public void Dispose()
         {
@@ -430,6 +455,7 @@ namespace WPF_WMS01.Services
             {
                 _serialPort = null;
             }
+            IsConnected = false; // 모든 리소스 해제 후 연결 상태를 false로 설정
             Debug.WriteLine("[ModbusService] Modbus Disconnected and all resources released.");
         }
     }
