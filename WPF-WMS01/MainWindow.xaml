@@ -126,87 +126,50 @@
             <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
         </Style>
 
-        <!-- Modbus 콜버튼 상태 표시를 위한 버튼 스타일 (Beautified) -->
-        <Style x:Key="ModbusStatusDisplayButton" TargetType="Button">
-            <Setter Property="Background" Value="#ADD8E6"/>
-            <Setter Property="Foreground" Value="#333333"/>
-            <Setter Property="FontSize" Value="18"/>
+        <!-- 콜 버튼 스타일 정의: 활성화/비활성화 및 진행 중 상태 표현 포함 -->
+        <Style x:Key="CallButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="135"/>
+            <Setter Property="Height" Value="64"/>
+            <Setter Property="Margin" Value="0,5,20,5"/>
+            <Setter Property="FontSize" Value="20"/>
             <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="BorderBrush" Value="#87CEEB"/>
+            <Setter Property="Background" Value="#FF2196F3"/>
+            <!-- 기본 활성화 상태 배경색 (파란색) -->
+            <Setter Property="Foreground" Value="White"/>
+            <!-- 기본 활성화 상태 전경색 (흰색) -->
+            <Setter Property="BorderBrush" Value="#FF1976D2"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="10"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="border" CornerRadius="8" Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
-                            <Grid>
-                                <!-- ContentPresenter는 기본 버튼 텍스트를 표시 -->
-                                <ContentPresenter x:Name="ButtonContent" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                  Visibility="{Binding IsProcessing, Converter={StaticResource BooleanToVisibilityConverterForHidden}}"/>
-
-                                <!-- 진행 중일 때만 보이는 ProgressBar -->
-                                <ProgressBar x:Name="TaskProgressBar"
-                                             Minimum="0" Maximum="100"
-                                             Value="{Binding CurrentProgress}"
-                                             Height="20"
-                                             HorizontalAlignment="Stretch" VerticalAlignment="Center"
-                                             Margin="5"
-                                             Visibility="{Binding IsProcessing, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                    <ProgressBar.Template>
-                                        <ControlTemplate TargetType="ProgressBar">
-                                            <Grid>
-                                                <Border CornerRadius="4" BorderBrush="#007ACC" BorderThickness="1" Background="#E0E0E0"/>
-                                                <Border CornerRadius="4" Background="#007ACC" HorizontalAlignment="Left"
-                                                        Width="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=ActualWidth, Converter={StaticResource ProgressToWidthConverter}, ConverterParameter={RelativeSource TemplatedParent}}">
-                                                    <!-- ProgressToWidthConverter는 ProgressBar의 Width를 진행률에 따라 조절 -->
-                                                    <TextBlock Text="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Value, StringFormat={}{0:F0}%}"
-                                                               Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                </Border>
-                                            </Grid>
-                                        </ControlTemplate>
-                                    </ProgressBar.Template>
-                                </ProgressBar>
-
-                                <!-- 진행 중일 때 보이는 메시지 (선택 사항, ProgressBar 위에 오버레이) -->
-                                <TextBlock x:Name="ProcessingTextBlock"
-                                           Text="{Binding CurrentProgress, StringFormat={}진행 중: {0:F0}%}"
-                                           Foreground="Black" FontWeight="Bold" FontSize="14"
-                                           HorizontalAlignment="Center" VerticalAlignment="Center"
-                                           Visibility="{Binding IsProcessing, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                            </Grid>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#B0E0E6"/>
-                                <Setter TargetName="border" Property="Effect">
-                                    <Setter.Value>
-                                        <DropShadowEffect ShadowDepth="1" Direction="270" Color="Black" Opacity="0.1" BlurRadius="2"/>
-                                    </Setter.Value>
-                                </Setter>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#87CEEB"/>
-                                <Setter TargetName="border" Property="Effect">
-                                    <Setter.Value>
-                                        <DropShadowEffect ShadowDepth="0.5" Direction="270" Color="Black" Opacity="0.2" BlurRadius="1"/>
-                                    </Setter.Value>
-                                </Setter>
-                            </Trigger>
-                            <!-- IsProcessing 상태에 따른 배경색 변경 -->
-                            <DataTrigger Binding="{Binding IsProcessing}" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#FFD700"/>
-                                <!-- Gold color for processing -->
-                                <Setter Property="Cursor" Value="Wait"/>
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding IsEnabled}" Value="False">
-                                <Setter TargetName="border" Property="Opacity" Value="0.6"/>
-                                <Setter Property="Cursor" Value="Arrow"/>
-                            </DataTrigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
+            <Setter Property="Cursor" Value="Hand"/>
+            <!-- 클릭 가능함을 나타내는 커서 -->
+            <Style.Triggers>
+                <!-- 마우스 오버 시 시각적 변화 -->
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#FF1976D2"/>
+                </Trigger>
+                <!-- 버튼 눌림 시 시각적 변화 -->
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="Background" Value="#FF0D47A1"/>
+                </Trigger>
+                <!-- IsProcessing이 True일 때의 시각적 상태 (작업 진행 중) -->
+                <DataTrigger Binding="{Binding IsProcessing}" Value="True">
+                    <Setter Property="Background" Value="#FFD700"/>
+                    <!-- 황금색 (진행 중) -->
+                    <Setter Property="Foreground" Value="Black"/>
+                    <Setter Property="Cursor" Value="Wait"/>
+                    <!-- 대기 커서 -->
+                </DataTrigger>
+                <!-- IsEnabled가 false일 때의 시각적 상태 정의 -->
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Background" Value="#FFB0BEC5"/>
+                    <!-- 비활성화 상태 배경색 (회색) -->
+                    <Setter Property="Foreground" Value="#FF607D8B"/>
+                    <!-- 비활성화 상태 전경색 (어두운 회색) -->
+                    <!-- Opacity는 제거하여 WPF 기본 비활성화 효과를 따르도록 함 -->
+                    <Setter Property="Cursor" Value="Arrow"/>
+                    <!-- 비활성화 커서 -->
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
         <!-- 햄버거 버튼 스타일 -->
@@ -475,10 +438,9 @@
                                 <DataTemplate>
                                     <Button Content="{Binding Content}"
                                             Command="{Binding ExecuteButtonCommand}"
+                                            CommandParameter="{Binding}"
                                             IsEnabled="{Binding IsEnabled}"
-                                            Width="135" Height="64" FontSize="20" FontWeight="Bold"
-                                            Margin="0,5,20,5"
-                                            Style="{StaticResource ModbusStatusDisplayButton}">
+                                            Style="{StaticResource CallButtonStyle}">
                                     </Button>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>

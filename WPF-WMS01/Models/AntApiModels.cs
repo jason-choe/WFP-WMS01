@@ -309,7 +309,7 @@ namespace WPF_WMS01.Models
             get => _currentStatus;
             set => SetProperty(ref _currentStatus, value);
         }
-        
+
         private bool _isFinished;
         public bool IsFinished // 전체 프로세스 완료 여부 (성공적으로 모든 단계 완료)
         {
@@ -344,8 +344,8 @@ namespace WPF_WMS01.Models
         public const int PollingRetryDelaySeconds = 2; // 재시도 간 지연 시간 (초)
 
         // 이 미션을 시작한 Modbus Coil의 주소 (경광등 제어용)
-        public ushort? InitiatingCoilAddress { get; set; }
-        
+        public ushort? InitiatingCoilAddress { get; set; } // 기존 정의 유지
+
         public RobotMissionInfo(string processId, string processType, List<MissionStepDefinition> missionSteps, List<int> racksLockedByProcess, ushort? initiatingCoilAddress = null)
         {
             ProcessId = processId;
@@ -354,7 +354,7 @@ namespace WPF_WMS01.Models
             CurrentStepIndex = 0;
             LastSentMissionId = null;
             LastCompletedMissionId = null;
-            HmiStatus = new HmiStatusInfo { Status = MissionStatusEnum.FAILED.ToString(), ProgressPercentage = 0, CurrentStepDescription = "미션 대기 중" };
+            HmiStatus = new HmiStatusInfo { Status = MissionStatusEnum.PENDING.ToString(), ProgressPercentage = 0, CurrentStepDescription = "미션 대기 중" }; // 초기 상태를 PENDING으로
             CurrentStatus = MissionStatusEnum.PENDING; // 초기 상태 설정
             IsFinished = false;
             IsFailed = false;

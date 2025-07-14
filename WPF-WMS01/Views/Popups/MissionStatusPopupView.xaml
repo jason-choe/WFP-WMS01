@@ -87,6 +87,6 @@
         </Border>
 
         <!-- 확인 버튼 -->
-        <Button Content="확인" Command="{Binding CloseCommand}" Style="{StaticResource ModernButtonStyle}" Grid.Row="5" HorizontalAlignment="Center" Margin="0,15,0,0" Width="100" Height="35"/>
+        <Button Content="확인" Command="{Binding ConfirmCloseCommand}" Style="{StaticResource ModernButtonStyle}" Grid.Row="5" HorizontalAlignment="Center" Margin="0,15,0,0" Width="100" Height="35"/>
     </Grid>
 </Window>

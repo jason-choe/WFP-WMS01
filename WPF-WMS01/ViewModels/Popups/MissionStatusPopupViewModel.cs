@@ -65,7 +65,8 @@ namespace WPF_WMS01.ViewModels.Popups
             set => SetProperty(ref _missionStepsStatus, value);
         }
 
-        public ICommand CloseCommand { get; }
+        public ICommand CloseCommand { get; } // 기존 닫기 명령 (팝업 닫기 액션에 연결)
+        public ICommand ConfirmCloseCommand { get; } // 새로 추가된 '확인' 버튼용 명령
 
         // 팝업을 닫기 위한 Action (View에서 호출될 것임)
         public Action CloseAction { get; set; }
@@ -96,9 +97,11 @@ namespace WPF_WMS01.ViewModels.Popups
             ProcessType = processType;
             MissionStepsStatus = new ObservableCollection<MissionStepStatusViewModel>();
             InitializeMissionSteps(missionStepDefinitions);
-            UpdateStatus(null, missionStepDefinitions); // 초기 상태 설정 (미션 정보가 아직 없는 경우)
+            // 초기 상태 설정: missionInfo가 아직 없는 경우, 기본 "대기 중" 상태로 설정
+            UpdateStatus(null, missionStepDefinitions);
 
-            CloseCommand = new RelayCommand(p => CloseAction?.Invoke());
+            CloseCommand = new RelayCommand(p => CloseAction?.Invoke()); // 기존 닫기 명령
+            ConfirmCloseCommand = new RelayCommand(p => CloseAction?.Invoke()); // '확인' 버튼 클릭 시 팝업 닫기
         }
 
         /// <summary>
@@ -107,6 +110,7 @@ namespace WPF_WMS01.ViewModels.Popups
         /// <param name="missionStepDefinitions">전체 미션 단계 정의 목록.</param>
         private void InitializeMissionSteps(List<MissionStepDefinition> missionStepDefinitions)
         {
+            MissionStepsStatus.Clear(); // 기존 내용이 있을 수 있으므로 클리어
             foreach (var step in missionStepDefinitions)
             {
                 MissionStepsStatus.Add(new MissionStepStatusViewModel(step.ProcessStepDescription, MissionStatusEnum.PENDING));
@@ -117,15 +121,23 @@ namespace WPF_WMS01.ViewModels.Popups
         /// 로봇 미션의 현재 상태를 기반으로 팝업의 내용을 업데이트합니다.
         /// </summary>
         /// <param name="missionInfo">현재 로봇 미션 정보 (RobotMissionService에서 전달됨).</param>
-        /// <param name="allMissionStepDefinitions">전체 미션 단계 정의 목록.</param>
+        /// <param name="allMissionStepDefinitions">전체 미션 단계 정의 목록 (초기화 또는 재설정용).</param>
         public void UpdateStatus(RobotMissionInfo missionInfo, List<MissionStepDefinition> allMissionStepDefinitions)
         {
             // 전체 미션 상태 업데이트
             if (missionInfo != null)
             {
-                OverallStatusText = missionInfo.HmiStatus.Status;
-                OverallProgressPercentage = missionInfo.HmiStatus.ProgressPercentage;
-                CurrentStepDescription = missionInfo.HmiStatus.CurrentStepDescription;
+                // ProcessId와 ProcessType은 생성자에서 설정되거나, 첫 업데이트 시 설정됩니다.
+                // 여기서는 이미 설정된 값을 사용하거나, 필요한 경우 업데이트합니다.
+                if (ProcessId == "N/A" && !string.IsNullOrEmpty(missionInfo.ProcessId))
+                {
+                    ProcessId = missionInfo.ProcessId;
+                }
+                ProcessType = missionInfo.ProcessType; // ProcessType은 변경될 수 있으므로 항상 업데이트
+
+                OverallStatusText = missionInfo.HmiStatus?.Status; // Null-conditional operator
+                OverallProgressPercentage = missionInfo.HmiStatus?.ProgressPercentage ?? 0;
+                CurrentStepDescription = missionInfo.HmiStatus?.CurrentStepDescription;
 
                 switch (missionInfo.CurrentStatus)
                 {
@@ -146,6 +158,14 @@ namespace WPF_WMS01.ViewModels.Popups
                 }
 
                 // 개별 미션 단계 상태 업데이트
+                // allMissionStepDefinitions가 변경될 수 있으므로, MissionStepsStatus를 재초기화합니다.
+                // 이전에 InitializeMissionSteps에서 생성된 MissionStepsStatus와 동기화합니다.
+                if (MissionStepsStatus.Count != allMissionStepDefinitions.Count ||
+                    !MissionStepsStatus.Select(s => s.Description).SequenceEqual(allMissionStepDefinitions.Select(d => d.ProcessStepDescription)))
+                {
+                    InitializeMissionSteps(allMissionStepDefinitions); // 구조가 변경되었으면 다시 초기화
+                }
+
                 for (int i = 0; i < allMissionStepDefinitions.Count; i++)
                 {
                     if (i < MissionStepsStatus.Count) // ViewModel 컬렉션이 정의 목록보다 작을 수 있으므로 방어 코드
@@ -169,6 +189,14 @@ namespace WPF_WMS01.ViewModels.Popups
                             {
                                 stepVm.SetStatus(missionInfo.CurrentStatus); // 미션 실패/거부/취소 시 현재 단계도 실패로 표시
                             }
+                            else if (missionInfo.CurrentStatus == MissionStatusEnum.RECEIVED)
+                            {
+                                stepVm.SetStatus(missionInfo.CurrentStatus); // 서버가 미션 수신함
+                            }
+                            else if (missionInfo.CurrentStatus == MissionStatusEnum.ACCEPTED)
+                            {
+                                stepVm.SetStatus(missionInfo.CurrentStatus); // 서버가 미션 수락함
+                            }
                             else
                             {
                                 stepVm.SetStatus(MissionStatusEnum.STARTED); // 현재 진행 중인 단계
@@ -189,11 +217,15 @@ namespace WPF_WMS01.ViewModels.Popups
                 OverallStatusColor = new SolidColorBrush(Colors.Gray);
                 OverallProgressPercentage = 0;
                 CurrentStepDescription = "로봇 미션 대기 중...";
+                // InitializeMissionSteps에서 이미 PENDING으로 설정되었으므로 추가적인 업데이트는 필요 없을 수 있습니다.
+                // 하지만 명시적으로 다시 설정하여 확실히 PENDING 상태임을 보장합니다.
                 foreach (var stepVm in MissionStepsStatus)
                 {
                     stepVm.SetStatus(MissionStatusEnum.PENDING);
                 }
             }
+            // 미션 완료/실패 시 팝업을 자동으로 닫는 로직은 여기서 제거됩니다.
+            // 사용자가 '확인' 버튼을 눌러야 닫히도록 합니다.
         }
     }
 }

@@ -26,19 +26,32 @@ namespace WPF_WMS01.ViewModels
     // Modbus 버튼의 상태를 나타내는 ViewModel (각 버튼에 바인딩될 개별 항목)
     public class ModbusButtonViewModel : ViewModelBase
     {
-        private bool _isEnabled; // 버튼의 활성화 상태 (Coil 1일 때 true, 그리고 작업 중이 아닐 때)
+        private bool _isEnabled; // 버튼의 활성화 상태 (PLC RUN && Discrete Input 1)
         private string _content; // 버튼에 표시될 텍스트 (예: "팔레트 공급")
         private ushort _discreteInputAddress; // 해당 버튼이 관여하는 Modbus Discrete Input 주소
         private ushort _coilOutputAddress; // 해당 버튼에 대응하는 Modbus Coil Output 주소 (경광등)
-        private bool _isProcessing; // 비동기 작업 진행 중 여부
+        private bool _isProcessing; // 비동기 작업 진행 중 여부 (미션 시작부터 완료/실패까지)
         private int _currentProgress; // 진행률 (0-100)
         private bool _isTaskInitiatedByDiscreteInput; // Discrete Input에 의해 작업이 시작되었음을 나타내는 플래그 (중복 트리거 방지용)
         private bool _currentDiscreteInputState; // 현재 Discrete Input 상태를 저장 (이전 상태 비교용)
 
+        // 각 ModbusButtonViewModel 인스턴스에 고유한 팝업 ViewModel 및 View를 연결
+        public MissionStatusPopupViewModel MissionStatusPopupVm { get; set; }
+        public MissionStatusPopupView MissionStatusPopupViewInstance { get; set; }
+
+
         public bool IsEnabled
         {
             get => _isEnabled;
-            set => SetProperty(ref _isEnabled, value);
+            set
+            {
+                if (SetProperty(ref _isEnabled, value))
+                {
+                    // IsEnabled가 변경되면 Command의 CanExecute를 재평가
+                    // CanExecuteModbusButtonCommand는 이제 IsEnabled에만 의존하므로 이 호출이 중요합니다.
+                    ((RelayCommand)ExecuteButtonCommand)?.RaiseCanExecuteChanged();
+                }
+            }
         }
 
         public string Content
@@ -64,11 +77,9 @@ namespace WPF_WMS01.ViewModels
             get => _isProcessing;
             set
             {
-                if (SetProperty(ref _isProcessing, value))
-                {
-                    // IsProcessing이 변경되면 Command의 CanExecute를 재평가하여 버튼 상태 갱신
-                    ((RelayCommand)ExecuteButtonCommand)?.RaiseCanExecuteChanged();
-                }
+                // IsProcessing 변경 시 CanExecute를 다시 평가할 필요가 없습니다.
+                // CanExecute는 이제 IsEnabled에만 의존하며, IsProcessing은 UI의 시각적 변화(DataTrigger)에만 사용됩니다.
+                SetProperty(ref _isProcessing, value);
             }
         }
 
@@ -81,7 +92,12 @@ namespace WPF_WMS01.ViewModels
         public bool IsTaskInitiatedByDiscreteInput // Discrete Input에 의해 작업이 스케줄링/시작되었는지 여부 (중복 트리거 방지용)
         {
             get => _isTaskInitiatedByDiscreteInput;
-            set => SetProperty(ref _isTaskInitiatedByDiscreteInput, value);
+            set
+            {
+                // IsTaskInitiatedByDiscreteInput 변경 시 CanExecute를 다시 평가할 필요가 없습니다.
+                // CanExecute는 이제 IsEnabled에만 의존하며, IsTaskInitiatedByDiscreteInput은 내부 로직 및 UI의 시각적 변화에 사용됩니다.
+                SetProperty(ref _isTaskInitiatedByDiscreteInput, value);
+            }
         }
 
         public bool CurrentDiscreteInputState // 현재 Discrete Input 상태 (for 0->1 transition detection)
@@ -103,6 +119,10 @@ namespace WPF_WMS01.ViewModels
             CurrentProgress = 0; // 초기 진행률 0
             IsTaskInitiatedByDiscreteInput = false; // 초기 상태
             CurrentDiscreteInputState = false; // 초기 Discrete Input 상태
+
+            // 팝업 관련 속성은 미션 시작 시점에 초기화될 예정
+            MissionStatusPopupVm = null;
+            MissionStatusPopupViewInstance = null;
         }
     }
 
@@ -148,7 +168,9 @@ namespace WPF_WMS01.ViewModels
                     // PLC 상태가 변경되면 모든 Modbus 버튼의 활성화 상태를 갱신
                     foreach (var buttonVm in ModbusButtons)
                     {
-                        ((RelayCommand)buttonVm.ExecuteButtonCommand)?.RaiseCanExecuteChanged();
+                        // IsEnabled는 이제 PLC 상태와 Discrete Input 상태에만 의존합니다.
+                        buttonVm.IsEnabled = value && buttonVm.CurrentDiscreteInputState;
+                        // ModbusButtonViewModel의 IsEnabled setter에서 RaiseCanExecuteChanged가 호출됩니다.
                     }
                 }
             }
@@ -231,9 +253,9 @@ namespace WPF_WMS01.ViewModels
 
         private DispatcherTimer _messagePopupTimer; // 메시지 팝업 자동 닫힘 타이머
 
-        // 미션 상태 팝업 관리를 위한 필드
-        private MissionStatusPopupViewModel _activeMissionStatusPopupViewModel;
-        private MissionStatusPopupView _activeMissionStatusPopupView;
+        // 미션 상태 팝업 관리를 위한 필드 (이제 ModbusButtonViewModel 내부에 개별적으로 존재)
+        // private MissionStatusPopupViewModel _activeMissionStatusPopupViewModel; // 제거
+        // private MissionStatusPopupView _activeMissionStatusPopupView; // 제거
 
         public ICommand LoginCommand { get; private set; }
         public ICommand OpenMenuCommand { get; }
@@ -351,15 +373,15 @@ namespace WPF_WMS01.ViewModels
                 _robotMissionServiceInternal.OnShowAutoClosingMessage -= ShowAutoClosingMessage;
                 _robotMissionServiceInternal.OnRackLockStateChanged -= OnRobotMissionRackLockStateChanged;
                 _robotMissionServiceInternal.OnInputStringForButtonCleared -= () => InputStringForButton = string.Empty;
-                _robotMissionServiceInternal.OnTurnOffAlarmLightRequest -= HandleTurnOffAlarmLightRequest; // 새로운 이벤트 구독 해제
-                _robotMissionServiceInternal.OnMissionProcessUpdated -= HandleMissionProcessUpdate; // 새로운 이벤트 구독 해제
+                _robotMissionServiceInternal.OnTurnOffAlarmLightRequest -= HandleTurnOffAlarmLightRequest;
+                _robotMissionServiceInternal.OnMissionProcessUpdated -= HandleMissionProcessUpdate;
 
                 // 새로 구독
                 _robotMissionServiceInternal.OnShowAutoClosingMessage += ShowAutoClosingMessage;
                 _robotMissionServiceInternal.OnRackLockStateChanged += OnRobotMissionRackLockStateChanged;
                 _robotMissionServiceInternal.OnInputStringForButtonCleared += () => InputStringForButton = string.Empty;
-                _robotMissionServiceInternal.OnTurnOffAlarmLightRequest += HandleTurnOffAlarmLightRequest; // 새로운 이벤트 구독
-                _robotMissionServiceInternal.OnMissionProcessUpdated += HandleMissionProcessUpdate; // 새로운 이벤트 구독
+                _robotMissionServiceInternal.OnTurnOffAlarmLightRequest += HandleTurnOffAlarmLightRequest;
+                _robotMissionServiceInternal.OnMissionProcessUpdated += HandleMissionProcessUpdate;
                 Debug.WriteLine("[MainViewModel] Subscribed to RobotMissionService events.");
             }
             else
@@ -736,8 +758,8 @@ namespace WPF_WMS01.ViewModels
                 }
             }
 
-            // 미션 시작 시 팝업 표시
-            ShowMissionStatusPopup(processType, missionSteps);
+            // MissionStatusPopupViewModel 초기화는 이제 HandleCallButtonActivatedTask에서 해당 버튼에 대해 수행됩니다.
+            // 이 메서드에서는 RobotMissionService에 미션 시작을 요청합니다.
 
             return await _robotMissionServiceInternal.InitiateRobotMissionProcess(
                 processType,
@@ -869,6 +891,10 @@ namespace WPF_WMS01.ViewModels
                             // Discrete Input 상태 업데이트 (다음 틱에서 이전 상태 비교를 위해)
                             buttonVm.CurrentDiscreteInputState = currentDiscreteInputState;
 
+                            // 버튼의 IsEnabled 상태는 PLC가 Run 상태이고, 해당 Discrete Input이 1일 때 활성화
+                            // IsProcessing 상태는 IsEnabled에 직접 영향을 주지 않음 (XAML DataTrigger에서 시각적 변화 처리)
+                            buttonVm.IsEnabled = PlcStatusIsRun && currentDiscreteInputState;
+
                             // PLC 신호 (Discrete Input 0->1) 감지 및 PLC가 Run 상태일 때
                             // 그리고 해당 버튼에 대한 작업이 아직 시작되지 않았을 때만 트리거
                             if (currentDiscreteInputState && !previousDiscreteInputState && PlcStatusIsRun && !buttonVm.IsTaskInitiatedByDiscreteInput)
@@ -898,14 +924,6 @@ namespace WPF_WMS01.ViewModels
                                     buttonVm.CurrentProgress = 0;
                                 }
                             }
-                            // 경광등이 꺼진 것이 감지되면 (Coil 1 -> 0) Discrete Input을 0으로 초기화
-                            // 이 부분은 PLC가 처리하는 것이 일반적이지만, HMI가 트리거하는 경우를 위해 남겨둠.
-                            // 스펙상 "경광등이 꺼지면 (1 -> 0) 이에 트리거되어 call button의 입력이 0으로 바뀐다"는 PLC의 동작을 의미.
-                            // HMI는 단순히 경광등을 끄는 역할만 하므로, 여기서는 Discrete Input을 HMI가 직접 0으로 바꾸는 로직은 필요 없음.
-                            // HMI가 경광등을 0으로 쓴 후, 다음 ModbusReadTimer_Tick에서 PLC의 Discrete Input이 0으로 바뀐 것을 확인하게 될 것임.
-
-                            // 버튼의 IsEnabled 상태는 PLC가 Run 상태이고, Discrete Input이 1이고, 현재 작업 중이 아닐 때 활성화
-                            buttonVm.IsEnabled = PlcStatusIsRun && currentDiscreteInputState && !buttonVm.IsProcessing;
                             // Command의 CanExecute 상태를 명시적으로 갱신하여 UI가 IsEnabled/IsProcessing 변화에 즉시 반응하도록 함
                             ((RelayCommand)buttonVm.ExecuteButtonCommand)?.RaiseCanExecuteChanged();
                         }
@@ -939,56 +957,97 @@ namespace WPF_WMS01.ViewModels
         {
             if (buttonVm == null) return;
 
-            // 버튼 클릭 시점의 상태에 따라 팝업 메시지 표시
-            if (buttonVm.IsProcessing)
+            Debug.WriteLine($"[Modbus] UI Call Button clicked for {buttonVm.Content}. Displaying status.");
+
+            string messageToShow;
+            // 이 버튼에 대해 미션이 활성 상태이거나 대기 중인 경우
+            if (buttonVm.IsProcessing || buttonVm.IsTaskInitiatedByDiscreteInput)
             {
-                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 작업 진행 중: {buttonVm.CurrentProgress}% (주소: {buttonVm.DiscreteInputAddress}).");
-                Debug.WriteLine($"[Modbus] Button clicked for {buttonVm.Content}. Task is already processing. Displaying current progress.");
+                // 해당 버튼의 팝업 ViewModel이 초기화되어 있지 않다면 초기화 (예상치 못한 상황 대비)
+                // 이 상황은 물리적 콜 버튼으로 미션이 시작되었으나, UI 버튼을 클릭하기 전에 팝업 ViewModel이 초기화되지 않은 경우입니다.
+                if (buttonVm.MissionStatusPopupVm == null)
+                {
+                    // 이 시점에서는 MissionSteps를 알 수 없으므로, RobotMissionService에서 현재 활성화된 미션 정보를 조회하여 초기화해야 합니다.
+                    // 임시로 빈 목록으로 초기화하고, HandleMissionProcessUpdate에서 실제 데이터로 채워질 것을 기대합니다.
+                    buttonVm.MissionStatusPopupVm = new MissionStatusPopupViewModel(
+                        "N/A", // ProcessId는 나중에 업데이트될 것
+                        buttonVm.Content + " 미션", // 임시 ProcessType
+                        new List<MissionStepDefinition>() // 임시 미션 단계 목록
+                    );
+                    Debug.WriteLine($"[MainViewModel] Lazily initialized MissionStatusPopupVm for {buttonVm.Content}.");
+                }
+
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    // 해당 버튼의 팝업 View가 존재하지 않거나 닫혀 있다면 새로 생성합니다.
+                    if (buttonVm.MissionStatusPopupViewInstance == null || !buttonVm.MissionStatusPopupViewInstance.IsLoaded)
+                    {
+                        buttonVm.MissionStatusPopupViewInstance = new MissionStatusPopupView
+                        {
+                            DataContext = buttonVm.MissionStatusPopupVm,
+                            Owner = Application.Current.MainWindow // 여기에 Owner 속성 추가
+                        };
+                        // 사용자가 팝업을 수동으로 닫을 때 View 참조를 null로 설정하여 다음 클릭 시 새로 생성되도록 합니다.
+                        buttonVm.MissionStatusPopupViewInstance.Closed += (s, e) =>
+                        {
+                            buttonVm.MissionStatusPopupViewInstance = null;
+                            buttonVm.MissionStatusPopupVm = null; // 팝업이 닫히면 ViewModel도 클리어
+                            Debug.WriteLine($"[MainViewModel] Mission status popup view for {buttonVm.Content} manually closed by user. View and ViewModel references cleared.");
+                        };
+                    }
+
+                    // 팝업을 표시합니다. 이미 표시되어 있다면 활성화합니다.
+                    if (!buttonVm.MissionStatusPopupViewInstance.IsVisible)
+                    {
+                        buttonVm.MissionStatusPopupViewInstance.Show();
+                        Debug.WriteLine($"[MainViewModel] Showing mission status popup for {buttonVm.Content}, Process ID: {buttonVm.MissionStatusPopupVm.ProcessId}");
+                    }
+                    else
+                    {
+                        buttonVm.MissionStatusPopupViewInstance.Activate(); // 이미 열려있다면 활성화
+                        Debug.WriteLine($"[MainViewModel] Mission status popup for {buttonVm.Content}, Process ID: {buttonVm.MissionStatusPopupVm.ProcessId} is already visible. Activating.");
+                    }
+                });
+                messageToShow = $"[Modbus] {buttonVm.Content} 작업 상태 표시됨.";
             }
-            else if (buttonVm.IsTaskInitiatedByDiscreteInput && buttonVm.CurrentDiscreteInputState) // Discrete Input이 1이고, 작업이 스케줄링되었지만 아직 진행 중은 아닌 경우 (10초 지연 중)
+            else if (buttonVm.IsEnabled && !buttonVm.IsProcessing && !buttonVm.IsTaskInitiatedByDiscreteInput)
             {
-                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 작업 대기 중. 10초 지연 후 자동 시작됩니다. (주소: {buttonVm.DiscreteInputAddress}).");
-                Debug.WriteLine($"[Modbus] Button clicked for {buttonVm.Content}. Discrete Input is active, task is scheduled to start soon.");
-            }
-            else if (buttonVm.IsEnabled && buttonVm.CurrentDiscreteInputState) // PLC가 Run이고 Discrete Input이 1이지만, 다른 조건으로 작업이 시작되지 않은 경우 (거의 없겠지만)
-            {
-                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 작업 시작 준비 완료. (주소: {buttonVm.DiscreteInputAddress}).");
-                Debug.WriteLine($"[Modbus] Button clicked for {buttonVm.Content}. Not active. Status: {PlcStatusIsRun}, DiscreteInputState: {buttonVm.CurrentDiscreteInputState}, IsProcessing: {buttonVm.IsProcessing}, IsTaskInitiatedByDiscreteInput: {buttonVm.IsTaskInitiatedByDiscreteInput}");
+                // PLC Run && Discrete Input 1 이지만, 미션이 실행 중이거나 대기 중이 아닌 경우
+                // (물리적 버튼이 눌렸다가 해제되었거나, 새 미션을 기다리는 상태)
+                messageToShow = $"[Modbus] {buttonVm.Content} 작업 시작 준비 완료. 물리적 콜 버튼을 기다립니다. (주소: {buttonVm.DiscreteInputAddress}).";
+                // 이 상태에서는 팝업을 띄우지 않습니다. 혹시 이전 미션의 팝업이 남아있다면 닫습니다.
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    if (buttonVm.MissionStatusPopupViewInstance != null)
+                    {
+                        buttonVm.MissionStatusPopupViewInstance.Close();
+                        buttonVm.MissionStatusPopupViewInstance = null;
+                        // ViewModel은 다음 미션을 위해 유지하거나, 필요시 null로 설정
+                        // 여기서는 미션이 없으므로 ViewModel도 클리어
+                        buttonVm.MissionStatusPopupVm = null;
+                        Debug.WriteLine($"[MainViewModel] Old mission status popup for {buttonVm.Content} closed as no active mission found.");
+                    }
+                });
             }
             else // 버튼이 비활성화된 경우 (PLC Stop 또는 Discrete Input 0)
             {
                 string status = PlcStatusIsRun ? $"Discrete Input {buttonVm.DiscreteInputAddress}이 0입니다." : "PLC가 정지 상태입니다.";
-                ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 작업 비활성화됨. ({status}).");
-                Debug.WriteLine($"[Modbus] Button clicked for {buttonVm.Content}. Not active. Status: {status}");
-            }
-
-            // 현재 활성화된 미션이 있다면 해당 미션 상태 팝업을 띄웁니다.
-            // 이 로직은 ExecuteModbusButtonCommand가 호출될 때 (즉, 버튼이 클릭될 때)만 실행됩니다.
-            // 미션이 이미 시작되어 진행 중인 경우에만 팝업을 띄웁니다.
-            // _activeRobotProcesses는 MainViewModel에서 직접 접근할 수 없으므로, RobotMissionService에
-            // 현재 활성화된 미션 정보를 조회하는 메서드를 추가하거나,
-            // MainViewModel이 시작된 미션의 processId를 저장하고 있어야 합니다.
-            // 여기서는 간단히 _activeMissionStatusPopupViewModel이 null이 아니면 다시 띄우는 것으로 처리합니다.
-            if (_activeMissionStatusPopupViewModel != null && _activeMissionStatusPopupView != null)
-            {
+                messageToShow = $"[Modbus] {buttonVm.Content} 작업 비활성화됨. ({status}).";
+                // 이 상태에서는 팝업을 띄우지 않습니다. 혹시 이전 미션의 팝업이 남아있다면 닫습니다.
                 Application.Current.Dispatcher.Invoke(() =>
                 {
-                    if (!_activeMissionStatusPopupView.IsVisible)
+                    if (buttonVm.MissionStatusPopupViewInstance != null)
                     {
-                        _activeMissionStatusPopupView.Show();
-                        Debug.WriteLine($"[MainViewModel] Re-showing active mission status popup for Process ID: {_activeMissionStatusPopupViewModel.ProcessId}");
-                    }
-                    else
-                    {
-                        Debug.WriteLine($"[MainViewModel] Mission status popup for Process ID: {_activeMissionStatusPopupViewModel.ProcessId} is already visible.");
+                        buttonVm.MissionStatusPopupViewInstance.Close();
+                        buttonVm.MissionStatusPopupViewInstance = null;
+                        // ViewModel도 클리어
+                        buttonVm.MissionStatusPopupVm = null;
+                        Debug.WriteLine($"[MainViewModel] Old mission status popup for {buttonVm.Content} closed as button is disabled.");
                     }
                 });
             }
-            else
-            {
-                // 미션이 시작되지 않았거나, 팝업이 닫힌 상태라면 새로운 팝업을 띄우지 않습니다.
-                Debug.WriteLine("[MainViewModel] No active mission status popup to show or re-show.");
-            }
+
+            ShowAutoClosingMessage(messageToShow);
         }
 
         // Discrete Input이 0에서 1로 활성화될 때 수행될 비동기 작업
@@ -1010,7 +1069,7 @@ namespace WPF_WMS01.ViewModels
                         processType = "공 팔레트 더미 공급 작업";
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = "충전소에서 나오는 중...",
+                            ProcessStepDescription = "충전소에서 이동",
                             MissionType = "8", // Pick up
                             ToNode = "Turn_Charge2", // Hypothetical drop-off station
                             Payload = _productionLinePayload,
@@ -1020,7 +1079,7 @@ namespace WPF_WMS01.ViewModels
                         });
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = "공 팔레트 더미 공급 중...",
+                            ProcessStepDescription = "공 팔레트 더미 픽업, 매거진으로 이동 & 투입",
                             MissionType = "7", // Move/Drop
                             FromNode = "Empty_Palette_PickUP",
                             ToNode = "MZ_Empty_Palette_Drop", // Return to charge station after drop-off
@@ -1031,7 +1090,7 @@ namespace WPF_WMS01.ViewModels
                         });
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = "충전소 복귀 중...",
+                            ProcessStepDescription = "충전소로 복귀",
                             MissionType = "8", // Move/Drop
                             ToNode = "Charge2", // Return to charge station after drop-off
                             Payload = _productionLinePayload,
@@ -1047,7 +1106,7 @@ namespace WPF_WMS01.ViewModels
                         processType = "단프라 시트 더미 공급 작업";
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = "충전소에서 나오는 중...",
+                            ProcessStepDescription = "충전소에서 이동",
                             MissionType = "8", // Pick up
                             ToNode = "Turn_Charge2", // Hypothetical drop-off station
                             Payload = _productionLinePayload,
@@ -1057,7 +1116,7 @@ namespace WPF_WMS01.ViewModels
                         });
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = "단프라 시트 더미 공급 중...",
+                            ProcessStepDescription = "단프라 시트 더미 픽업, 매거진으로 이동 & 투입",
                             MissionType = "7", // Move/Drop
                             FromNode = "DanPra_Sheet_PickUP",
                             ToNode = "MZ_DanPra_Sheet_Drop", // Return to charge station after drop-off
@@ -1068,7 +1127,7 @@ namespace WPF_WMS01.ViewModels
                         });
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = "충전소 복귀 중...",
+                            ProcessStepDescription = "충전소로 복귀",
                             MissionType = "8", // Move/Drop
                             ToNode = "Charge2", // Return to charge station after drop-off
                             Payload = _productionLinePayload,
@@ -1086,7 +1145,7 @@ namespace WPF_WMS01.ViewModels
                         processType = "특수 포장 제품 입고 작업";
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = "충전소에서 나오는 중...",
+                            ProcessStepDescription = "충전소에서 이동",
                             MissionType = "8", // Pick up
                             ToNode = "Turn_Charge2", // Hypothetical drop-off station
                             Payload = _productionLinePayload,
@@ -1096,7 +1155,7 @@ namespace WPF_WMS01.ViewModels
                         });
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = "특수 포장 제품 랙 입고 중...",
+                            ProcessStepDescription = "특수 포장 제품 픽업,입고장으로 이동 & 입고",
                             MissionType = "7", // Move/Drop
                             FromNode = "Work_Etc_PickUP",
                             ToNode = "Palette_IN_Drop", // Return to charge station after drop-off
@@ -1107,7 +1166,7 @@ namespace WPF_WMS01.ViewModels
                         });
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = "충전소 복귀 중...",
+                            ProcessStepDescription = "충전소로 복귀",
                             MissionType = "8", // Move/Drop
                             ToNode = "Charge2", // Return to charge station after drop-off
                             Payload = _productionLinePayload,
@@ -1183,7 +1242,7 @@ namespace WPF_WMS01.ViewModels
                         missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"{buttonVm.Content} 제품 팔레트 이동 & 입고", MissionType = "8", ToNode = "Palette_IN_Drop", Payload = _productionLinePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = $"충전소 복귀",
+                            ProcessStepDescription = $"충전소로 복귀",
                             MissionType = "8",
                             ToNode = "Charge2",
                             Payload = _productionLinePayload,
@@ -1199,6 +1258,17 @@ namespace WPF_WMS01.ViewModels
                         Debug.WriteLine($"[Modbus] Unknown call button content: {buttonVm.Content}. No mission initiated.");
                         return; // Exit if unknown button
                 }
+
+                // 해당 버튼의 MissionStatusPopupVm을 초기화합니다.
+                // 이 시점에서 processId는 아직 모르므로 "N/A"로 초기화하고,
+                // RobotMissionService에서 실제 processId를 받으면 업데이트됩니다.
+                buttonVm.MissionStatusPopupVm = new MissionStatusPopupViewModel(
+                    "N/A", // 초기 ProcessId는 "N/A"로 설정
+                    processType,
+                    missionSteps // 초기 미션 단계 목록 전달
+                );
+                Debug.WriteLine($"[MainViewModel] Initialized MissionStatusPopupVm for {buttonVm.Content} (Coil: {buttonVm.CoilOutputAddress}).");
+
 
                 // Initiate the robot mission
                 string processId = await InitiateRobotMissionProcess(
@@ -1216,17 +1286,26 @@ namespace WPF_WMS01.ViewModels
                 {
                     ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 로봇 미션 시작됨: {processId}");
                     Debug.WriteLine($"[Modbus] Robot mission for {buttonVm.Content} initiated with Process ID: {processId}");
+                    // 미션이 시작되었으므로, 해당 버튼의 팝업 ViewModel에 실제 ProcessId를 업데이트합니다.
+                    if (buttonVm.MissionStatusPopupVm != null)
+                    {
+                        buttonVm.MissionStatusPopupVm.ProcessId = processId;
+                    }
                 }
                 else
                 {
                     ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 로봇 미션 시작 실패.");
                     Debug.WriteLine($"[Modbus] Robot mission for {buttonVm.Content} failed to initiate.");
+                    // 미션 시작 실패 시 해당 버튼의 팝업 ViewModel도 클리어
+                    buttonVm.MissionStatusPopupVm = null;
                 }
             }
             catch (Exception ex)
             {
                 ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 미션 시작 중 오류: {ex.Message}");
                 Debug.WriteLine($"[Modbus] Error during {buttonVm.Content} mission initiation: {ex.GetType().Name} - {ex.Message}");
+                // 오류 발생 시 해당 버튼의 팝업 ViewModel도 클리어
+                buttonVm.MissionStatusPopupVm = null;
             }
             finally
             {
@@ -1243,9 +1322,10 @@ namespace WPF_WMS01.ViewModels
         // Modbus 버튼 활성화 여부를 결정하는 CanExecute 로직
         private bool CanExecuteModbusButtonCommand(ModbusButtonViewModel buttonVm)
         {
-            // 버튼은 PLC가 Run 상태이고, 해당 Discrete Input이 1이며, 현재 비동기 작업이 진행 중이 아닐 때만 클릭 가능합니다.
-            // 클릭은 작업 시작이 아닌, 진행 상황 확인/정보 표시용입니다.
-            return PlcStatusIsRun && buttonVm?.CurrentDiscreteInputState == true && !buttonVm.IsProcessing;
+            if (buttonVm == null) return false;
+            // UI 버튼은 PLC가 Run 상태이고 해당 Discrete Input이 1일 때 (즉, buttonVm.IsEnabled가 true일 때) 클릭 가능합니다.
+            // 이는 미션 진행 여부와 상관없이 상태를 확인하기 위해 클릭할 수 있도록 합니다.
+            return buttonVm.IsEnabled;
         }
 
         public void Dispose()
@@ -1271,12 +1351,15 @@ namespace WPF_WMS01.ViewModels
             }
             _robotMissionServiceInternal?.Dispose(); // 로봇 미션 서비스 자원 해제
 
-            // 활성 팝업이 있다면 닫고 정리
-            if (_activeMissionStatusPopupView != null)
+            // 모든 활성 팝업 정리
+            foreach (var buttonVm in ModbusButtons)
             {
-                _activeMissionStatusPopupView.Close();
-                _activeMissionStatusPopupView = null;
-                _activeMissionStatusPopupViewModel = null;
+                if (buttonVm.MissionStatusPopupViewInstance != null)
+                {
+                    buttonVm.MissionStatusPopupViewInstance.Close();
+                    buttonVm.MissionStatusPopupViewInstance = null;
+                    buttonVm.MissionStatusPopupVm = null;
+                }
             }
         }
 
@@ -1338,6 +1421,11 @@ namespace WPF_WMS01.ViewModels
                             buttonVm.IsTaskInitiatedByDiscreteInput = false;
                             // Discrete Input 상태는 다음 ModbusReadTimer_Tick에서 PLC로부터 읽어와 업데이트될 것입니다.
                             Debug.WriteLine($"[MainViewModel] Button {buttonVm.Content} state reset after alarm light OFF.");
+
+                            // 미션이 완료/실패되었지만, 팝업은 자동으로 닫지 않습니다.
+                            // 사용자가 '확인' 버튼을 눌러 닫도록 합니다.
+                            // 따라서 buttonVm.MissionStatusPopupViewInstance.Close() 및 null 설정 로직은 여기서 제거합니다.
+                            // 팝업이 닫힐 때 (사용자 클릭 시) Closed 이벤트 핸들러에서 ViewModel 및 View 참조를 클리어합니다.
                         }
                     });
                 }
@@ -1355,46 +1443,6 @@ namespace WPF_WMS01.ViewModels
         }
 
         /// <summary>
-        /// 미션 상태 팝업을 표시하고 초기화합니다.
-        /// </summary>
-        /// <param name="processType">미션 프로세스 유형.</param>
-        /// <param name="missionSteps">미션 단계 정의 목록.</param>
-        private void ShowMissionStatusPopup(string processType, List<MissionStepDefinition> missionSteps)
-        {
-            Application.Current.Dispatcher.Invoke(() =>
-            {
-                // 이미 팝업이 열려 있다면 닫고 새로 엽니다.
-                if (_activeMissionStatusPopupView != null)
-                {
-                    _activeMissionStatusPopupView.Close();
-                    _activeMissionStatusPopupView = null;
-                    _activeMissionStatusPopupViewModel = null;
-                }
-
-                _activeMissionStatusPopupViewModel = new MissionStatusPopupViewModel(
-                    "N/A", // processId는 RobotMissionService에서 생성 후 이벤트로 받을 것이므로 초기에는 N/A
-                    processType,
-                    missionSteps
-                );
-                _activeMissionStatusPopupView = new MissionStatusPopupView
-                {
-                    DataContext = _activeMissionStatusPopupViewModel
-                };
-
-                // 팝업이 닫힐 때 ViewModel 참조를 해제합니다.
-                _activeMissionStatusPopupView.Closed += (s, e) =>
-                {
-                    _activeMissionStatusPopupViewModel = null;
-                    _activeMissionStatusPopupView = null;
-                    Debug.WriteLine("[MainViewModel] Mission status popup closed and references cleared.");
-                };
-
-                _activeMissionStatusPopupView.Show();
-                Debug.WriteLine($"[MainViewModel] Mission status popup shown for process type: {processType}");
-            });
-        }
-
-        /// <summary>
         /// RobotMissionService로부터 미션 프로세스 업데이트를 받아 팝업을 갱신합니다.
         /// </summary>
         /// <param name="missionInfo">업데이트된 RobotMissionInfo 객체.</param>
@@ -1402,24 +1450,36 @@ namespace WPF_WMS01.ViewModels
         {
             Application.Current.Dispatcher.Invoke(() =>
             {
-                if (_activeMissionStatusPopupViewModel != null)
+                // missionInfo의 InitiatingCoilAddress를 사용하여 해당 ModbusButtonViewModel을 찾습니다.
+                var buttonVm = ModbusButtons.FirstOrDefault(b => b.CoilOutputAddress == missionInfo.InitiatingCoilAddress);
+
+                if (buttonVm != null) // 버튼 ViewModel을 찾았을 경우
                 {
-                    // processId가 처음 설정될 때 업데이트
-                    if (_activeMissionStatusPopupViewModel.ProcessId == "N/A")
+                    // 해당 버튼의 팝업 ViewModel이 아직 초기화되지 않았다면 초기화합니다.
+                    // 이 경우는 물리적 콜 버튼으로 미션이 시작되었고, 아직 UI 버튼을 클릭하지 않은 상태에서 업데이트가 먼저 도착한 경우입니다.
+                    if (buttonVm.MissionStatusPopupVm == null)
                     {
-                        _activeMissionStatusPopupViewModel.ProcessId = missionInfo.ProcessId;
+                        buttonVm.MissionStatusPopupVm = new MissionStatusPopupViewModel(
+                            missionInfo.ProcessId,
+                            missionInfo.ProcessType,
+                            missionInfo.MissionSteps.ToList()
+                        );
+                        Debug.WriteLine($"[MainViewModel] Lazily initialized MissionStatusPopupVm for {buttonVm.Content} (Coil: {missionInfo.InitiatingCoilAddress}) upon first update.");
                     }
-                    _activeMissionStatusPopupViewModel.UpdateStatus(missionInfo, missionInfo.MissionSteps);
-                    Debug.WriteLine($"[MainViewModel] Mission status popup updated for Process ID: {missionInfo.ProcessId}");
+
+                    // 해당 버튼의 팝업 ViewModel을 업데이트합니다.
+                    buttonVm.MissionStatusPopupVm.UpdateStatus(missionInfo, missionInfo.MissionSteps.ToList());
+                    Debug.WriteLine($"[MainViewModel] Mission status popup ViewModel for Coil {missionInfo.InitiatingCoilAddress} updated for Process ID: {missionInfo.ProcessId}");
                 }
                 else
                 {
-                    Debug.WriteLine($"[MainViewModel] Received mission process update for {missionInfo.ProcessId}, but no active popup to update.");
-                    // 만약 팝업이 닫혔는데 업데이트가 들어온다면, 해당 미션이 완료되거나 실패했는지 확인 후 메시지 표시
-                    if (missionInfo.IsFinished || missionInfo.IsFailed)
-                    {
-                        ShowAutoClosingMessage($"미션 {missionInfo.ProcessId} ({missionInfo.ProcessType})이(가) {missionInfo.HmiStatus.Status} 상태로 종료되었습니다.");
-                    }
+                    Debug.WriteLine($"[MainViewModel] Received mission process update for {missionInfo.ProcessId} (Coil: {missionInfo.InitiatingCoilAddress}), but no matching button ViewModel found. This might indicate an unhandled scenario or a late update for a non-button-initiated mission.");
+                }
+
+                // 미션이 완료되거나 실패하면 자동 닫힘 메시지를 표시합니다.
+                if (missionInfo.IsFinished || missionInfo.IsFailed)
+                {
+                    ShowAutoClosingMessage($"미션 {missionInfo.ProcessId} ({missionInfo.ProcessType})이(가) {missionInfo.HmiStatus.Status} 상태로 종료되었습니다.");
                 }
             });
         }
@@ -1553,7 +1613,7 @@ namespace WPF_WMS01.ViewModels
                             new MissionStepDefinition { ProcessStepDescription = $"{waitRackVm.Title} 제품 픽업, {targetRackVm.Title}(을)로 이동 & 드롭", MissionType = "7", FromNode = "Palette_OUT_PickUP", ToNode = $"Rack_{shelf}_Drop", Payload = _warehousePayload, IsLinkable = true, LinkWaitTimeout = 60 },
                             // 3. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
                             new MissionStepDefinition {
-                                ProcessStepDescription = $"충전소로 복귀", MissionType = "8", ToNode = "Charge1", Payload = _warehousePayload, IsLinkable = false, LinkWaitTimeout = 3600, 
+                                ProcessStepDescription = $"충전소로 복귀", MissionType = "8", ToNode = "Charge1", Payload = _warehousePayload, IsLinkable = false, LinkWaitTimeout = 3600,
                                 CheckModbusDiscreteInput = true, ModbusDiscreteInputAddressToCheck = 13, SourceRackId = waitRackVm.Id, DestinationRackId = targetRackVm.Id
                             }
                         };
@@ -1635,7 +1695,7 @@ namespace WPF_WMS01.ViewModels
                 });
             }
 
-            return inputContainsValidProduct && waitRackNotLocked;
+            return inputContainsValidProduct && emptyAndVisibleRackExists && waitRackNotLocked;
         }
 
         private async void FakeExecuteInboundProduct(object parameter)
@@ -1790,7 +1850,7 @@ namespace WPF_WMS01.ViewModels
 
             bool waitRackNotLocked = (waitRackVm?.IsLocked == false) || (waitRackVm == null);
 
-            return inputContainsValidProduct && waitRackNotLocked;
+            return inputContainsValidProduct && emptyAndVisibleRackExists && waitRackNotLocked;
         }
 
         private async void ExecuteCheckoutProduct(object parameter)
@@ -1917,7 +1977,7 @@ namespace WPF_WMS01.ViewModels
                                 LinkedMission = null,
                                 LinkWaitTimeout = 3600,
                                 SourceRackId = targetRackVm.Id,
-                                DestinationRackId = null // 출고는 소스 랙만 비우므로 SourceRackId만 설정
+                                DestinationRackId = null // 충전소 복귀는 랙 상태 변화가 없음
                             });
                         }
                     }
@@ -1963,14 +2023,10 @@ namespace WPF_WMS01.ViewModels
                         }
                     }
                 }
-                else
-                {
-                    ShowAutoClosingMessage($"{productName} 제품 출고가 취소되었습니다.");
-                }
             }
             else
             {
-                MessageBox.Show("잘못된 출고 요청.", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                ShowAutoClosingMessage("재공품 입고가 취소되었습니다.");
             }
         }
 

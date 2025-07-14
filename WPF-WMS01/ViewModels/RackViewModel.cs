@@ -295,7 +295,7 @@ namespace WPF_WMS01.ViewModels
             {
                 case 0:
                 case 13:
-                    if (clickedRackViewModel.Title.Equals("WAIT"))
+                    if (clickedRackViewModel.Title.Equals("WAIT") || clickedRackViewModel.Title.Equals("AMR"))
                         break;
                     // 랙 타입 변경 팝업
                     int currentRackType = clickedRackViewModel.RackModel.RackType; // 현재 모델의 타입 읽기
