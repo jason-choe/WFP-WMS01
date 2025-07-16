@@ -260,9 +260,10 @@ namespace WPF_WMS01.ViewModels
         public ICommand LoginCommand { get; private set; }
         public ICommand OpenMenuCommand { get; }
         public ICommand CloseMenuCommand { get; }
-        public ICommand MenuItem1Command { get; }
+        public ICommand MenuItem1Command { get; private set; } // 잠금 해제 기능에 사용될 명령 (private set 추가)
         public ICommand MenuItem2Command { get; }
         public ICommand MenuItem3Command { get; }
+        public ICommand UnlockRackCommand { get; private set; } // UnlockRackCommand 선언 추가 (private set 추가)
 
         private string _popupDebugMessage;
         public string PopupDebugMessage
@@ -325,9 +326,13 @@ namespace WPF_WMS01.ViewModels
             // 일반 Command 초기화 (기존 코드)
             OpenMenuCommand = new RelayCommand(p => ExecuteOpenMenuCommand());
             CloseMenuCommand = new RelayCommand(p => ExecuteCloseMenuCommand());
-            MenuItem1Command = new RelayCommand(p => OnMenuItem1Executed(p));
+            // MenuItem1Command는 이제 UnlockRackCommand에 바인딩됩니다.
             MenuItem2Command = new RelayCommand(p => OnMenuItem2Executed(p));
             MenuItem3Command = new RelayCommand(p => OnMenuItem3Executed(p));
+
+            // 잠금 해제 명령 초기화
+            UnlockRackCommand = new RelayCommand(async p => await ExecuteUnlockRack());
+
 
             IsMenuOpen = false;
             IsLoggedIn = false;
@@ -421,11 +426,12 @@ namespace WPF_WMS01.ViewModels
             Debug.WriteLine("Menu close button clicked. IsMenuOpen: False");
         }
 
-        private void OnMenuItem1Executed(object parameter)
-        {
-            Debug.WriteLine($"Option 1 clicked. Parameter: {parameter}");
-            IsMenuOpen = false;
-        }
+        // MenuItem1Command는 이제 UnlockRackCommand에 바인딩되므로 이 메서드는 더 이상 직접 호출되지 않습니다.
+        // private void OnMenuItem1Executed(object parameter)
+        // {
+        //     Debug.WriteLine($"Option 1 clicked. Parameter: {parameter}");
+        //     IsMenuOpen = false;
+        // }
 
         private void OnMenuItem2Executed(object parameter)
         {
@@ -481,6 +487,9 @@ namespace WPF_WMS01.ViewModels
                 param => CanExecuteCheckoutProduct(new CheckoutRequest { BulletType = 12, ProductName = "M80" }));
 
             LoginCommand = new AsyncRelayCommand(ExecuteLogin, CanExecuteLogin);
+
+            // MenuItem1Command를 UnlockRackCommand에 바인딩
+            MenuItem1Command = UnlockRackCommand;
         }
 
         public ObservableCollection<RackViewModel> RackList
@@ -994,6 +1003,14 @@ namespace WPF_WMS01.ViewModels
                             buttonVm.MissionStatusPopupVm = null; // 팝업이 닫히면 ViewModel도 클리어
                             Debug.WriteLine($"[MainViewModel] Mission status popup view for {buttonVm.Content} manually closed by user. View and ViewModel references cleared.");
                         };
+                        // MissionStatusPopupViewModel에 CloseAction 설정 // ToDo Check auto close again
+                        buttonVm.MissionStatusPopupVm.CloseAction = () =>
+                        {
+                            if (buttonVm.MissionStatusPopupViewInstance != null)
+                            {
+                                buttonVm.MissionStatusPopupViewInstance.Close();
+                            }
+                        };
                     }
 
                     // 팝업을 표시합니다. 이미 표시되어 있다면 활성화합니다.
@@ -1242,7 +1259,7 @@ namespace WPF_WMS01.ViewModels
                         missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"{buttonVm.Content} 제품 팔레트 이동 & 입고", MissionType = "8", ToNode = "Palette_IN_Drop", Payload = _productionLinePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = $"충전소로 복귀",
+                            ProcessStepDescription = $"충전소 복귀",
                             MissionType = "8",
                             ToNode = "Charge2",
                             Payload = _productionLinePayload,
@@ -1327,6 +1344,90 @@ namespace WPF_WMS01.ViewModels
             // 이는 미션 진행 여부와 상관없이 상태를 확인하기 위해 클릭할 수 있도록 합니다.
             return buttonVm.IsEnabled;
         }
+
+        /// <summary>
+        /// 잠긴 랙의 잠금을 해제하는 작업을 수행합니다.
+        /// 사용자가 팝업에서 잠금을 해제할 랙을 선택하도록 합니다.
+        /// </summary>
+        private async Task ExecuteUnlockRack()
+        {
+            Debug.WriteLine("[MainViewModel] ExecuteUnlockRack command executed.");
+            IsMenuOpen = false; // 메뉴 닫기
+
+            var lockedRacks = RackList?.Where(r => r.IsLocked).Select(r => r.RackModel).ToList();
+
+            if (lockedRacks == null || !lockedRacks.Any())
+            {
+                ShowAutoClosingMessage("현재 잠긴 랙이 없습니다.");
+                Debug.WriteLine("[MainViewModel] No locked racks found to unlock.");
+                return;
+            }
+
+            // SelectCheckoutRackPopupViewModel을 재활용하여 잠긴 랙을 선택하도록 합니다.
+            // 이 팝업은 Rack 모델 목록을 받고, 선택된 Rack 모델 목록을 반환합니다.
+            var selectLockedRackViewModel = new SelectCheckoutRackPopupViewModel(lockedRacks, "잠금 해제할 랙들을 선택하세요.");
+            var selectLockedRackView = new SelectCheckoutRackPopupView { DataContext = selectLockedRackViewModel };
+            selectLockedRackView.Title = "잠금 해제할 랙 선택"; // 팝업 제목 변경
+
+            ShowAutoClosingMessage("잠금 해제할 랙을 선택하세요.");
+
+            // ShowDialog()는 모달로 작동하므로, 사용자가 팝업을 닫을 때까지 이 메서드는 대기합니다.
+            if (selectLockedRackView.ShowDialog() == true && selectLockedRackViewModel.DialogResult == true)
+            {
+                var selectedRacksToUnlock = selectLockedRackViewModel.GetSelectedRacks();
+
+                if (selectedRacksToUnlock == null || !selectedRacksToUnlock.Any())
+                {
+                    ShowAutoClosingMessage("선택된 랙이 없습니다. 잠금 해제 취소.");
+                    Debug.WriteLine("[MainViewModel] No racks selected for unlock. Operation cancelled.");
+                    return;
+                }
+
+                ShowAutoClosingMessage($"{selectedRacksToUnlock.Count}개의 랙 잠금을 해제합니다...");
+                Debug.WriteLine($"[MainViewModel] Attempting to unlock {selectedRacksToUnlock.Count} selected racks.");
+
+                int unlockedCount = 0;
+                foreach (var rackModel in selectedRacksToUnlock)
+                {
+                    try
+                    {
+                        await _databaseService.UpdateIsLockedAsync(rackModel.Id, false);
+                        Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            var rackVm = RackList?.FirstOrDefault(r => r.Id == rackModel.Id);
+                            if (rackVm != null)
+                            {
+                                rackVm.IsLocked = false;
+                                Debug.WriteLine($"[MainViewModel] Successfully unlocked rack: {rackVm.Title} (ID: {rackVm.Id}).");
+                            }
+                        });
+                        unlockedCount++;
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"[MainViewModel] Error unlocking rack {rackModel.Id}: {ex.Message}");
+                        ShowAutoClosingMessage($"랙 {rackModel.Title} 잠금 해제 실패: {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}");
+                    }
+                }
+
+                if (unlockedCount > 0)
+                {
+                    ShowAutoClosingMessage($"{unlockedCount}개의 랙 잠금 해제 완료.");
+                    Debug.WriteLine($"[MainViewModel] Finished unlocking racks. Total unlocked: {unlockedCount}.");
+                }
+                else
+                {
+                    ShowAutoClosingMessage("랙 잠금 해제 작업을 완료하지 못했습니다.");
+                    Debug.WriteLine("[MainViewModel] No racks were successfully unlocked.");
+                }
+            }
+            else
+            {
+                ShowAutoClosingMessage("랙 잠금 해제 작업이 취소되었습니다.");
+                Debug.WriteLine("[MainViewModel] Rack unlock operation cancelled by user.");
+            }
+        }
+
 
         public void Dispose()
         {
@@ -1465,6 +1566,14 @@ namespace WPF_WMS01.ViewModels
                             missionInfo.MissionSteps.ToList()
                         );
                         Debug.WriteLine($"[MainViewModel] Lazily initialized MissionStatusPopupVm for {buttonVm.Content} (Coil: {missionInfo.InitiatingCoilAddress}) upon first update.");
+                        // MissionStatusPopupViewModel에 CloseAction 설정 (지연 초기화 시에도 설정) // ToDo Check auto close again
+                        buttonVm.MissionStatusPopupVm.CloseAction = () =>
+                        {
+                            if (buttonVm.MissionStatusPopupViewInstance != null)
+                            {
+                                buttonVm.MissionStatusPopupViewInstance.Close();
+                            }
+                        };
                     }
 
                     // 해당 버튼의 팝업 ViewModel을 업데이트합니다.
@@ -1866,7 +1975,7 @@ namespace WPF_WMS01.ViewModels
                     return;
                 }
 
-                var selectCheckoutRackViewModel = new SelectCheckoutRackPopupViewModel(availableRacksForCheckout);
+                var selectCheckoutRackViewModel = new SelectCheckoutRackPopupViewModel(availableRacksForCheckout, "출고할 제품들을 선택하세요.");
                 var selectCheckoutRackView = new SelectCheckoutRackPopupView { DataContext = selectCheckoutRackViewModel };
                 selectCheckoutRackView.Title = $"출고할 {productName} 제품 선택";
 

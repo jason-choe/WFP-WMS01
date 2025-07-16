@@ -102,13 +102,36 @@ namespace WPF_WMS01.Services
         /// <returns>연결 성공 여부 (true: 성공, false: 실패).</returns>
         public async Task<bool> ConnectAsync()
         {
-            if (IsConnected)
+            // 연결 상태를 확인하고, 유효한 연결이 아니라면 기존 자원을 정리합니다.
+            bool needsReconnect = false;
+            if (_currentMode == ModbusMode.TCP)
             {
-                Debug.WriteLine("[ModbusService] Already connected. Skipping new connection attempt.");
+                // TCP 클라이언트가 없거나 연결되지 않았거나, 마스터가 없는 경우 재연결이 필요합니다.
+                // _master.Transport.IsOpen 대신 _tcpClient.Connected를 사용하고, _master가 null인지도 확인합니다.
+                if (_tcpClient == null || !_tcpClient.Connected || _master == null)
+                {
+                    needsReconnect = true;
+                }
+            }
+            else // RTU
+            {
+                // 시리얼 포트가 없거나 열려 있지 않거나, 마스터가 없는 경우 재연결이 필요합니다.
+                if (_serialPort == null || !_serialPort.IsOpen || _master == null)
+                {
+                    needsReconnect = true;
+                }
+            }
+
+            // 재연결이 필요하지 않고 이미 연결된 상태라면 바로 반환합니다.
+            if (!needsReconnect && IsConnected)
+            {
+                Debug.WriteLine("[ModbusService] Already connected and healthy. Skipping new connection attempt.");
                 return true;
             }
 
-            Dispose(); // 기존 연결이 있다면 해제 (자원 정리)
+            // 기존 연결이 끊겼거나 유효하지 않다면, 모든 자원을 정리하고 새로 연결을 시도합니다.
+            // Dispose()는 _master, _tcpClient, _serialPort를 null로 설정하고 IsConnected를 false로 설정합니다.
+            Dispose();
 
             try
             {
@@ -131,10 +154,16 @@ namespace WPF_WMS01.Services
                         // 타임아웃 발생 시 OperationCanceledException을 던지도록 함
                         token.ThrowIfCancellationRequested();
                     }
-
-                    if (_tcpClient.Connected)
+                    else // completedTask == connectTask
                     {
-                        _master = ModbusIpMaster.CreateIp(_tcpClient); // Modbus TCP 마스터 생성
+                        // connectTask가 먼저 완료되었지만, 예외가 발생했을 수 있으므로 await하여 예외를 전파합니다.
+                        await connectTask.ConfigureAwait(false);
+                    }
+
+                    // _tcpClient가 null이 아니고 연결되었는지 다시 한번 확인
+                    if (_tcpClient != null && _tcpClient.Connected)
+                    {
+                        _master = ModbusIpMaster.CreateIp(_tcpClient); // 줄 158
                         _master.Transport.ReadTimeout = 2000; // 응답 대기 시간 (ms)
                         _master.Transport.WriteTimeout = 2000;
                         IsConnected = true; // 연결 성공

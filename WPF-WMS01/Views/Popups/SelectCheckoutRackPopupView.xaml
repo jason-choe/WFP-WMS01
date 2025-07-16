@@ -18,10 +18,12 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0" Text="출고할 제품들을 선택하세요."
+        <TextBlock Grid.Row="0"
                    VerticalAlignment="Center" HorizontalAlignment="Center"
                    TextWrapping="Wrap"
-                   FontSize="22" FontWeight="Bold" Margin="10"/>
+                   FontSize="22" FontWeight="Bold" Margin="10">
+            <Run Text="{Binding SubTitle}"/>
+        </TextBlock>
 
         <ListView Grid.Row="1" ItemsSource="{Binding AvailableRacks}" Margin="10" FontSize="24">
             <ListView.View>

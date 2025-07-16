@@ -283,6 +283,12 @@ namespace WPF_WMS01.ViewModels
             var clickedRackViewModel = parameter as RackViewModel;
             if (clickedRackViewModel == null) return;
 
+            if (clickedRackViewModel.Title.Equals("AMR"))
+            {
+                ShowAutoClosingMessage("AMR을 클릭했습니다.");
+                return;
+            }
+
             // 랙이 잠겨있으면 작업을 수행할 수 없음
             if (IsLocked)
             {
@@ -295,7 +301,7 @@ namespace WPF_WMS01.ViewModels
             {
                 case 0:
                 case 13:
-                    if (clickedRackViewModel.Title.Equals("WAIT") || clickedRackViewModel.Title.Equals("AMR"))
+                    if (clickedRackViewModel.Title.Equals("WAIT"))
                         break;
                     // 랙 타입 변경 팝업
                     int currentRackType = clickedRackViewModel.RackModel.RackType; // 현재 모델의 타입 읽기
@@ -672,8 +678,12 @@ namespace WPF_WMS01.ViewModels
                 }
                 else
                 {
-                    ShowAutoClosingMessage("재공품 반출작업이 취소되었습니다.");
+                    ShowAutoClosingMessage("재공품 반출장소가 선택되지 않았습니다."); // It never happens
                 }
+            }
+            else
+            {
+                ShowAutoClosingMessage("재공품 반출작업이 취소되었습니다.");
             }
         }
 
@@ -808,7 +818,7 @@ namespace WPF_WMS01.ViewModels
             }
             else
             {
-                ShowAutoClosingMessage("랙 이동/복사 작업이 취소되었습니다.");
+                ShowAutoClosingMessage("포장된 팔레트 적재 작업이 취소되었습니다.");
             }
         }
 

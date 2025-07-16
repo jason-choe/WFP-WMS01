@@ -347,7 +347,7 @@
                     <Border Background="#455A64" CornerRadius="5" BorderThickness="1" BorderBrush="#263238" Padding="5"
                             Effect="{StaticResource DefaultShadow}">
                         <StackPanel>
-                            <Button Content="옵션 1" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding MenuItem1Command}"/>
+                            <Button Content="잠긴 랙 잠금 풀기" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding MenuItem1Command}"/>
                             <Button Content="옵션 2" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding MenuItem2Command}"/>
                             <Button Content="옵션 3" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding MenuItem3Command}"/>
                             <!-- 팝업이 닫힐 때 IsMenuOpen을 False로 설정하는 버튼 추가 -->

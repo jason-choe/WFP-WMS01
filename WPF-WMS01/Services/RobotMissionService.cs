@@ -450,13 +450,31 @@ namespace WPF_WMS01.Services
                 {
                     Debug.WriteLine($"[RobotMissionService] Checking Modbus Discrete Input {currentStep.ModbusDiscreteInputAddressToCheck.Value} before sending mission step.");
 
-                    // 미션 체크용 Modbus 서비스 연결 시도 (필요 시)
+                    // Modbus 연결이 끊겼다면 재연결 시도
                     if (!_missionCheckModbusService.IsConnected)
                     {
-                        await _missionCheckModbusService.ConnectAsync().ConfigureAwait(false);
+                        Debug.WriteLine("[RobotMissionService] Modbus Check Service: Not Connected. Attempting to reconnect...");
+                        try
+                        {
+                            await _missionCheckModbusService.ConnectAsync().ConfigureAwait(false);
+                            if (!_missionCheckModbusService.IsConnected) // 연결 시도 후에도 연결되지 않았다면
+                            {
+                                throw new InvalidOperationException("Modbus 연결에 실패했습니다. Discrete Input을 읽을 수 없습니다.");
+                            }
+                            Debug.WriteLine("[RobotMissionService] Modbus Check Service: Reconnected successfully.");
+                        }
+                        catch (Exception connectEx)
+                        {
+                            throw new InvalidOperationException($"Modbus 연결 중 오류 발생: {connectEx.Message}", connectEx);
+                        }
                     }
 
-                    // Modbus 연결이 여전히 안 되어 있다면 예외 발생 (ModbusClientService에서 이미 던지도록 수정됨)
+                    // Modbus 연결이 여전히 안 되어 있다면 예외 발생 (위에서 이미 처리하지만, 방어적으로 한 번 더)
+                    if (!_missionCheckModbusService.IsConnected)
+                    {
+                        throw new InvalidOperationException("Modbus 연결이 활성화되지 않아 Discrete Input을 읽을 수 없습니다.");
+                    }
+
                     bool[] discreteInputStates = await _missionCheckModbusService.ReadDiscreteInputStatesAsync(currentStep.ModbusDiscreteInputAddressToCheck.Value, 1).ConfigureAwait(false);
 
                     if (discreteInputStates != null && discreteInputStates.Length > 0 && discreteInputStates[0])
@@ -484,17 +502,17 @@ namespace WPF_WMS01.Services
                         Debug.WriteLine($"[RobotMissionService] Modbus Discrete Input {currentStep.ModbusDiscreteInputAddressToCheck.Value} is 0. Proceeding with mission step.");
                     }
                 }
-                catch (InvalidOperationException ex) // ModbusClientService에서 던지는 연결 오류 예외
+                catch (InvalidOperationException ex) // ModbusClientService에서 던지는 연결/작업 오류 예외
                 {
                     if (!_hasMissionCriticalModbusErrorBeenDisplayed) // 플래그 확인
                     {
                         _hasMissionCriticalModbusErrorBeenDisplayed = true; // MessageBox 표시 후 플래그 설정
                         await Application.Current.Dispatcher.Invoke(async () =>
                         {
-                            MessageBox.Show(Application.Current.MainWindow, $"Modbus 연결 오류: {ex.Message}. 미션 프로세스를 취소합니다.", "미션 취소", MessageBoxButton.OK, MessageBoxImage.Error);
+                            MessageBox.Show(Application.Current.MainWindow, $"Modbus 연결/통신 오류: {ex.Message}. 미션 프로세스를 취소합니다.", "미션 취소", MessageBoxButton.OK, MessageBoxImage.Error);
                         });
                     }
-                    Debug.WriteLine($"[RobotMissionService] Modbus Connection Error during check: {ex.Message}. Cancelling mission process {missionInfo.ProcessId}.");
+                    Debug.WriteLine($"[RobotMissionService] Modbus Connection/Communication Error during check: {ex.Message}. Cancelling mission process {missionInfo.ProcessId}.");
                     missionInfo.CurrentStatus = MissionStatusEnum.FAILED;
                     missionInfo.HmiStatus.Status = "FAILED";
                     missionInfo.HmiStatus.ProgressPercentage = 100;
@@ -511,7 +529,7 @@ namespace WPF_WMS01.Services
                         _hasMissionCriticalModbusErrorBeenDisplayed = true; // MessageBox 표시 후 플래그 설정
                         await Application.Current.Dispatcher.Invoke(async () =>
                         {
-                            MessageBox.Show(Application.Current.MainWindow, $"Modbus Discrete Input {currentStep.ModbusDiscreteInputAddressToCheck.Value} 읽기 중 오류 발생: {ex.Message}. 미션 프로세스를 취소합니다.", "미션 취소", MessageBoxButton.OK, MessageBoxImage.Error);
+                            MessageBox.Show(Application.Current.MainWindow, $"Modbus Discrete Input {currentStep.ModbusDiscreteInputAddressToCheck.Value} 읽기 중 예상치 못한 오류 발생: {ex.Message}. 미션 프로세스를 취소합니다.", "미션 취소", MessageBoxButton.OK, MessageBoxImage.Error);
                         });
                     }
                     Debug.WriteLine($"[RobotMissionService] Error reading Modbus Discrete Input {currentStep.ModbusDiscreteInputAddressToCheck.Value}: {ex.Message}. Cancelling mission process {missionInfo.ProcessId}.");
