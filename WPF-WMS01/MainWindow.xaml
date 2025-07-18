@@ -370,7 +370,8 @@
 
                 <TabItem Header="입고 관리" Width ="150" FontSize="20" FontWeight="Bold">
                     <Grid>
-                            <Grid.ColumnDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
@@ -390,14 +391,28 @@
                              FontSize="28" Foreground="White"
                              VerticalContentAlignment="Center"
                              TextAlignment="Center" />
-                        
-                        <Button Grid.Column="1" Content="미포장 입고"
+                        <TextBlock Grid.Column="1"
+                             Margin="5,10,0,0"
+                             Text="Box 수:"
+                             FontSize="18" Foreground="Black" FontWeight="Light"
+                             VerticalAlignment="Top"/>
+                        <TextBox  Grid.Column="1"                     
+                             Text=""
+                             MaxLength="3" Width="80" Height="80" Background="LightSeaGreen"
+                             VerticalAlignment="Center" HorizontalAlignment="Left"
+                             Margin="0,0,20,0"
+                             BorderThickness="3" 
+                             BorderBrush="Black"
+                             FontSize="28" Foreground="White"
+                             VerticalContentAlignment="Center"
+                             TextAlignment="Center" />
+                        <Button Grid.Column="2" Content="미포장 입고"
                              Command="{Binding InboundProductCommand}"
                              Width="120" Height="64" FontSize="20" FontWeight="Bold"
                              VerticalAlignment="Center" HorizontalAlignment="Left" Margin="0,0,20,0"
                              Style="{StaticResource ModernButtonStyle}"/>
 
-                        <Button Grid.Column="2" Content="재공품 입고"
+                        <Button Grid.Column="3" Content="재공품 입고"
                              Command="{Binding FakeInboundProductCommand}"
                              Width="120" Height="64" FontSize="20" FontWeight="Bold"
                              VerticalAlignment="Center" HorizontalAlignment="Left"
@@ -440,7 +455,9 @@
                                             Command="{Binding ExecuteButtonCommand}"
                                             CommandParameter="{Binding}"
                                             IsEnabled="{Binding IsEnabled}"
-                                            Style="{StaticResource CallButtonStyle}">
+                                            Width="135" Height="64" FontSize="20" FontWeight="Bold"
+                                    VerticalAlignment="Center" HorizontalAlignment="Right"
+                                    Margin="0,5,20,5" Style="{StaticResource ModernButtonStyle}">
                                     </Button>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
