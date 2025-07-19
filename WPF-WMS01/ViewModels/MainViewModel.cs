@@ -378,6 +378,7 @@ namespace WPF_WMS01.ViewModels
                 _robotMissionServiceInternal.OnShowAutoClosingMessage -= ShowAutoClosingMessage;
                 _robotMissionServiceInternal.OnRackLockStateChanged -= OnRobotMissionRackLockStateChanged;
                 _robotMissionServiceInternal.OnInputStringForButtonCleared -= () => InputStringForButton = string.Empty;
+                _robotMissionServiceInternal.OnInputStringForBoxesCleared -= () => InputStringForBoxes = string.Empty;
                 _robotMissionServiceInternal.OnTurnOffAlarmLightRequest -= HandleTurnOffAlarmLightRequest;
                 _robotMissionServiceInternal.OnMissionProcessUpdated -= HandleMissionProcessUpdate;
 
@@ -385,6 +386,7 @@ namespace WPF_WMS01.ViewModels
                 _robotMissionServiceInternal.OnShowAutoClosingMessage += ShowAutoClosingMessage;
                 _robotMissionServiceInternal.OnRackLockStateChanged += OnRobotMissionRackLockStateChanged;
                 _robotMissionServiceInternal.OnInputStringForButtonCleared += () => InputStringForButton = string.Empty;
+                _robotMissionServiceInternal.OnInputStringForBoxesCleared += () => InputStringForBoxes = string.Empty;
                 _robotMissionServiceInternal.OnTurnOffAlarmLightRequest += HandleTurnOffAlarmLightRequest;
                 _robotMissionServiceInternal.OnMissionProcessUpdated += HandleMissionProcessUpdate;
                 Debug.WriteLine("[MainViewModel] Subscribed to RobotMissionService events.");
@@ -777,6 +779,7 @@ namespace WPF_WMS01.ViewModels
                 destinationRack, // 여전히 인터페이스 호환을 위해 전달하지만, RobotMissionService에서 사용하지 않음
                 destinationLine,
                 () => InputStringForButton, // InputStringForButton 값을 가져오는 델리게이트 전달
+                () => InputStringForBoxes, // InputStringForBoxes 값을 가져오는 델리게이트 전달
                 racksLockedAtStart,
                 racksToProcess,
                 initiatingCoilAddress // 새로운 파라미터 전달
@@ -1447,6 +1450,7 @@ namespace WPF_WMS01.ViewModels
                 _robotMissionServiceInternal.OnShowAutoClosingMessage -= ShowAutoClosingMessage;
                 _robotMissionServiceInternal.OnRackLockStateChanged -= OnRobotMissionRackLockStateChanged;
                 _robotMissionServiceInternal.OnInputStringForButtonCleared -= () => InputStringForButton = string.Empty;
+                _robotMissionServiceInternal.OnInputStringForBoxesCleared -= () => InputStringForBoxes = string.Empty;
                 _robotMissionServiceInternal.OnTurnOffAlarmLightRequest -= HandleTurnOffAlarmLightRequest;
                 _robotMissionServiceInternal.OnMissionProcessUpdated -= HandleMissionProcessUpdate;
             }
@@ -1605,6 +1609,18 @@ namespace WPF_WMS01.ViewModels
             }
         }
 
+        private string _inputStringForBoxes;
+        public string InputStringForBoxes
+        {
+            get => _inputStringForBoxes;
+            set
+            {
+                _inputStringForBoxes = value;
+                OnPropertyChanged();
+                ((RelayCommand)InboundProductCommand).RaiseCanExecuteChanged();
+            }
+        }
+
         private string _inputStringForShipOut;
         public string InputStringForShipOut
         {
@@ -1743,7 +1759,7 @@ namespace WPF_WMS01.ViewModels
                     }
                     catch (Exception ex)
                     {
-                        MessageBox.Show($"로봇 미션 시작 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                        MessageBox.Show($"미포장 입고 로봇 미션 시작 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
                         foreach (var id in lockedRackIds)
                         {
                             await _databaseService.UpdateIsLockedAsync(id, false);
@@ -1921,7 +1937,7 @@ namespace WPF_WMS01.ViewModels
                     }
                     catch (Exception ex)
                     {
-                        MessageBox.Show($"로봇 미션 시작 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                        MessageBox.Show($"반제품 입고 로봇 미션 시작 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
                         foreach (var id in lockedRackIds)
                         {
                             await _databaseService.UpdateIsLockedAsync(id, false);

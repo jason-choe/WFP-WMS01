@@ -28,6 +28,7 @@ namespace WPF_WMS01.Services
         /// WAIT 랙 이동 완료 후 InputStringForButton을 초기화하도록 MainViewModel에 알리는 이벤트입니다.
         /// </summary>
         event Action OnInputStringForButtonCleared;
+        event Action OnInputStringForBoxesCleared;
 
         /// <summary>
         /// RobotMissionService가 MainViewModel에게 특정 경광등을 끄도록 요청하는 이벤트입니다.
@@ -50,6 +51,7 @@ namespace WPF_WMS01.Services
         /// <param name="destinationRack">목적지 랙 ViewModel (더 이상 사용되지 않음).</param>
         /// <param name="destinationLine">목적지 생산 라인.</param>
         /// <param name="getInputStringForButtonFunc">MainViewModel에서 InputStringForButton 값을 가져오는 함수.</param>
+        /// <param name="getInputStringForBoxesFunc">MainViewModel에서 InputStringForButton 값을 가져오는 함수.</param>
         /// <param name="racksLockedAtStart">이 프로세스 시작 시 잠긴 모든 랙의 ID 목록.</param>
         /// <param name="racksToProcess">여러 랙을 처리할 경우 (예: 출고) 해당 랙들의 ViewModel 목록.</param>
         /// <param name="initiatingCoilAddress">이 미션을 시작한 Modbus Coil의 주소 (경광등 제어용).</param>
@@ -61,6 +63,7 @@ namespace WPF_WMS01.Services
             RackViewModel destinationRack,
             Location destinationLine,
             Func<string> getInputStringForButtonFunc,
+            Func<string> getInputStringForBoxesFunc,
             List<int> racksLockedAtStart,
             List<RackViewModel> racksToProcess = null,
             ushort? initiatingCoilAddress = null // 새로운 파라미터 추가

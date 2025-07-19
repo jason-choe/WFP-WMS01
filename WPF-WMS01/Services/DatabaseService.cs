@@ -30,7 +30,7 @@ namespace WPF_WMS01.Services
         public async Task<List<Rack>> GetRackStatesAsync()
         {
             List<Rack> currentRacks = new List<Rack>(); // 현재 DB에서 읽어올 랙 목록 (캐시된 객체들로 구성)
-            string query = "SELECT id as 'Id', rack_name as 'Title', rack_type AS 'RackType', bullet_type as 'BulletType', visible AS 'IsVisible', locked AS 'IsLocked', lot_number AS 'LotNumber', racked_at AS 'RackedAt', location_area AS 'LocationArea' FROM RackState";
+            string query = "SELECT id as 'Id', rack_name as 'Title', rack_type AS 'RackType', bullet_type as 'BulletType', visible AS 'IsVisible', locked AS 'IsLocked', lot_number AS 'LotNumber', box_count AS 'BoxCount', racked_at AS 'RackedAt', location_area AS 'LocationArea' FROM RackState";
 
             using (SqlConnection connection = new SqlConnection(_connectionString))
             {
@@ -48,6 +48,7 @@ namespace WPF_WMS01.Services
                             bool isVisible = reader.IsDBNull(reader.GetOrdinal("IsVisible")) ? false : Convert.ToBoolean(reader["IsVisible"]);
                             bool isLocked = reader.IsDBNull(reader.GetOrdinal("IsLocked")) ? false : Convert.ToBoolean(reader["IsLocked"]);
                             string lotNumber = reader.IsDBNull(reader.GetOrdinal("LotNumber")) ? string.Empty : reader["LotNumber"].ToString();
+                            int boxCount = reader.IsDBNull(reader.GetOrdinal("BoxCount")) ? 0 : Convert.ToInt32(reader["BoxCount"]);
                             DateTime? rackedAt = reader.IsDBNull(reader.GetOrdinal("RackedAt")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("RackedAt"));
                             int locationArea = reader.IsDBNull(reader.GetOrdinal("LocationArea")) ? 0 : Convert.ToInt32(reader["LocationArea"]);
 
@@ -66,6 +67,7 @@ namespace WPF_WMS01.Services
                                     rack.IsVisible = isVisible;
                                     rack.IsLocked = isLocked;
                                     rack.LotNumber = lotNumber;
+                                    rack.BoxCount = boxCount;
                                     rack.RackedAt = rackedAt;
                                     rack.LocationArea = locationArea;
                                 }
@@ -148,15 +150,16 @@ namespace WPF_WMS01.Services
         }
 
         // Lot Number 업데이트 메서드 (필요시)
-        public async Task UpdateLotNumberAsync(int rackId, string newLotNumber)
+        public async Task UpdateLotNumberAsync(int rackId, string newLotNumber, int boxCount)
         {
             using (var connection = new SqlConnection(_connectionString))
             {
                 await connection.OpenAsync();
-                var command = new SqlCommand("UPDATE RackState SET lot_number = @lotNumber, racked_at = @rackedAt WHERE id = @rackId", connection);
+                var command = new SqlCommand("UPDATE RackState SET lot_number = @lotNumber, box_count = @boxCount, racked_at = @rackedAt WHERE id = @rackId", connection);
                 command.Parameters.AddWithValue("@lotNumber", newLotNumber);
                 DateTime? tmpDateTime = String.IsNullOrEmpty(newLotNumber) ? (DateTime?)null : DateTime.Now;
                 //command.Parameters.AddWithValue("@rackedAt", String.IsNullOrEmpty(newLotNumber) ? (DateTime?)null : DateTime.Now);
+                command.Parameters.AddWithValue("@boxCount", boxCount);
                 command.Parameters.AddWithValue("@rackedAt", DateTime.Now);
                 command.Parameters.AddWithValue("@rackId", rackId);
                 await command.ExecuteNonQueryAsync();
@@ -168,6 +171,7 @@ namespace WPF_WMS01.Services
                 if (_rackCache.TryGetValue(rackId, out Rack rackToUpdate))
                 {
                     rackToUpdate.LotNumber = newLotNumber;
+                    rackToUpdate.BoxCount = boxCount;
                     rackToUpdate.RackedAt = String.IsNullOrEmpty(newLotNumber) ? null : DateTime.Now;
                 }
             }

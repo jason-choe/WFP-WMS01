@@ -244,6 +244,19 @@ namespace WPF_WMS01.ViewModels
             }
         }
 
+        public int BoxCount
+        {
+            get => _rackModel.BoxCount;
+            set
+            {
+                if (_rackModel.BoxCount != value)
+                {
+                    _rackModel.BoxCount = value;
+                    // OnPropertyChanged()는 RackModel에서 이미 알림을 보내므로 여기서는 명시적으로 호출할 필요 없음.
+                }
+            }
+        }
+
         public DateTime? RackedAt
         {
             get => _rackModel.RackedAt;
@@ -503,7 +516,7 @@ namespace WPF_WMS01.ViewModels
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show($"로봇 미션 시작 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                    MessageBox.Show($"포장기로 이동 로봇 미션 시작 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
                     Debug.WriteLine($"[RackViewModel] Error initiating robot mission: {ex.Message}");
                     // 미션 시작 실패 시 랙 잠금 해제
                     foreach (var id in lockedRackIds)
@@ -668,7 +681,7 @@ namespace WPF_WMS01.ViewModels
                     }
                     catch (Exception ex)
                     {
-                        MessageBox.Show($"로봇 미션 시작 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                        MessageBox.Show($"반제품 반출 로봇 미션 시작 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
                         foreach (var id in lockedRackIds)
                         {
                             await _databaseService.UpdateIsLockedAsync(id, false);
@@ -807,7 +820,7 @@ namespace WPF_WMS01.ViewModels
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show($"로봇 미션 시작 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                    MessageBox.Show($"포장제품 입고 로봇 미션 시작 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
                     Debug.WriteLine($"[RackViewModel] Error initiating robot mission: {ex.Message}");
                     foreach (var id in lockedRackIds)
                     {
@@ -930,7 +943,7 @@ namespace WPF_WMS01.ViewModels
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show($"로봇 미션 시작 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                    MessageBox.Show($"제품 출고 로봇 미션 시작 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
                     Debug.WriteLine($"[RackViewModel] Error initiating robot mission: {ex.Message}");
                     // 미션 시작 실패 시 랙 잠금 해제
                     foreach (var id in lockedRackIds)
