@@ -811,7 +811,7 @@ namespace WPF_WMS01.ViewModels
                 {
                     Debug.WriteLine($"[ModbusService] Reconnect attempt failed: {ex.Message}.");
                     // 재연결 실패 시 메시지 박스 대신 자동 닫힘 메시지 사용
-                    ShowAutoClosingMessage($"Modbus 연결 실패: {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}");
+                    ShowAutoClosingMessage($"콜 버튼 Modbus 연결 실패: {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}");
                     // 연결 실패 시 모든 버튼 상태를 비활성화 및 리셋
                     Application.Current.Dispatcher.Invoke(() =>
                     {

@@ -1,13 +1,10 @@
-﻿// App.xaml.cs
-using System.Configuration; // ConfigurationManager를 위해 추가
-using Microsoft.Extensions.DependencyInjection; // NuGet 패키지 설치 필요
-using System.Windows;
+﻿using Microsoft.Extensions.DependencyInjection;
 using System;
-using WPF_WMS01.Services; // HttpService
-using WPF_WMS01.ViewModels; // MainViewModel
-using System.Diagnostics; // Debug.WriteLine을 위해 추가
-using System.Configuration; // ConfigurationManager를 위해 추가
+using System.Configuration;
 using System.IO.Ports; // Parity, StopBits를 위해 추가
+using System.Windows;
+using WPF_WMS01.Services;
+using WPF_WMS01.ViewModels;
 
 namespace WPF_WMS01
 {
@@ -16,169 +13,118 @@ namespace WPF_WMS01
     /// </summary>
     public partial class App : Application
     {
-        private MainViewModel _mainViewModelInstance;
-        private ModbusClientService _modbusServiceInstance;
-        private RobotMissionService _robotMissionServiceInstance;
-        // private McProtocolService _mcProtocolServiceInstance; // MC Protocol 서비스 인스턴스 필드 (현재 사용 안함)
-
         public static IServiceProvider ServiceProvider { get; private set; }
 
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
-            Debug.WriteLine("[App] OnStartup: Configuring Services...");
             ConfigureServices();
-            Debug.WriteLine("[App] OnStartup: Services Configured.");
 
-            // DI 컨테이너에서 인스턴스를 가져와 필드에 할당 (Dispose를 위해)
-            _mainViewModelInstance = ServiceProvider.GetRequiredService<MainViewModel>();
-            // MainViewModel에 주입된 ModbusClientService는 콜 버튼용이므로, _modbusServiceInstance에 할당
-            _modbusServiceInstance = ServiceProvider.GetRequiredService<ModbusClientService>();
-            _robotMissionServiceInstance = (RobotMissionService)ServiceProvider.GetRequiredService<IRobotMissionService>();
-            // _mcProtocolServiceInstance = (McProtocolService)ServiceProvider.GetService<IMcProtocolService>(); // MC Protocol 서비스 인스턴스 할당 (현재 사용 안함)
-
-            Debug.WriteLine("[App] OnStartup: Creating MainWindow...");
-            // MainWindow를 생성하고 ViewModel을 주입
-            var mainWindow = ServiceProvider.GetService<MainWindow>();
+            var mainWindow = ServiceProvider.GetRequiredService<MainWindow>();
+            // MainViewModel에 RobotMissionService 인스턴스 주입
+            var mainViewModel = ServiceProvider.GetRequiredService<MainViewModel>();
+            mainViewModel.SetRobotMissionService(ServiceProvider.GetRequiredService<IRobotMissionService>());
+            mainWindow.DataContext = mainViewModel;
             mainWindow.Show();
-            Debug.WriteLine("[App] OnStartup: MainWindow Shown.");
         }
 
         private void ConfigureServices()
         {
             var services = new ServiceCollection();
 
-            // App.config에서 설정 값 읽기
-            string baseApiUrl = ConfigurationManager.AppSettings["AntApiBaseUrl"];
-            string waitRackTitle = ConfigurationManager.AppSettings["WaitRackTitle"] ?? "WAIT";
-            char[] militaryCharacter = (ConfigurationManager.AppSettings["MilitaryCharacters"] ?? "abc ").ToCharArray();
+            // App.config에서 메인 Modbus 설정 읽기 (MainViewModel용)
+            string mainModbusMode = ConfigurationManager.AppSettings["ModbusMode"] ?? "TCP";
+            string mainModbusIp = ConfigurationManager.AppSettings["ModbusIpAddress"] ?? "127.0.0.1";
+            int mainModbusPort = int.Parse(ConfigurationManager.AppSettings["ModbusPort"] ?? "502");
+            byte mainModbusSlaveId = byte.Parse(ConfigurationManager.AppSettings["ModbusSlaveId"] ?? "1");
+            string mainModbusComPort = ConfigurationManager.AppSettings["ModbusComPort"] ?? "COM3";
+            int mainModbusBaudRate = int.Parse(ConfigurationManager.AppSettings["ModbusBaudRate"] ?? "9600");
+            Parity mainModbusParity = (Parity)Enum.Parse(typeof(Parity), ConfigurationManager.AppSettings["ModbusParity"] ?? "None");
+            int mainModbusDataBits = int.Parse(ConfigurationManager.AppSettings["ModbusDataBits"] ?? "8");
+            StopBits mainModbusStopBits = (StopBits)Enum.Parse(typeof(StopBits), ConfigurationManager.AppSettings["ModbusStopBits"] ?? "One");
 
-            // 새로운 AMR Payload 값 읽기
-            string warehousePayload = ConfigurationManager.AppSettings["WarehouseAMR"] ?? "AMR_1";
-            string productionLinePayload = ConfigurationManager.AppSettings["ProductionLineAMR"] ?? "AMR_2";
+            // App.config에서 미션 체크용 Modbus 설정 읽기 (RobotMissionService용)
+            string missionModbusMode = ConfigurationManager.AppSettings["MissionModbusMode"] ?? "TCP";
+            string missionModbusIp = ConfigurationManager.AppSettings["MissionModbusIpAddress"] ?? "127.0.0.1";
+            int missionModbusPort = int.Parse(ConfigurationManager.AppSettings["MissionModbusPort"] ?? "503");
+            byte missionModbusSlaveId = byte.Parse(ConfigurationManager.AppSettings["MissionModbusSlaveId"] ?? "1");
+            string missionModbusComPort = ConfigurationManager.AppSettings["MissionModbusComPort"] ?? "COM4";
+            int missionModbusBaudRate = int.Parse(ConfigurationManager.AppSettings["MissionModbusBaudRate"] ?? "9600");
+            Parity missionModbusParity = (Parity)Enum.Parse(typeof(Parity), ConfigurationManager.AppSettings["MissionModbusParity"] ?? "None");
+            int missionModbusDataBits = int.Parse(ConfigurationManager.AppSettings["MissionModbusDataBits"] ?? "8");
+            StopBits missionModbusStopBits = (StopBits)Enum.Parse(typeof(StopBits), ConfigurationManager.AppSettings["MissionModbusStopBits"] ?? "One");
 
-            // 콜 버튼용 Modbus 설정 읽기
-            string callButtonModbusIp = ConfigurationManager.AppSettings["ModbusIpAddress"];
-            int callButtonModbusPort = int.Parse(ConfigurationManager.AppSettings["ModbusPort"]);
-            byte callButtonModbusSlaveId = byte.Parse(ConfigurationManager.AppSettings["ModbusSlaveId"]);
+            // HttpService 등록 (생성자에 baseApiUrl 주입)
+            services.AddSingleton<HttpService>(provider =>
+            {
+                string antApiBaseUrl = ConfigurationManager.AppSettings["AntApiBaseUrl"] ?? "http://localhost:8081/";
+                return new HttpService(antApiBaseUrl);
+            });
 
-            // 미션 실패 확인용 Modbus 설정 읽기
-            string missionCheckModbusIp = ConfigurationManager.AppSettings["MissionCheckModbusIpAddress"];
-            int missionCheckModbusPort = int.Parse(ConfigurationManager.AppSettings["MissionCheckModbusPort"]);
-            byte missionCheckModbusSlaveId = byte.Parse(ConfigurationManager.AppSettings["MissionCheckModbusSlaveId"]);
-
-            // MC Protocol 설정 읽기 (현재 사용 안함)
-            // string mcProtocolIp = ConfigurationManager.AppSettings["McProtocolIpAddress"] ?? "127.0.0.1";
-            // int mcProtocolPort = int.Parse(ConfigurationManager.AppSettings["McProtocolPort"] ?? "5000");
-            // byte mcProtocolCpuType = byte.Parse(ConfigurationManager.AppSettings["McProtocolCpuType"] ?? "144"); // Default to 0x90 (QCPU)
-            // byte mcProtocolNetworkNo = byte.Parse(ConfigurationManager.AppSettings["McProtocolNetworkNo"] ?? "0");
-            // byte mcProtocolPcNo = byte.Parse(ConfigurationManager.AppSettings["McProtocolPcNo"] ?? "255");
-
-            // ModbusClientService 등록 (MainViewModel에서 사용)
-            // App.config의 ModbusMode 설정에 따라 TCP 또는 RTU 모드로 ModbusClientService를 인스턴스화합니다.
-            string modbusMode = ConfigurationManager.AppSettings["ModbusMode"] ?? "TCP"; // 기본값 TCP
-
-            Debug.WriteLine("[App.ConfigureServices] Registering HttpService, DatabaseService, ModbusClientService...");
-            services.AddSingleton<HttpService>(new HttpService(baseApiUrl));
+            // DatabaseService 등록
             services.AddSingleton<DatabaseService>();
 
-            if (modbusMode.Equals("RTU", StringComparison.OrdinalIgnoreCase))
+            // ModbusClientService 인스턴스 등록 (MainViewModel용)
+            services.AddSingleton(provider =>
             {
-                string comPort = ConfigurationManager.AppSettings["ModbusComPort"] ?? "COM1";
-                int baudRate = int.Parse(ConfigurationManager.AppSettings["ModbusBaudRate"] ?? "9600");
-                Parity parity = (Parity)Enum.Parse(typeof(Parity), ConfigurationManager.AppSettings["ModbusParity"] ?? "None");
-                int dataBits = int.Parse(ConfigurationManager.AppSettings["ModbusDataBits"] ?? "8");
-                StopBits stopBits = (StopBits)Enum.Parse(typeof(StopBits), ConfigurationManager.AppSettings["ModbusStopBits"] ?? "One");
-                byte slaveId = byte.Parse(ConfigurationManager.AppSettings["ModbusSlaveId"] ?? "1");
+                if (mainModbusMode.Equals("TCP", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new ModbusClientService(mainModbusIp, mainModbusPort, mainModbusSlaveId);
+                }
+                else // RTU
+                {
+                    return new ModbusClientService(mainModbusComPort, mainModbusBaudRate, mainModbusParity, mainModbusStopBits, mainModbusDataBits, mainModbusSlaveId);
+                }
+            });
 
-                services.AddSingleton(s => new ModbusClientService(comPort, baudRate, parity, stopBits, dataBits, slaveId));
-                Debug.WriteLine("[App.ConfigureServices] Main ModbusClientService registered as RTU mode.");
-            }
-            else // TCP 모드 (기본값)
-            {
-                string ipAddress = ConfigurationManager.AppSettings["ModbusIpAddress"] ?? "127.0.0.1";
-                int port = int.Parse(ConfigurationManager.AppSettings["ModbusPort"] ?? "502");
-                byte slaveId = byte.Parse(ConfigurationManager.AppSettings["ModbusSlaveId"] ?? "1");
-
-                services.AddSingleton(s => new ModbusClientService(ipAddress, port, slaveId));
-                Debug.WriteLine("[App.ConfigureServices] Main ModbusClientService registered as TCP mode.");
-            }
-
-            /*// 콜 버튼용 ModbusClientService 등록
-            services.AddSingleton<ModbusClientService>(provider =>
-                new ModbusClientService(
-                    callButtonModbusIp,
-                    callButtonModbusPort,
-                    callButtonModbusSlaveId
-                ));*/
-
-            // MC Protocol 서비스 등록 (현재 사용 안함)
-            // services.AddSingleton<IMcProtocolService>(s => new McProtocolService(mcProtocolIp, mcProtocolPort, mcProtocolCpuType, mcProtocolNetworkNo, mcProtocolPcNo));
-
-
-            Debug.WriteLine("[App.ConfigureServices] Registering MainViewModel (initial)...");
-            // MainViewModel 등록: 이제 생성자에서 AMR payload 값들을 받습니다.
-            services.AddSingleton<MainViewModel>(provider =>
-                new MainViewModel(
-                    provider.GetRequiredService<DatabaseService>(),
-                    provider.GetRequiredService<HttpService>(),
-                    provider.GetRequiredService<ModbusClientService>(), // 콜 버튼용 ModbusClientService 주입
-                    warehousePayload, // App.config에서 읽은 값 전달
-                    productionLinePayload // App.config에서 읽은 값 전달
-                    // provider.GetService<IMcProtocolService>() // MC Protocol 서비스 주입 (현재 사용 안함)
-                ));
-
-            Debug.WriteLine("[App.ConfigureServices] Registering IRobotMissionService factory...");
-            // IRobotMissionService와 RobotMissionService 등록
+            // RobotMissionService에 주입될 ModbusClientService 인스턴스 등록 (미션 체크용)
             services.AddSingleton<IRobotMissionService, RobotMissionService>(provider =>
             {
-                Debug.WriteLine("[App.ConfigureServices] IRobotMissionService factory: Getting MainViewModel instance...");
-                var mainViewModelInstance = provider.GetRequiredService<MainViewModel>();
-                Debug.WriteLine("[App.ConfigureServices] IRobotMissionService factory: MainViewModel instance obtained. Creating RobotMissionService...");
+                var httpService = provider.GetRequiredService<HttpService>();
+                var databaseService = provider.GetRequiredService<DatabaseService>();
+                string waitRackTitle = ConfigurationManager.AppSettings["WaitRackTitle"] ?? "WAIT";
+                char[] militaryCharacter = { 'a', 'b', 'c', ' ' }; // MainViewModel과 동일하게 정의
+
+                // Mission Check Modbus Service 인스턴스 생성
+                ModbusClientService missionCheckModbusService;
+                if (missionModbusMode.Equals("TCP", StringComparison.OrdinalIgnoreCase))
+                {
+                    missionCheckModbusService = new ModbusClientService(missionModbusIp, missionModbusPort, missionModbusSlaveId);
+                }
+                else // RTU
+                {
+                    missionCheckModbusService = new ModbusClientService(missionModbusComPort, missionModbusBaudRate, missionModbusParity, missionModbusStopBits, missionModbusDataBits, missionModbusSlaveId);
+                }
+
                 return new RobotMissionService(
-                    provider.GetRequiredService<HttpService>(),
-                    provider.GetRequiredService<DatabaseService>(),
+                    httpService,
+                    databaseService,
                     waitRackTitle,
                     militaryCharacter,
-                    mainViewModelInstance.GetRackViewModelById, // MainViewModel의 메서드를 델리게이트로 전달
-                    missionCheckModbusIp, // 미션 실패 확인용 Modbus IP 전달
-                    missionCheckModbusPort, // 미션 실패 확인용 Modbus Port 전달
-                    missionCheckModbusSlaveId // 미션 실패 확인용 Modbus Slave ID 전달
+                    provider.GetRequiredService<MainViewModel>().GetRackViewModelById, // MainViewModel의 델리게이트 전달
+                    missionCheckModbusService // ModbusClientService 인스턴스 직접 전달
                 );
             });
 
-            Debug.WriteLine("[App.ConfigureServices] Registering MainWindow...");
-            services.AddSingleton(provider => new MainWindow
+            // MainViewModel 등록
+            services.AddSingleton<MainViewModel>(provider =>
             {
-                DataContext = provider.GetRequiredService<MainViewModel>() // DataContext 설정
+                string warehousePayload = ConfigurationManager.AppSettings["WarehouseAMR"] ?? "AMR_1";
+                string packagingLinePayload = ConfigurationManager.AppSettings["PackagingLineAMR"] ?? "AMR_2";
+
+                return new MainViewModel(
+                    provider.GetRequiredService<DatabaseService>(),
+                    provider.GetRequiredService<HttpService>(),
+                    provider.GetRequiredService<ModbusClientService>(), // MainViewModel용 ModbusClientService
+                    warehousePayload,
+                    packagingLinePayload
+                );
             });
 
-            Debug.WriteLine("[App.ConfigureServices] Building ServiceProvider...");
+            // MainWindow 등록
+            services.AddSingleton<MainWindow>();
+
             ServiceProvider = services.BuildServiceProvider();
-            Debug.WriteLine("[App.ConfigureServices] ServiceProvider Built.");
-
-            // ServiceProvider 빌드 후, MainViewModel에 RobotMissionService 주입
-            Debug.WriteLine("[App.ConfigureServices] Performing late injection of RobotMissionService into MainViewModel...");
-            var resolvedMainViewModel = ServiceProvider.GetRequiredService<MainViewModel>();
-            var resolvedRobotMissionService = ServiceProvider.GetRequiredService<IRobotMissionService>();
-            resolvedMainViewModel.SetRobotMissionService(resolvedRobotMissionService);
-            Debug.WriteLine("[App.ConfigureServices] Late injection complete.");
-        }
-
-        protected override void OnExit(ExitEventArgs e)
-        {
-            base.OnExit(e);
-            Debug.WriteLine("[App] OnExit: Disposing services...");
-            _mainViewModelInstance?.Dispose();
-            _modbusServiceInstance?.Dispose(); // 콜 버튼용 Modbus 서비스 해제
-            _robotMissionServiceInstance?.Dispose(); // 로봇 미션 서비스 해제 (내부적으로 미션 체크 Modbus 서비스도 해제)
-            // _mcProtocolServiceInstance?.Dispose(); // MC Protocol 서비스 해제 (현재 사용 안함)
-
-            if (ServiceProvider is IDisposable disposableProvider)
-            {
-                disposableProvider.Dispose();
-            }
-            Debug.WriteLine("[App] OnExit: Services Disposed.");
         }
     }
 }
