@@ -54,7 +54,8 @@ namespace WPF_WMS01.Services
         /// <param name="getInputStringForBoxesFunc">MainViewModel에서 InputStringForButton 값을 가져오는 함수.</param>
         /// <param name="racksLockedAtStart">이 프로세스 시작 시 잠긴 모든 랙의 ID 목록.</param>
         /// <param name="racksToProcess">여러 랙을 처리할 경우 (예: 출고) 해당 랙들의 ViewModel 목록.</param>
-        /// <param name="initiatingCoilAddress">이 미션을 시작한 Modbus Coil의 주소 (경광등 제어용).</param>
+        /// <param name="initiatingCoilAddress">이 미션을 시작한 Modbus Coil의 주소 (경광등 제어용).</param
+        /// <param name="isWarehouseMission">이 미션이 창고 관련 미션인지 여부 (true: 창고, false: 포장실).</param>
         /// <returns>시작된 미션 프로세스의 고유 ID.</returns>
         Task<string> InitiateRobotMissionProcess(
             string processType,
@@ -66,7 +67,8 @@ namespace WPF_WMS01.Services
             Func<string> getInputStringForBoxesFunc,
             List<int> racksLockedAtStart,
             List<RackViewModel> racksToProcess = null,
-            ushort? initiatingCoilAddress = null // 새로운 파라미터 추가
+            ushort? initiatingCoilAddress = null,
+            bool isWarehouseMission = false // isWarehouseMission 파라미터 추가
         );
 
         /// <summary>
@@ -85,5 +87,18 @@ namespace WPF_WMS01.Services
         /// <param name="status">단계의 최종 상태 (COMPLETED, FAILED 등).</param>
         /// <param name="message">관련 메시지 (선택 사항).</param>
         Task CompleteMissionStep(string processId, int stepIndex, MissionStatusEnum status, string message = null);
+
+        /// <summary>
+        /// 특정 로봇 미션 프로세스를 취소합니다.
+        /// </summary>
+        /// <param name="processId">취소할 미션 프로세스의 고유 ID.</param>
+        //Task CancelRobotMissionProcess(string processId);
+
+        /// <summary>
+        /// 현재 STARTED 상태이면서 창고 미션인 첫 번째 미션 프로세스를 반환합니다.
+        /// (동시에 하나의 미션만 실행된다는 가정 하에 유효)
+        /// </summary>
+        /// <returns>STARTED 상태의 창고 미션 RobotMissionInfo 객체 또는 null.</returns>
+        RobotMissionInfo GetFirstStartedWarehouseMission(); // 새로운 메서드 시그니처 추가
     }
 }

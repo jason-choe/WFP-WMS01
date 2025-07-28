@@ -7,7 +7,7 @@
         xmlns:local="clr-namespace:WPF_WMS01.Views.Popups"
         xmlns:vm="clr-namespace:WPF_WMS01.ViewModels.Popups"
         mc:Ignorable="d"
-        Title="로봇 미션 진행 상황" Height="600" Width="600"
+        Title="AMR 미션 진행 상황" Height="600" Width="600"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
         ShowInTaskbar="False"

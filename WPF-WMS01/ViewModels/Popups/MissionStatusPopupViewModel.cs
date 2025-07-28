@@ -108,7 +108,7 @@ namespace WPF_WMS01.ViewModels.Popups
         /// 초기 미션 단계 목록을 설정합니다. 모든 단계는 초기에는 "대기 중" 상태입니다.
         /// </summary>
         /// <param name="missionStepDefinitions">전체 미션 단계 정의 목록.</param>
-        private void InitializeMissionSteps(List<MissionStepDefinition> missionStepDefinitions)
+        public void InitializeMissionSteps(List<MissionStepDefinition> missionStepDefinitions)
         {
             MissionStepsStatus.Clear(); // 기존 내용이 있을 수 있으므로 클리어
             foreach (var step in missionStepDefinitions)

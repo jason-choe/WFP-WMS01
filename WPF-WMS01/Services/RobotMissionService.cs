@@ -392,6 +392,8 @@ namespace WPF_WMS01.Services
         /// <param name="racksLockedByProcess">이 프로세스 시작 시 잠긴 모든 랙의 ID 목록.</param>
         /// <param name="racksToProcess">여러 랙을 처리할 경우 (예: 출고) 해당 랙들의 ViewModel 목록.</param>
         /// <param name="initiatingCoilAddress">이 미션을 시작한 Modbus Coil의 주소 (경광등 제어용).</param>
+        /// <param name="amrPayload">미션에 사용될 AMR Payload (WarehouseAMR 또는 ProductionLineAMR).</param>
+        /// <param name="isWarehouseMission">이 미션이 창고 관련 미션인지 여부 (true: 창고, false: 포장실).</param>
         /// <returns>시작된 미션 프로세스의 고유 ID.</returns>
         public async Task<string> InitiateRobotMissionProcess(
             string processType,
@@ -403,7 +405,8 @@ namespace WPF_WMS01.Services
             Func<string> getInputStringForBoxesFunc,
             List<int> racksLockedByProcess, // 새로 추가된 파라미터
             List<RackViewModel> racksToProcess = null, // 새로 추가된 파라미터
-            ushort? initiatingCoilAddress = null) // 새로운 파라미터 추가
+            ushort? initiatingCoilAddress = null, // 새로운 파라미터 추가
+            bool isWarehouseMission = false) // isWarehouseMission 파라미터 추가
         {
             // MainViewModel로부터 받은 델리게이트를 저장하여 필요할 때 사용합니다.
             _getInputStringForButtonFunc = getInputStringForButtonFunc;
@@ -414,13 +417,13 @@ namespace WPF_WMS01.Services
             _modbusErrorMessageSuppressionTimer.Stop(); // 타이머도 중지하여 다음 오류 메시지 표시를 허용
 
             string processId = Guid.NewGuid().ToString(); // 고유한 프로세스 ID 생성
-            var newMissionProcess = new RobotMissionInfo(processId, processType, missionSteps, racksLockedByProcess, initiatingCoilAddress) // 생성자에 racksLockedByProcess와 initiatingCoilAddress 전달
+            var newMissionProcess = new RobotMissionInfo(processId, processType, missionSteps, racksLockedByProcess, initiatingCoilAddress, isWarehouseMission) // 생성자에 racksLockedByProcess와 initiatingCoilAddress 전달
             {
                 // SourceRack과 DestinationRack은 이제 MissionStepDefinition 내에서 ID로 관리됩니다.
                 // 여기에 직접 ViewModel을 할당하지 않습니다.
                 // SourceRack = sourceRack, // 제거
                 // DestinationRack = destinationRack, // 제거
-                RacksToProcess = racksToProcess ?? new List<RackViewModel>() // racksToProcess 설정
+                RacksToProcess = racksToProcess ?? new List<RackViewModel>(), // racksToProcess 설정
             };
 
             lock (_activeRobotProcessesLock) // _activeRobotProcesses에 대한 스레드 안전한 접근
@@ -435,6 +438,69 @@ namespace WPF_WMS01.Services
 
             return processId;
         }
+
+        /// <summary>
+        /// 특정 로봇 미션 프로세스를 취소합니다.
+        /// </summary>
+        /// <param name="processId">취소할 미션 프로세스의 고유 ID.</param>
+/*        public async Task CancelRobotMissionProcess(string processId)
+        {
+            RobotMissionInfo processInfo;
+            lock (_activeRobotProcessesLock)
+            {
+                if (!_activeRobotProcesses.TryGetValue(processId, out processInfo))
+                {
+                    OnShowAutoClosingMessage?.Invoke($"미션 프로세스 {processId}를 찾을 수 없습니다.");
+                    return;
+                }
+            }
+
+            // ANT 서버에 미션 취소 요청 (현재 진행 중인 미션이 있다면)
+            if (processInfo.LastSentMissionId.HasValue)
+            {
+                try
+                {
+                    // HttpService의 CancelMissionAsync 메서드 시그니처에 맞게 호출
+                    bool cancelSuccess = await _httpService.CancelMissionAsync(processInfo.LastSentMissionId.Value);
+                    if (cancelSuccess)
+                    {
+                        OnShowAutoClosingMessage?.Invoke($"미션 {processInfo.LastSentMissionId.Value} 취소 요청 성공.");
+                    }
+                    else
+                    {
+                        OnShowAutoClosingMessage?.Invoke($"미션 {processInfo.LastSentMissionId.Value} 취소 요청 실패.");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[RobotMissionService] Failed to cancel mission {processInfo.LastSentMissionId.Value} on ANT server: {ex.Message}");
+                    OnShowAutoClosingMessage?.Invoke($"미션 {processInfo.LastSentMissionId.Value} 취소 요청 실패: {ex.Message}");
+                }
+            }
+
+            // 프로세스 상태를 CANCELLED로 업데이트하고 완료 처리
+            processInfo.CurrentStatus = MissionStatusEnum.CANCELLED;
+            processInfo.IsFailed = true; // 취소도 실패로 간주하여 완료 처리 로직을 타도록 함
+            processInfo.CancellationTokenSource.Cancel(); // 미션 취소 요청
+            await HandleRobotMissionCompletion(processInfo); // 완료 처리 로직 호출
+        }*/
+
+        /// <summary>
+        /// 현재 STARTED 상태이면서 창고 미션인 첫 번째 미션 프로세스를 반환합니다.
+        /// (동시에 하나의 미션만 실행된다는 가정 하에 유효)
+        /// </summary>
+        /// <returns>STARTED 상태의 창고 미션 RobotMissionInfo 객체 또는 null.</returns>
+        public RobotMissionInfo GetFirstStartedWarehouseMission()
+        {
+            lock (_activeRobotProcessesLock)
+            {
+                // STARTED 상태이면서 IsWarehouseMission이 true인 첫 번째 미션을 찾습니다.
+                return _activeRobotProcesses.Values.FirstOrDefault(
+                    p => p.CurrentStatus == MissionStatusEnum.STARTED && p.IsWarehouseMission
+                );
+            }
+        }
+
 
         /// <summary>
         /// 주어진 로봇 미션 프로세스에서 현재 단계의 미션을 ANT 서버에 전송하고 추적을 시작합니다.

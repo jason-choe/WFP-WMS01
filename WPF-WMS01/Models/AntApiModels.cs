@@ -346,7 +346,10 @@ namespace WPF_WMS01.Models
         // 이 미션을 시작한 Modbus Coil의 주소 (경광등 제어용)
         public ushort? InitiatingCoilAddress { get; set; } // 기존 정의 유지
 
-        public RobotMissionInfo(string processId, string processType, List<MissionStepDefinition> missionSteps, List<int> racksLockedByProcess, ushort? initiatingCoilAddress = null)
+        // AMR 랙 버튼 기능 추가: 창고 미션 여부
+        public bool IsWarehouseMission { get; set; } // 창고 미션 여부
+
+        public RobotMissionInfo(string processId, string processType, List<MissionStepDefinition> missionSteps, List<int> racksLockedByProcess, ushort? initiatingCoilAddress = null, bool isWarehouseMission = false)
         {
             ProcessId = processId;
             ProcessType = processType;
@@ -366,6 +369,7 @@ namespace WPF_WMS01.Models
             LastPollingAttemptTime = DateTime.MinValue;
 
             InitiatingCoilAddress = initiatingCoilAddress; // 경광등 Coil 주소 저장
+            IsWarehouseMission = isWarehouseMission; // isWarehouseMission 초기화
         }
     }
 

@@ -144,8 +144,8 @@ namespace WPF_WMS01.ViewModels
         // private readonly IMcProtocolService _mcProtocolService; // MC Protocol Service 인스턴스 추가 (현재 사용 안함)
 
         // AMR Payload 값들을 저장할 필드 추가
-        private readonly string _warehousePayload;
-        private readonly string _productionLinePayload;
+        public readonly string WarehousePayload; // public으로 변경하여 RackViewModel에서 접근 가능하도록 함
+        public readonly string ProductionLinePayload; // public으로 변경하여 RackViewModel에서 접근 가능하도록 함
 
         private ObservableCollection<RackViewModel> _rackList;
         private DispatcherTimer _refreshTimer;
@@ -253,9 +253,13 @@ namespace WPF_WMS01.ViewModels
 
         private DispatcherTimer _messagePopupTimer; // 메시지 팝업 자동 닫힘 타이머
 
-        // 미션 상태 팝업 관리를 위한 필드 (이제 ModbusButtonViewModel 내부에 개별적으로 존재)
-        // private MissionStatusPopupViewModel _activeMissionStatusPopupViewModel; // 제거
-        // private MissionStatusPopupView _activeMissionStatusPopupView; // 제거
+        // AMR 랙 버튼 클릭 시 미션 상태 팝업을 띄우기 위한 명령 추가
+        public ICommand ShowAmrMissionStatusCommand { get; private set; }
+
+        // AMR 미션 전용 팝업 인스턴스 (새로 추가된 필드)
+        private MissionStatusPopupViewModel _amrMissionStatusPopupVm;
+        private MissionStatusPopupView _amrMissionStatusPopupView;
+
 
         public ICommand LoginCommand { get; private set; }
         public ICommand OpenMenuCommand { get; }
@@ -293,8 +297,8 @@ namespace WPF_WMS01.ViewModels
             // _mcProtocolService = mcProtocolService; // MC Protocol 서비스 주입 (현재 사용 안함)
 
             // Initialize AMR payload fields
-            _warehousePayload = warehousePayload;
-            _productionLinePayload = productionLinePayload;
+            WarehousePayload = warehousePayload;
+            ProductionLinePayload = productionLinePayload;
 
             // ModbusButtons 컬렉션 초기화 (XAML의 버튼 순서 및 내용에 맞춰)
             // Discrete Input Address와 Coil Output Address를 스펙에 맞춰 매핑
@@ -332,6 +336,9 @@ namespace WPF_WMS01.ViewModels
 
             // 잠금 해제 명령 초기화
             UnlockRackCommand = new RelayCommand(async p => await ExecuteUnlockRack());
+
+            // AMR 미션 상태 팝업 명령 초기화
+            ShowAmrMissionStatusCommand = new RelayCommand(async p => await ExecuteShowAmrMissionStatus());
 
 
             IsMenuOpen = false;
@@ -729,6 +736,7 @@ namespace WPF_WMS01.ViewModels
         /// <param name="destinationLine">목적지 생산 라인 (선택 사항).</param>
         /// <param name="racksLockedAtStart">이 프로세스 시작 시 잠긴 모든 랙의 ID 목록.</param>
         /// <param name="racksToProcess">여러 랙을 처리할 경우 (예: 출고) 해당 랙들의 ViewModel 목록.</param>
+        /// <param name="isWarehouseMission">이 미션이 창고 관련 미션인지 여부 (true: 창고, false: 포장실).</param>
         /// <param name="initiatingCoilAddress">이 미션을 시작한 Modbus Coil의 주소 (경광등 제어용).</param>
         /// <returns>시작된 미션 프로세스의 고유 ID.</returns>
         public async Task<string> InitiateRobotMissionProcess(
@@ -739,7 +747,8 @@ namespace WPF_WMS01.ViewModels
             Location destinationLine = null,
             List<int> racksLockedAtStart = null,
             List<RackViewModel> racksToProcess = null,
-            ushort? initiatingCoilAddress = null) // 새로운 파라미터 추가
+            ushort? initiatingCoilAddress = null, // 새로운 파라미터 추가
+            bool isWarehouseMission = true) // isWarehouseMission 파라미터 추가 (기본값 true)
         {
             if (_robotMissionServiceInternal == null)
             {
@@ -782,9 +791,109 @@ namespace WPF_WMS01.ViewModels
                 () => InputStringForBoxes, // InputStringForBoxes 값을 가져오는 델리게이트 전달
                 racksLockedAtStart,
                 racksToProcess,
-                initiatingCoilAddress // 새로운 파라미터 전달
+                initiatingCoilAddress, // 새로운 파라미터 전달
+                isWarehouseMission // isWarehouseMission 전달
             );
         }
+
+        /// <summary>
+        /// AMR 랙 버튼 클릭 시 호출되는 명령의 실행 메서드입니다.
+        /// 현재 실행 중인 창고 미션의 상태 팝업을 표시합니다.
+        /// </summary>
+        private async Task ExecuteShowAmrMissionStatus()
+        {
+            Debug.WriteLine("[MainViewModel] ExecuteShowAmrMissionStatus command executed.");
+
+            if (_robotMissionServiceInternal == null)
+            {
+                ShowAutoClosingMessage("로봇 미션 서비스가 초기화되지 않았습니다.");
+                Debug.WriteLine("[MainViewModel] RobotMissionService is null when trying to show AMR mission status.");
+                return;
+            }
+
+            // 현재 STARTED 상태인 창고 미션 (IsWarehouseMission = true)을 가져옵니다.
+            var activeMission = _robotMissionServiceInternal.GetFirstStartedWarehouseMission();
+
+            if (activeMission != null)
+            {
+                // _amrMissionStatusPopupVm이 null이거나, 이전 미션의 팝업이라면 새로 생성
+                // (여기서는 단일 AMR 미션만 가정하므로, 기존 팝업이 있다면 재활용)
+                if (_amrMissionStatusPopupVm == null)
+                {
+                    _amrMissionStatusPopupVm = new MissionStatusPopupViewModel(
+                        activeMission.ProcessId,
+                        activeMission.ProcessType,
+                        activeMission.MissionSteps.ToList()
+                    );
+                    Debug.WriteLine($"[MainViewModel] Initialized _amrMissionStatusPopupVm for Process ID: {activeMission.ProcessId}.");
+                }
+                else
+                {
+                    // 이미 팝업 ViewModel이 있다면 ProcessId와 ProcessType을 업데이트
+                    _amrMissionStatusPopupVm.ProcessId = activeMission.ProcessId;
+                    _amrMissionStatusPopupVm.ProcessType = activeMission.ProcessType;
+                    // 미션 단계 정의는 변경될 수 있으므로 다시 초기화
+                    _amrMissionStatusPopupVm.InitializeMissionSteps(activeMission.MissionSteps.ToList());
+                    Debug.WriteLine($"[MainViewModel] Reused and updated _amrMissionStatusPopupVm for Process ID: {activeMission.ProcessId}.");
+                }
+
+                // _amrMissionStatusPopupView가 null이거나 닫혀 있다면 새로 생성
+                if (_amrMissionStatusPopupView == null || !(_amrMissionStatusPopupView.IsLoaded || _amrMissionStatusPopupView.IsVisible))
+                {
+                    _amrMissionStatusPopupView = new MissionStatusPopupView
+                    {
+                        DataContext = _amrMissionStatusPopupVm,
+                        Owner = Application.Current.MainWindow
+                    };
+                    // 팝업이 닫힐 때 ViewModel 참조를 클리어하도록 설정
+                    _amrMissionStatusPopupView.Closed += (s, e) =>
+                    {
+                        _amrMissionStatusPopupView = null;
+                        _amrMissionStatusPopupVm = null;
+                        Debug.WriteLine("[MainViewModel] AMR mission status popup manually closed by user. View and ViewModel references cleared.");
+                    };
+                    Debug.WriteLine("[MainViewModel] Created _amrMissionStatusPopupView.");
+                }
+
+                // 팝업 ViewModel에 CloseAction 설정
+                _amrMissionStatusPopupVm.CloseAction = () =>
+                {
+                    if (_amrMissionStatusPopupView != null)
+                    {
+                        _amrMissionStatusPopupView.Close();
+                    }
+                };
+
+                // 현재 미션 정보로 팝업 상태 업데이트
+                _amrMissionStatusPopupVm.UpdateStatus(activeMission, activeMission.MissionSteps.ToList());
+
+                // 팝업 표시 또는 활성화
+                if (!_amrMissionStatusPopupView.IsVisible)
+                {
+                    _amrMissionStatusPopupView.Show();
+                    Debug.WriteLine($"[MainViewModel] Showing AMR mission status popup for Process ID: {activeMission.ProcessId}");
+                }
+                else
+                {
+                    _amrMissionStatusPopupView.Activate(); // 이미 열려있다면 활성화
+                    Debug.WriteLine($"[MainViewModel] AMR mission status popup for Process ID: {activeMission.ProcessId} is already visible. Activating.");
+                }
+            }
+            else
+            {
+                ShowAutoClosingMessage("현재 실행 중인 로봇 미션이 없습니다.");
+                Debug.WriteLine("[MainViewModel] No active warehouse robot mission found.");
+                // 활성 미션이 없으면 기존 팝업이 열려있더라도 닫습니다.
+                if (_amrMissionStatusPopupView != null)
+                {
+                    _amrMissionStatusPopupView.Close();
+                    _amrMissionStatusPopupView = null;
+                    _amrMissionStatusPopupVm = null;
+                    Debug.WriteLine("[MainViewModel] Closed existing AMR mission status popup as no active mission was found.");
+                }
+            }
+        }
+
 
         // Modbus Coil 상태 읽기 타이머 설정
         private void SetupModbusReadTimer()
@@ -1092,7 +1201,7 @@ namespace WPF_WMS01.ViewModels
                             ProcessStepDescription = "충전소에서 이동",
                             MissionType = "8", // Pick up
                             ToNode = "Turn_Charge2", // Hypothetical drop-off station
-                            Payload = _productionLinePayload,
+                            Payload = ProductionLinePayload,
                             IsLinkable = true,
                             LinkedMission = null,
                             LinkWaitTimeout = 3600
@@ -1103,7 +1212,7 @@ namespace WPF_WMS01.ViewModels
                             MissionType = "7", // Move/Drop
                             FromNode = "Empty_Palette_PickUP",
                             ToNode = "MZ_Empty_Palette_Drop", // Return to charge station after drop-off
-                            Payload = _productionLinePayload,
+                            Payload = ProductionLinePayload,
                             IsLinkable = true, // This is the final step of this specific mission
                             LinkedMission = null,
                             LinkWaitTimeout = 3600
@@ -1113,7 +1222,7 @@ namespace WPF_WMS01.ViewModels
                             ProcessStepDescription = "충전소로 복귀",
                             MissionType = "8", // Move/Drop
                             ToNode = "Charge2", // Return to charge station after drop-off
-                            Payload = _productionLinePayload,
+                            Payload = ProductionLinePayload,
                             IsLinkable = false, // This is the final step of this specific mission
                             LinkedMission = null,
                             LinkWaitTimeout = 3600,
@@ -1129,7 +1238,7 @@ namespace WPF_WMS01.ViewModels
                             ProcessStepDescription = "충전소에서 이동",
                             MissionType = "8", // Pick up
                             ToNode = "Turn_Charge2", // Hypothetical drop-off station
-                            Payload = _productionLinePayload,
+                            Payload = ProductionLinePayload,
                             IsLinkable = true,
                             LinkedMission = null,
                             LinkWaitTimeout = 3600
@@ -1140,7 +1249,7 @@ namespace WPF_WMS01.ViewModels
                             MissionType = "7", // Move/Drop
                             FromNode = "DanPra_Sheet_PickUP",
                             ToNode = "MZ_DanPra_Sheet_Drop", // Return to charge station after drop-off
-                            Payload = _productionLinePayload,
+                            Payload = ProductionLinePayload,
                             IsLinkable = true, // This is the final step of this specific mission
                             LinkedMission = null,
                             LinkWaitTimeout = 3600
@@ -1150,7 +1259,7 @@ namespace WPF_WMS01.ViewModels
                             ProcessStepDescription = "충전소로 복귀",
                             MissionType = "8", // Move/Drop
                             ToNode = "Charge2", // Return to charge station after drop-off
-                            Payload = _productionLinePayload,
+                            Payload = ProductionLinePayload,
                             IsLinkable = false, // This is the final step of this specific mission
                             LinkedMission = null,
                             LinkWaitTimeout = 3600,
@@ -1168,7 +1277,7 @@ namespace WPF_WMS01.ViewModels
                             ProcessStepDescription = "충전소에서 이동",
                             MissionType = "8", // Pick up
                             ToNode = "Turn_Charge2", // Hypothetical drop-off station
-                            Payload = _productionLinePayload,
+                            Payload = ProductionLinePayload,
                             IsLinkable = true,
                             LinkedMission = null,
                             LinkWaitTimeout = 3600
@@ -1179,7 +1288,7 @@ namespace WPF_WMS01.ViewModels
                             MissionType = "7", // Move/Drop
                             FromNode = "Work_Etc_PickUP",
                             ToNode = "Palette_IN_Drop", // Return to charge station after drop-off
-                            Payload = _productionLinePayload,
+                            Payload = ProductionLinePayload,
                             IsLinkable = true, // This is the final step of this specific mission
                             LinkedMission = null,
                             LinkWaitTimeout = 3600
@@ -1189,7 +1298,7 @@ namespace WPF_WMS01.ViewModels
                             ProcessStepDescription = "충전소로 복귀",
                             MissionType = "8", // Move/Drop
                             ToNode = "Charge2", // Return to charge station after drop-off
-                            Payload = _productionLinePayload,
+                            Payload = ProductionLinePayload,
                             IsLinkable = false, // This is the final step of this specific mission
                             LinkedMission = null,
                             LinkWaitTimeout = 3600,
@@ -1254,18 +1363,18 @@ namespace WPF_WMS01.ViewModels
                             swapPoint = "223_2";
                         }
                         processType = $"{buttonVm.Content} 제품 입고 작업";
-                        missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"충전소에서 이동", MissionType = "8", ToNode = "Turn_Charge2", Payload = _productionLinePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
-                        missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"매거진에서 공 파레트 픽업, 교체 장소로 이동 & 드롭", MissionType = "7", FromNode = "MZ_DanPra_Palette_PickUP", ToNode = $"Empty_{swapPoint}_Drop", Payload = _productionLinePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
-                        missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"{buttonVm.Content} 제품 팔레트 픽업, 교체 장소로 이동 & 드롭", MissionType = "7", FromNode = $"Work_{workPoint}_PickUP", ToNode = $"Full_{swapPoint}_Drop", Payload = _productionLinePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
-                        missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"공 파레트 픽업, {buttonVm.Content}(으)로 이동 & 투입", MissionType = "7", FromNode = $"Empty_{swapPoint}_PickUP", ToNode = $"Work_{workPoint}_Drop", Payload = _productionLinePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
-                        missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"{buttonVm.Content} 제품 팔레트 픽업 & 이동", MissionType = "7", FromNode = $"Full_{swapPoint}_PickUP", ToNode = $"Return_{swapPoint}", Payload = _productionLinePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
-                        missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"{buttonVm.Content} 제품 팔레트 이동 & 입고", MissionType = "8", ToNode = "Palette_IN_Drop", Payload = _productionLinePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
+                        missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"충전소에서 이동", MissionType = "8", ToNode = "Turn_Charge2", Payload = ProductionLinePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
+                        missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"매거진에서 공 파레트 픽업, 교체 장소로 이동 & 드롭", MissionType = "7", FromNode = "MZ_DanPra_Palette_PickUP", ToNode = $"Empty_{swapPoint}_Drop", Payload = ProductionLinePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
+                        missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"{buttonVm.Content} 제품 팔레트 픽업, 교체 장소로 이동 & 드롭", MissionType = "7", FromNode = $"Work_{workPoint}_PickUP", ToNode = $"Full_{swapPoint}_Drop", Payload = ProductionLinePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
+                        missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"공 파레트 픽업, {buttonVm.Content}(으)로 이동 & 투입", MissionType = "7", FromNode = $"Empty_{swapPoint}_PickUP", ToNode = $"Work_{workPoint}_Drop", Payload = ProductionLinePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
+                        missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"{buttonVm.Content} 제품 팔레트 픽업 & 이동", MissionType = "7", FromNode = $"Full_{swapPoint}_PickUP", ToNode = $"Return_{swapPoint}", Payload = ProductionLinePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
+                        missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"{buttonVm.Content} 제품 팔레트 이동 & 입고", MissionType = "8", ToNode = "Palette_IN_Drop", Payload = ProductionLinePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
                         missionSteps.Add(new MissionStepDefinition
                         {
                             ProcessStepDescription = $"충전소 복귀",
                             MissionType = "8",
                             ToNode = "Charge2",
-                            Payload = _productionLinePayload,
+                            Payload = ProductionLinePayload,
                             IsLinkable = false,
                             LinkWaitTimeout = 3600,
                             SourceRackId = null,
@@ -1299,7 +1408,8 @@ namespace WPF_WMS01.ViewModels
                     null, // DestinationLine
                     racksToLock, // Empty list for now, as no racks are directly locked for these supply missions
                     null, // racksToProcess
-                    buttonVm.CoilOutputAddress // 새로 추가된 파라미터: 경광등 Coil 주소 전달
+                    buttonVm.CoilOutputAddress, // 새로 추가된 파라미터: 경광등 Coil 주소 전달
+                    false // isWarehouseMission = false로 전달 (포장실 미션)
                 );
 
                 if (!string.IsNullOrEmpty(processId))
@@ -1466,6 +1576,13 @@ namespace WPF_WMS01.ViewModels
                     buttonVm.MissionStatusPopupVm = null;
                 }
             }
+            // AMR 미션 팝업 정리
+            if (_amrMissionStatusPopupView != null)
+            {
+                _amrMissionStatusPopupView.Close();
+                _amrMissionStatusPopupView = null;
+                _amrMissionStatusPopupVm = null;
+            }
         }
 
         // AutoClosingMessagePopupView를 표시하는 새로운 로직
@@ -1556,9 +1673,15 @@ namespace WPF_WMS01.ViewModels
             Application.Current.Dispatcher.Invoke(() =>
             {
                 // missionInfo의 InitiatingCoilAddress를 사용하여 해당 ModbusButtonViewModel을 찾습니다.
-                var buttonVm = ModbusButtons.FirstOrDefault(b => b.CoilOutputAddress == missionInfo.InitiatingCoilAddress);
+                // InitiatingCoilAddress가 null이면 (예: AMR 랙 클릭으로 시작된 미션)
+                // AMR 미션 전용 팝업을 업데이트합니다.
+                ModbusButtonViewModel buttonVm = null;
+                if (missionInfo.InitiatingCoilAddress.HasValue)
+                {
+                    buttonVm = ModbusButtons.FirstOrDefault(b => b.CoilOutputAddress == missionInfo.InitiatingCoilAddress);
+                }
 
-                if (buttonVm != null) // 버튼 ViewModel을 찾았을 경우
+                if (buttonVm != null) // 콜 버튼으로 시작된 미션일 경우 (포장실 미션)
                 {
                     // 해당 버튼의 팝업 ViewModel이 아직 초기화되지 않았다면 초기화합니다.
                     // 이 경우는 물리적 콜 버튼으로 미션이 시작되었고, 아직 UI 버튼을 클릭하지 않은 상태에서 업데이트가 먼저 도착한 경우입니다.
@@ -1570,7 +1693,7 @@ namespace WPF_WMS01.ViewModels
                             missionInfo.MissionSteps.ToList()
                         );
                         Debug.WriteLine($"[MainViewModel] Lazily initialized MissionStatusPopupVm for {buttonVm.Content} (Coil: {missionInfo.InitiatingCoilAddress}) upon first update.");
-                        // MissionStatusPopupViewModel에 CloseAction 설정 (지연 초기화 시에도 설정) // ToDo Check auto close again
+                        // MissionStatusPopupViewModel에 CloseAction 설정 (지연 초기화 시에도 설정)
                         buttonVm.MissionStatusPopupVm.CloseAction = () =>
                         {
                             if (buttonVm.MissionStatusPopupViewInstance != null)
@@ -1584,9 +1707,45 @@ namespace WPF_WMS01.ViewModels
                     buttonVm.MissionStatusPopupVm.UpdateStatus(missionInfo, missionInfo.MissionSteps.ToList());
                     Debug.WriteLine($"[MainViewModel] Mission status popup ViewModel for Coil {missionInfo.InitiatingCoilAddress} updated for Process ID: {missionInfo.ProcessId}");
                 }
+                else if (missionInfo.IsWarehouseMission) // AMR 랙 클릭으로 시작된 창고 미션일 경우
+                {
+                    // _amrMissionStatusPopupVm이 아직 초기화되지 않았다면 초기화합니다.
+                    if (_amrMissionStatusPopupVm == null)
+                    {
+                        _amrMissionStatusPopupVm = new MissionStatusPopupViewModel(
+                            missionInfo.ProcessId,
+                            missionInfo.ProcessType,
+                            missionInfo.MissionSteps.ToList()
+                        );
+                        Debug.WriteLine($"[MainViewModel] Lazily initialized _amrMissionStatusPopupVm for warehouse mission upon first update.");
+
+                        // 팝업 View도 함께 초기화하고 표시합니다.
+                        _amrMissionStatusPopupView = new MissionStatusPopupView
+                        {
+                            DataContext = _amrMissionStatusPopupVm,
+                            Owner = Application.Current.MainWindow
+                        };
+                        _amrMissionStatusPopupView.Closed += (s, e) =>
+                        {
+                            _amrMissionStatusPopupView = null;
+                            _amrMissionStatusPopupVm = null;
+                            Debug.WriteLine("[MainViewModel] AMR mission status popup manually closed by user.");
+                        };
+                        _amrMissionStatusPopupVm.CloseAction = () => _amrMissionStatusPopupView?.Close();
+
+                        if (!_amrMissionStatusPopupView.IsVisible)
+                        {
+                            _amrMissionStatusPopupView.Show();
+                            Debug.WriteLine($"[MainViewModel] Showing AMR mission status popup for Process ID: {missionInfo.ProcessId} (triggered by update).");
+                        }
+                    }
+                    // _amrMissionStatusPopupVm이 이미 초기화되어 있다면 업데이트만 수행합니다.
+                    _amrMissionStatusPopupVm.UpdateStatus(missionInfo, missionInfo.MissionSteps.ToList());
+                    Debug.WriteLine($"[MainViewModel] AMR mission status popup ViewModel updated for Process ID: {missionInfo.ProcessId}.");
+                }
                 else
                 {
-                    Debug.WriteLine($"[MainViewModel] Received mission process update for {missionInfo.ProcessId} (Coil: {missionInfo.InitiatingCoilAddress}), but no matching button ViewModel found. This might indicate an unhandled scenario or a late update for a non-button-initiated mission.");
+                    Debug.WriteLine($"[MainViewModel] Received mission process update for {missionInfo.ProcessId} (Coil: {missionInfo.InitiatingCoilAddress}), but no matching button ViewModel found or it's not a warehouse mission.");
                 }
 
                 // 미션이 완료되거나 실패하면 자동 닫힘 메시지를 표시합니다.
@@ -1714,16 +1873,16 @@ namespace WPF_WMS01.ViewModels
                         missionSteps = new List<MissionStepDefinition>
                         {
                             // 1. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
-                            new MissionStepDefinition { ProcessStepDescription = $"대기장소로 이동", MissionType = "8", ToNode = "Turn_Rack_27_32", Payload = _warehousePayload, IsLinkable = true, LinkWaitTimeout = 3600 },
+                            new MissionStepDefinition { ProcessStepDescription = $"대기장소로 이동", MissionType = "8", ToNode = "Turn_Rack_27_32", Payload = WarehousePayload, IsLinkable = true, LinkWaitTimeout = 3600 },
                             // 2. 랩핑 드롭 (랩핑 스테이션으로 이동하여 드롭)
-                            new MissionStepDefinition { ProcessStepDescription = $"{waitRackVm.Title} 제품 픽업 & 이동", MissionType = "7", FromNode = "Palette_OUT_PickUP", ToNode = "Turn_Rack_27_32", Payload = _warehousePayload, IsLinkable = true, LinkWaitTimeout = 3600 },
+                            new MissionStepDefinition { ProcessStepDescription = $"{waitRackVm.Title} 제품 픽업 & 이동", MissionType = "7", FromNode = "Palette_OUT_PickUP", ToNode = "Turn_Rack_27_32", Payload = WarehousePayload, IsLinkable = true, LinkWaitTimeout = 3600 },
                             // 3. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
-                            new MissionStepDefinition { ProcessStepDescription = $"{targetRackVm.Title}(으)로 이동 & 제품 드롭", MissionType = "8", ToNode = $"Rack_{shelf}_Drop", Payload = _warehousePayload, IsLinkable = true, LinkWaitTimeout = 3600 },
+                            new MissionStepDefinition { ProcessStepDescription = $"{targetRackVm.Title}(으)로 이동 & 제품 드롭", MissionType = "8", ToNode = $"Rack_{shelf}_Drop", Payload = WarehousePayload, IsLinkable = true, LinkWaitTimeout = 3600 },
                             // 4. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
-                            new MissionStepDefinition { ProcessStepDescription = $"지게차 회전을 위한 이동", MissionType = "8", ToNode = "Turn_Rack_29", Payload = _warehousePayload, IsLinkable = true, LinkWaitTimeout = 60 },
+                            new MissionStepDefinition { ProcessStepDescription = $"지게차 회전을 위한 이동", MissionType = "8", ToNode = "Turn_Rack_29", Payload = WarehousePayload, IsLinkable = true, LinkWaitTimeout = 60 },
                             // 5.
                             new MissionStepDefinition {
-                                ProcessStepDescription = $"충전소로 복귀", MissionType = "8", ToNode = "Charge1", Payload = _warehousePayload, IsLinkable = false, LinkWaitTimeout = 3600,
+                                ProcessStepDescription = $"충전소로 복귀", MissionType = "8", ToNode = "Charge1", Payload = WarehousePayload, IsLinkable = false, LinkWaitTimeout = 3600,
                                 CheckModbusDiscreteInput = true, ModbusDiscreteInputAddressToCheck = 13, SourceRackId = waitRackVm.Id, DestinationRackId = targetRackVm.Id
                             }
                         };
@@ -1733,12 +1892,12 @@ namespace WPF_WMS01.ViewModels
                         missionSteps = new List<MissionStepDefinition>
                         {
                             // 1. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
-                            new MissionStepDefinition { ProcessStepDescription = $"대기장소로 이동", MissionType = "8", ToNode = "Turn_Rack_27_32", Payload = _warehousePayload, IsLinkable = true, LinkWaitTimeout = 3600 },
+                            new MissionStepDefinition { ProcessStepDescription = $"대기장소로 이동", MissionType = "8", ToNode = "Turn_Rack_27_32", Payload = WarehousePayload, IsLinkable = true, LinkWaitTimeout = 3600 },
                             // 2. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
-                            new MissionStepDefinition { ProcessStepDescription = $"{waitRackVm.Title} 제품 픽업, {targetRackVm.Title}(을)로 이동 & 드롭", MissionType = "7", FromNode = "Palette_OUT_PickUP", ToNode = $"Rack_{shelf}_Drop", Payload = _warehousePayload, IsLinkable = true, LinkWaitTimeout = 60 },
+                            new MissionStepDefinition { ProcessStepDescription = $"{waitRackVm.Title} 제품 픽업, {targetRackVm.Title}(을)로 이동 & 드롭", MissionType = "7", FromNode = "Palette_OUT_PickUP", ToNode = $"Rack_{shelf}_Drop", Payload = WarehousePayload, IsLinkable = true, LinkWaitTimeout = 60 },
                             // 3. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
                             new MissionStepDefinition {
-                                ProcessStepDescription = $"충전소로 복귀", MissionType = "8", ToNode = "Charge1", Payload = _warehousePayload, IsLinkable = false, LinkWaitTimeout = 3600,
+                                ProcessStepDescription = $"충전소로 복귀", MissionType = "8", ToNode = "Charge1", Payload = WarehousePayload, IsLinkable = false, LinkWaitTimeout = 3600,
                                 CheckModbusDiscreteInput = true, ModbusDiscreteInputAddressToCheck = 13, SourceRackId = waitRackVm.Id, DestinationRackId = targetRackVm.Id
                             }
                         };
@@ -1753,7 +1912,10 @@ namespace WPF_WMS01.ViewModels
                             null, // SourceRack은 이제 MissionStepDefinition의 ID로 관리
                             null, // DestinationRack은 이제 MissionStepDefinition의 ID로 관리
                             null,
-                            lockedRackIds // 잠긴 랙 ID 목록 전달
+                            lockedRackIds, // 잠긴 랙 ID 목록 전달
+                            null, // racksToProcess
+                            null, // initiatingCoilAddress
+                            true // isWarehouseMission = true로 전달
                         );
                         ShowAutoClosingMessage($"로봇 미션 프로세스 시작됨: {processId}");
                     }
@@ -1892,16 +2054,16 @@ namespace WPF_WMS01.ViewModels
                         missionSteps = new List<MissionStepDefinition>
                         {
                             // 1. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
-                            new MissionStepDefinition { ProcessStepDescription = $"대기장소로 이동", MissionType = "8", ToNode = "Turn_Rack_27_32", Payload = _warehousePayload, IsLinkable = true, LinkWaitTimeout = 3600 },
+                            new MissionStepDefinition { ProcessStepDescription = $"대기장소로 이동", MissionType = "8", ToNode = "Turn_Rack_27_32", Payload = WarehousePayload, IsLinkable = true, LinkWaitTimeout = 3600 },
                             // 2. 랩핑 드롭 (랩핑 스테이션으로 이동하여 드롭)
-                            new MissionStepDefinition { ProcessStepDescription = $"{waitRackVm.Title} 제품 픽업 & 이동", MissionType = "7", FromNode = "Palette_OUT_PickUP", ToNode = "Turn_Rack_27_32", Payload = _warehousePayload, IsLinkable = true, LinkWaitTimeout = 3600 },
+                            new MissionStepDefinition { ProcessStepDescription = $"{waitRackVm.Title} 제품 픽업 & 이동", MissionType = "7", FromNode = "Palette_OUT_PickUP", ToNode = "Turn_Rack_27_32", Payload = WarehousePayload, IsLinkable = true, LinkWaitTimeout = 3600 },
                             // 3. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
-                            new MissionStepDefinition { ProcessStepDescription = $"{targetRackVm.Title}(으)로 이동 & 제품 드롭", MissionType = "8", ToNode = $"Rack_{shelf}_Drop", Payload = _warehousePayload, IsLinkable = true, LinkWaitTimeout = 3600 },
+                            new MissionStepDefinition { ProcessStepDescription = $"{targetRackVm.Title}(으)로 이동 & 제품 드롭", MissionType = "8", ToNode = $"Rack_{shelf}_Drop", Payload = WarehousePayload, IsLinkable = true, LinkWaitTimeout = 3600 },
                             // 4. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
-                            new MissionStepDefinition { ProcessStepDescription = $"지게차 회전을 위한 이동", MissionType = "8", ToNode = "Turn_Rack_29", Payload = _warehousePayload, IsLinkable = true, LinkWaitTimeout = 60 },
+                            new MissionStepDefinition { ProcessStepDescription = $"지게차 회전을 위한 이동", MissionType = "8", ToNode = "Turn_Rack_29", Payload = WarehousePayload, IsLinkable = true, LinkWaitTimeout = 60 },
                             // 5.
                             new MissionStepDefinition {
-                                ProcessStepDescription = $"충전소로 복귀", MissionType = "8", ToNode = "Charge1", Payload = _warehousePayload, IsLinkable = false, LinkWaitTimeout = 3600,
+                                ProcessStepDescription = $"충전소로 복귀", MissionType = "8", ToNode = "Charge1", Payload = WarehousePayload, IsLinkable = false, LinkWaitTimeout = 3600,
                                 CheckModbusDiscreteInput = true, ModbusDiscreteInputAddressToCheck = 13, SourceRackId = waitRackVm.Id, DestinationRackId = targetRackVm.Id
                             }
                         };
@@ -1911,12 +2073,12 @@ namespace WPF_WMS01.ViewModels
                         missionSteps = new List<MissionStepDefinition>
                         {
                             // 1. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
-                            new MissionStepDefinition { ProcessStepDescription = $"대기장소로 이동", MissionType = "8", ToNode = "Turn_Rack_27_32", Payload = _warehousePayload, IsLinkable = true, LinkWaitTimeout = 3600 },
+                            new MissionStepDefinition { ProcessStepDescription = $"대기장소로 이동", MissionType = "8", ToNode = "Turn_Rack_27_32", Payload = WarehousePayload, IsLinkable = true, LinkWaitTimeout = 3600 },
                             // 2. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
-                            new MissionStepDefinition { ProcessStepDescription = $"{waitRackVm.Title} 제품 픽업, {targetRackVm.Title}(으)로 이동 & 드롭", MissionType = "7", FromNode = "Palette_OUT_PickUP", ToNode = $"Rack_{shelf}_Drop", Payload = _warehousePayload, IsLinkable = true, LinkWaitTimeout = 60 },
+                            new MissionStepDefinition { ProcessStepDescription = $"{waitRackVm.Title} 제품 픽업, {targetRackVm.Title}(으)로 이동 & 드롭", MissionType = "7", FromNode = "Palette_OUT_PickUP", ToNode = $"Rack_{shelf}_Drop", Payload = WarehousePayload, IsLinkable = true, LinkWaitTimeout = 60 },
                             // 3. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
                             new MissionStepDefinition {
-                                ProcessStepDescription = $"충전소로 복귀", MissionType = "8", ToNode = "Charge1", Payload = _warehousePayload, IsLinkable = false, LinkWaitTimeout = 3600,
+                                ProcessStepDescription = $"충전소로 복귀", MissionType = "8", ToNode = "Charge1", Payload = WarehousePayload, IsLinkable = false, LinkWaitTimeout = 3600,
                                 CheckModbusDiscreteInput = true, ModbusDiscreteInputAddressToCheck = 13, SourceRackId = waitRackVm.Id, DestinationRackId = targetRackVm.Id
                             }
                         };
@@ -1931,7 +2093,10 @@ namespace WPF_WMS01.ViewModels
                             null, // SourceRack은 이제 MissionStepDefinition의 ID로 관리
                             null, // DestinationRack은 이제 MissionStepDefinition의 ID로 관리
                             null,
-                            lockedRackIds // 잠긴 랙 ID 목록 전달
+                            lockedRackIds, // 잠긴 랙 ID 목록 전달
+                            null, // racksToProcess
+                            null, // initiatingCoilAddress
+                            true // isWarehouseMission = true로 전달
                         );
                         ShowAutoClosingMessage($"로봇 미션 프로세스 시작됨: {processId}");
                     }
@@ -2057,13 +2222,13 @@ namespace WPF_WMS01.ViewModels
                         // 이 정보는 RobotMissionService의 RacksToProcess와 ProcessType을 통해 HandleRobotMissionCompletion에서 처리됩니다.
                         if (targetRackVm.LocationArea == 3)
                         {
-                            missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"{targetRackVm.Title} 제품 픽업 & 이동", MissionType = "7", FromNode = $"Rack_{shelf}_PickUP", ToNode = "Turn_Rack_29", Payload = _warehousePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
+                            missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"{targetRackVm.Title} 제품 픽업 & 이동", MissionType = "7", FromNode = $"Rack_{shelf}_PickUP", ToNode = "Turn_Rack_29", Payload = WarehousePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
                             missionSteps.Add(new MissionStepDefinition
                             {
                                 ProcessStepDescription = $"출고 장소로 이동 & 제품 드롭",
                                 MissionType = "8",
                                 ToNode = "WaitProduct_1_Drop",
-                                Payload = _warehousePayload,
+                                Payload = WarehousePayload,
                                 IsLinkable = false,
                                 LinkedMission = null,
                                 LinkWaitTimeout = 3600,
@@ -2073,14 +2238,14 @@ namespace WPF_WMS01.ViewModels
                         }
                         else if (targetRackVm.LocationArea == 2)
                         {
-                            missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"대기장소로 이동", MissionType = "8", ToNode = "Turn_Rack_27_32", Payload = _warehousePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
+                            missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"대기장소로 이동", MissionType = "8", ToNode = "Turn_Rack_27_32", Payload = WarehousePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
                             missionSteps.Add(new MissionStepDefinition
                             {
                                 ProcessStepDescription = $"{targetRackVm.Title} 제품 픽업, 출고 장소로 이동 & 드롭",
                                 MissionType = "7",
                                 FromNode = $"Rack_{shelf}_PickUP",
                                 ToNode = "WaitProduct_1_Drop",
-                                Payload = _warehousePayload,
+                                Payload = WarehousePayload,
                                 IsLinkable = false,
                                 LinkedMission = null,
                                 LinkWaitTimeout = 3600,
@@ -2091,13 +2256,13 @@ namespace WPF_WMS01.ViewModels
                         }
                         else //if (targetRackVm.LocationArea == 1)
                         {
-                            missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"{targetRackVm.Title} 제품 픽업 & 이동", MissionType = "7", FromNode = $"Rack_{shelf}_PickUP", ToNode = "Turn_Rack_27_32", Payload = _warehousePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
+                            missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"{targetRackVm.Title} 제품 픽업 & 이동", MissionType = "7", FromNode = $"Rack_{shelf}_PickUP", ToNode = "Turn_Rack_27_32", Payload = WarehousePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
                             missionSteps.Add(new MissionStepDefinition
                             {
                                 ProcessStepDescription = $"출고 장소로 이동 & 제품 드롭",
                                 MissionType = "8",
                                 ToNode = "WaitProduct_1_Drop",
-                                Payload = _warehousePayload,
+                                Payload = WarehousePayload,
                                 IsLinkable = false,
                                 LinkedMission = null,
                                 LinkWaitTimeout = 3600,
@@ -2111,7 +2276,7 @@ namespace WPF_WMS01.ViewModels
                         ProcessStepDescription = "충전소로 복귀",
                         MissionType = "8",
                         ToNode = "Charge1",
-                        Payload = _warehousePayload,
+                        Payload = WarehousePayload,
                         IsLinkable = false,
                         LinkedMission = null,
                         LinkWaitTimeout = 3600,
@@ -2129,13 +2294,14 @@ namespace WPF_WMS01.ViewModels
                             null, // DestinationRack은 이제 MissionStepDefinition의 ID로 관리
                             null,
                             lockedRackIds, // 잠긴 랙 ID 목록 전달
-                            racksToProcess // 처리할 랙 ViewModel 목록 전달
+                            racksToProcess, // 처리할 랙 ViewModel 목록 전달
+                            null, // initiatingCoilAddress
+                            true // isWarehouseMission = true로 전달
                         );
                         ShowAutoClosingMessage($"로봇 미션 프로세스 시작됨: {processId}");
                         // **중요**: 로봇 미션이 시작되었으므로, 이 시점에서는 랙의 잠금 상태만 유지하고,
                         // 실제 DB 업데이트 (비우기, 채우기)는 RobotMissionService의 폴링 로직에서
                         // 미션 완료 시점에 이루어지도록 위임합니다.
-
                     }
                     catch (Exception ex) // 외부 try-catch 추가
                     {
@@ -2151,7 +2317,7 @@ namespace WPF_WMS01.ViewModels
             }
             else
             {
-                ShowAutoClosingMessage("재공품 입고가 취소되었습니다.");
+                ShowAutoClosingMessage("제품 출고가 취소되었습니다.");
             }
         }
 
