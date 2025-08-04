@@ -20,6 +20,7 @@ using System.Windows.Threading; // DispatcherTimer 사용을 위해 추가
 using Newtonsoft.Json;
 using JsonException = Newtonsoft.Json.JsonException;
 using Microsoft.Extensions.DependencyInjection;
+using System.Collections.Concurrent; // ConcurrentDictionary를 위해 추가
 
 namespace WPF_WMS01.ViewModels
 {
@@ -823,7 +824,8 @@ namespace WPF_WMS01.ViewModels
                     _amrMissionStatusPopupVm = new MissionStatusPopupViewModel(
                         activeMission.ProcessId,
                         activeMission.ProcessType,
-                        activeMission.MissionSteps.ToList()
+                        activeMission.MissionSteps.ToList(),
+                        activeMission.IsWarehouseMission
                     );
                     Debug.WriteLine($"[MainViewModel] Initialized _amrMissionStatusPopupVm for Process ID: {activeMission.ProcessId}.");
                 }
@@ -1093,7 +1095,8 @@ namespace WPF_WMS01.ViewModels
                     buttonVm.MissionStatusPopupVm = new MissionStatusPopupViewModel(
                         "N/A", // ProcessId는 나중에 업데이트될 것
                         buttonVm.Content + " 미션", // 임시 ProcessType
-                        new List<MissionStepDefinition>() // 임시 미션 단계 목록
+                        new List<MissionStepDefinition>(), // 임시 미션 단계 목록
+                        false   // IsWarehouseMission
                     );
                     Debug.WriteLine($"[MainViewModel] Lazily initialized MissionStatusPopupVm for {buttonVm.Content}.");
                 }
@@ -1394,7 +1397,8 @@ namespace WPF_WMS01.ViewModels
                 buttonVm.MissionStatusPopupVm = new MissionStatusPopupViewModel(
                     "N/A", // 초기 ProcessId는 "N/A"로 설정
                     processType,
-                    missionSteps // 초기 미션 단계 목록 전달
+                    missionSteps, // 초기 미션 단계 목록 전달
+                    false // IsWarehouseMission
                 );
                 Debug.WriteLine($"[MainViewModel] Initialized MissionStatusPopupVm for {buttonVm.Content} (Coil: {buttonVm.CoilOutputAddress}).");
 
@@ -1690,7 +1694,8 @@ namespace WPF_WMS01.ViewModels
                         buttonVm.MissionStatusPopupVm = new MissionStatusPopupViewModel(
                             missionInfo.ProcessId,
                             missionInfo.ProcessType,
-                            missionInfo.MissionSteps.ToList()
+                            missionInfo.MissionSteps.ToList(),
+                            missionInfo.IsWarehouseMission
                         );
                         Debug.WriteLine($"[MainViewModel] Lazily initialized MissionStatusPopupVm for {buttonVm.Content} (Coil: {missionInfo.InitiatingCoilAddress}) upon first update.");
                         // MissionStatusPopupViewModel에 CloseAction 설정 (지연 초기화 시에도 설정)
@@ -1715,7 +1720,8 @@ namespace WPF_WMS01.ViewModels
                         _amrMissionStatusPopupVm = new MissionStatusPopupViewModel(
                             missionInfo.ProcessId,
                             missionInfo.ProcessType,
-                            missionInfo.MissionSteps.ToList()
+                            missionInfo.MissionSteps.ToList(),
+                            missionInfo.IsWarehouseMission
                         );
                         Debug.WriteLine($"[MainViewModel] Lazily initialized _amrMissionStatusPopupVm for warehouse mission upon first update.");
 
@@ -1733,14 +1739,15 @@ namespace WPF_WMS01.ViewModels
                         };
                         _amrMissionStatusPopupVm.CloseAction = () => _amrMissionStatusPopupView?.Close();
 
-                        if (!_amrMissionStatusPopupView.IsVisible)
-                        {
-                            _amrMissionStatusPopupView.Show();
-                            Debug.WriteLine($"[MainViewModel] Showing AMR mission status popup for Process ID: {missionInfo.ProcessId} (triggered by update).");
-                        }
+                        //if (!_amrMissionStatusPopupView.IsVisible)  // update 시 자동으로 팝업 나타나지 않도록 삭제 합니다.  
+                        //{
+                        //    _amrMissionStatusPopupView.Show();
+                        //    Debug.WriteLine($"[MainViewModel] Showing AMR mission status popup for Process ID: {missionInfo.ProcessId} (triggered by update).");
+                        //}
                     }
                     // _amrMissionStatusPopupVm이 이미 초기화되어 있다면 업데이트만 수행합니다.
-                    _amrMissionStatusPopupVm.UpdateStatus(missionInfo, missionInfo.MissionSteps.ToList());
+                    if (_amrMissionStatusPopupVm != null)
+                        _amrMissionStatusPopupVm.UpdateStatus(missionInfo, missionInfo.MissionSteps.ToList());
                     Debug.WriteLine($"[MainViewModel] AMR mission status popup ViewModel updated for Process ID: {missionInfo.ProcessId}.");
                 }
                 else

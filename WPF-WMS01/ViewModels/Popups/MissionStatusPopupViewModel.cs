@@ -23,6 +23,14 @@ namespace WPF_WMS01.ViewModels.Popups
         private string _currentStepDescription;
         private ObservableCollection<MissionStepStatusViewModel> _missionStepsStatus;
 
+        // 새로 추가된 Title 속성
+        private string _title;
+        public string Title
+        {
+            get => _title;
+            set => SetProperty(ref _title, value);
+        }
+
         public string ProcessId
         {
             get => _processId;
@@ -74,7 +82,7 @@ namespace WPF_WMS01.ViewModels.Popups
         /// <summary>
         /// XAML 디자이너를 위한 매개변수 없는 생성자입니다.
         /// </summary>
-        public MissionStatusPopupViewModel() : this("Design-Time ID", "Design-Time Type", new List<MissionStepDefinition>())
+        public MissionStatusPopupViewModel() : this("Design-Time ID", "Design-Time Type", new List<MissionStepDefinition>(), false)
         {
             // 디자인 타임에 표시될 기본값 설정
             OverallStatusText = "디자인 모드";
@@ -91,7 +99,7 @@ namespace WPF_WMS01.ViewModels.Popups
         /// <param name="processId">미션 프로세스의 고유 ID.</param>
         /// <param name="processType">미션 프로세스의 유형.</param>
         /// <param name="missionStepDefinitions">전체 미션 단계 정의 목록.</param>
-        public MissionStatusPopupViewModel(string processId, string processType, List<MissionStepDefinition> missionStepDefinitions)
+        public MissionStatusPopupViewModel(string processId, string processType, List<MissionStepDefinition> missionStepDefinitions, bool isWarehouseMission)
         {
             ProcessId = processId;
             ProcessType = processType;
@@ -102,6 +110,7 @@ namespace WPF_WMS01.ViewModels.Popups
 
             CloseCommand = new RelayCommand(p => CloseAction?.Invoke()); // 기존 닫기 명령
             ConfirmCloseCommand = new RelayCommand(p => CloseAction?.Invoke()); // '확인' 버튼 클릭 시 팝업 닫기
+            Title = (isWarehouseMission ? "창고":"포장실") + " AMR 미션 진행 상황";
         }
 
         /// <summary>
