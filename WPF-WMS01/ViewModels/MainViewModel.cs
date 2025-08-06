@@ -1324,26 +1324,31 @@ namespace WPF_WMS01.ViewModels
                         {
                             workPoint = "308";
                             swapPoint = "308";
+                            //mcpIpAddress = "192.168.200.63";
                         }
                         else if (buttonVm.Content.Equals("5.56mm[5]"))
                         {
                             workPoint = "223_2_2";
                             swapPoint = "223_2";
+                            //mcpIpAddress = "192.168.200.62";
                         }
                         else if (buttonVm.Content.Equals("5.56mm[4]"))
                         {
                             workPoint = "223_2_1";
                             swapPoint = "223_2";
+                            //mcpIpAddress = "192.168.200.62";
                         }
                         else if (buttonVm.Content.Equals("5.56mm[2]"))
                         {
                             workPoint = "223_1_2";
                             swapPoint = "223_1";
+                            //mcpIpAddress = "192.168.200.61";
                         }
                         else if (buttonVm.Content.Equals("5.56mm[1]"))
                         {
                             workPoint = "223_1_1";
                             swapPoint = "223_1";
+                            //mcpIpAddress = "192.168.200.61";
                         }
                         else if (buttonVm.Content.Equals("카타르[1]"))
                         {
@@ -1372,6 +1377,7 @@ namespace WPF_WMS01.ViewModels
                         missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"공 파레트 픽업, {buttonVm.Content}(으)로 이동 & 투입", MissionType = "7", FromNode = $"Empty_{swapPoint}_PickUP", ToNode = $"Work_{workPoint}_Drop", Payload = ProductionLinePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
                         missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"{buttonVm.Content} 제품 팔레트 픽업 & 이동", MissionType = "7", FromNode = $"Full_{swapPoint}_PickUP", ToNode = $"Return_{swapPoint}", Payload = ProductionLinePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
                         missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"{buttonVm.Content} 제품 팔레트 이동 & 입고", MissionType = "8", ToNode = "Palette_IN_Drop", Payload = ProductionLinePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
+                        // 이 step 에서 Lot No,와 Box count 읽어 들임. mcpIpAddress
                         missionSteps.Add(new MissionStepDefinition
                         {
                             ProcessStepDescription = $"충전소 복귀",
@@ -2229,7 +2235,17 @@ namespace WPF_WMS01.ViewModels
                         // 이 정보는 RobotMissionService의 RacksToProcess와 ProcessType을 통해 HandleRobotMissionCompletion에서 처리됩니다.
                         if (targetRackVm.LocationArea == 3)
                         {
-                            missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"{targetRackVm.Title} 제품 픽업 & 이동", MissionType = "7", FromNode = $"Rack_{shelf}_PickUP", ToNode = "Turn_Rack_29", Payload = WarehousePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
+                            missionSteps.Add(new MissionStepDefinition
+                            {
+                                ProcessStepDescription = $"{targetRackVm.Title} 제품 픽업 & 이동",
+                                MissionType = "7",
+                                FromNode = $"Rack_{shelf}_PickUP",
+                                ToNode = "Turn_Rack_29",
+                                Payload = WarehousePayload,
+                                IsLinkable = true,
+                                LinkedMission = null,
+                                LinkWaitTimeout = 3600
+                            });
                             missionSteps.Add(new MissionStepDefinition
                             {
                                 ProcessStepDescription = $"출고 장소로 이동 & 제품 드롭",
@@ -2245,7 +2261,16 @@ namespace WPF_WMS01.ViewModels
                         }
                         else if (targetRackVm.LocationArea == 2)
                         {
-                            missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"대기장소로 이동", MissionType = "8", ToNode = "Turn_Rack_27_32", Payload = WarehousePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
+                            missionSteps.Add(new MissionStepDefinition
+                            {
+                                ProcessStepDescription = $"대기장소로 이동",
+                                MissionType = "8",
+                                ToNode = "Turn_Rack_27_32",
+                                Payload = WarehousePayload,
+                                IsLinkable = true,
+                                LinkedMission = null,
+                                LinkWaitTimeout = 3600
+                            });
                             missionSteps.Add(new MissionStepDefinition
                             {
                                 ProcessStepDescription = $"{targetRackVm.Title} 제품 픽업, 출고 장소로 이동 & 드롭",
@@ -2263,17 +2288,38 @@ namespace WPF_WMS01.ViewModels
                         }
                         else //if (targetRackVm.LocationArea == 1)
                         {
-                            missionSteps.Add(new MissionStepDefinition { ProcessStepDescription = $"{targetRackVm.Title} 제품 픽업 & 이동", MissionType = "7", FromNode = $"Rack_{shelf}_PickUP", ToNode = "Turn_Rack_27_32", Payload = WarehousePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 });
                             missionSteps.Add(new MissionStepDefinition
                             {
-                                ProcessStepDescription = $"출고 장소로 이동 & 제품 드롭",
+                                ProcessStepDescription = $"{targetRackVm.Title}로 이동 & 제품 픽업",
+                                MissionType = "8",
+                                ToNode = $"Rack_{shelf}_PickUP",
+                                Payload = WarehousePayload,
+                                IsLinkable = true,
+                                LinkedMission = null,
+                                LinkWaitTimeout = 3600,
+                                SourceRackId = targetRackVm.Id,
+                                DestinationRackId = RackList?.FirstOrDefault(r => r.Title.Equals("AMR")).Id
+                            });
+                            missionSteps.Add(new MissionStepDefinition
+                            {
+                                ProcessStepDescription = $"{targetRackVm.Title} 제품 이동 중 ...",
+                                MissionType = "8",
+                                ToNode = $"Turn_Rack_27_32",
+                                Payload = WarehousePayload,
+                                IsLinkable = true,
+                                LinkedMission = null,
+                                LinkWaitTimeout = 3600
+                            });
+                            missionSteps.Add(new MissionStepDefinition
+                            {
+                                ProcessStepDescription = $"출고 장소로 이동 & {targetRackVm.Title} 제품 드롭",
                                 MissionType = "8",
                                 ToNode = "WaitProduct_1_Drop",
                                 Payload = WarehousePayload,
                                 IsLinkable = false,
                                 LinkedMission = null,
                                 LinkWaitTimeout = 3600,
-                                SourceRackId = targetRackVm.Id,
+                                SourceRackId = RackList?.FirstOrDefault(r => r.Title.Equals("AMR")).Id,
                                 DestinationRackId = null // 충전소 복귀는 랙 상태 변화가 없음
                             });
                         }

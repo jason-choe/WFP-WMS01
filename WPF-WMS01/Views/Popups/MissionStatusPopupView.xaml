@@ -38,6 +38,10 @@
                     <Run Text="{Binding ProcessType}"/>
                 </TextBlock>
                 <TextBlock FontWeight="Bold" FontSize="16" Margin="0,0,0,5">
+                    <Run Text="{Binding Payload}" Foreground="{Binding OverallStatusColor}"/>
+                    <Run Text="(이)가 미션 수행 중임"/>
+                </TextBlock>
+                <TextBlock FontWeight="Bold" FontSize="16" Margin="0,0,0,5">
                     <Run Text="프로세스 ID:"/>
                     <Run Text="{Binding ProcessId}"/>
                 </TextBlock>

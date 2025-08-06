@@ -24,6 +24,14 @@ namespace WPF_WMS01.ViewModels.Popups
         private ObservableCollection<MissionStepStatusViewModel> _missionStepsStatus;
 
         // 새로 추가된 Title 속성
+        private string _payload;
+        public string Payload
+        {
+            get => _payload;
+            set => SetProperty(ref _payload, value);
+        }
+
+        // 새로 추가된 Title 속성
         private string _title;
         public string Title
         {
@@ -89,6 +97,7 @@ namespace WPF_WMS01.ViewModels.Popups
             OverallStatusColor = new SolidColorBrush(Colors.LightGray);
             CurrentStepDescription = "디자인 타임 미리보기";
             OverallProgressPercentage = 0;
+            Payload = "디자인 타임 미리보기";
             MissionStepsStatus.Add(new MissionStepStatusViewModel("단계 1 (디자인)", MissionStatusEnum.PENDING));
             MissionStepsStatus.Add(new MissionStepStatusViewModel("단계 2 (디자인)", MissionStatusEnum.PENDING));
         }
@@ -111,6 +120,7 @@ namespace WPF_WMS01.ViewModels.Popups
             CloseCommand = new RelayCommand(p => CloseAction?.Invoke()); // 기존 닫기 명령
             ConfirmCloseCommand = new RelayCommand(p => CloseAction?.Invoke()); // '확인' 버튼 클릭 시 팝업 닫기
             Title = (isWarehouseMission ? "창고":"포장실") + " AMR 미션 진행 상황";
+            Payload = "";
         }
 
         /// <summary>
@@ -147,6 +157,7 @@ namespace WPF_WMS01.ViewModels.Popups
                 OverallStatusText = missionInfo.HmiStatus?.Status; // Null-conditional operator
                 OverallProgressPercentage = missionInfo.HmiStatus?.ProgressPercentage ?? 0;
                 CurrentStepDescription = missionInfo.HmiStatus?.CurrentStepDescription;
+                Payload = allMissionStepDefinitions[missionInfo.CurrentStepIndex].Payload;
 
                 switch (missionInfo.CurrentStatus)
                 {

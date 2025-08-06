@@ -271,10 +271,10 @@ namespace WPF_WMS01.Services
                                     var completedStepDefinition = processInfo.MissionSteps[processInfo.CurrentStepIndex];
 
                                     // IsLinkable이 false인 미션이 성공적으로 완료되면 DB 업데이트 및 랙 잠금 해제
-                                    if (!completedStepDefinition.IsLinkable)
-                                    {
+                                    //if (!completedStepDefinition.IsLinkable)
+                                    //{
                                         await PerformDbUpdateForCompletedStep(processInfo, completedStepDefinition);
-                                    }
+                                    //}
 
                                     // 미션 단계 인덱스 증가
                                     processInfo.CurrentStepIndex++;

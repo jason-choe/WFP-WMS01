@@ -922,16 +922,51 @@ namespace WPF_WMS01.ViewModels
                     missionSteps = new List<MissionStepDefinition>
                     {
                         // 1. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
-                        new MissionStepDefinition { ProcessStepDescription = $"{targetRackViewModel.Title} 제품 픽업 & 이동", MissionType = "7", FromNode = $"Rack_{shelf}_PickUP", ToNode = "Turn_Rack_27_32", Payload = _mainViewModel.WarehousePayload, IsLinkable = true, LinkedMission = null, LinkWaitTimeout = 3600 },
-                        // 3. 랩핑 드롭 (랩핑 스테이션으로 이동하여 드롭)
-                        new MissionStepDefinition {
-                            ProcessStepDescription = $"출고 장소로 이동, 제품 드롭", MissionType = "8", ToNode = "WaitProduct_1_Drop", Payload = _mainViewModel.WarehousePayload, IsLinkable = false, LinkedMission = null, LinkWaitTimeout = 3600,
-                            SourceRackId = targetRackViewModel.Id, DestinationRackId = null // 출고는 소스 랙만 비우므로 SourceRackId만 설정
+                        new MissionStepDefinition
+                        {
+                            ProcessStepDescription = $"{targetRackViewModel.Title}로 이동 & 제품 픽업",
+                            MissionType = "8",
+                            ToNode = $"Rack_{shelf}_PickUP",
+                            Payload = _mainViewModel.WarehousePayload,
+                            IsLinkable = true,
+                            LinkedMission = null,
+                            LinkWaitTimeout = 3600,
+                            SourceRackId = targetRackViewModel.Id,
+                            DestinationRackId = _mainViewModel.RackList?.FirstOrDefault(r => r.Title.Equals("AMR")).Id
+                        },
+                        new MissionStepDefinition
+                        {
+                            ProcessStepDescription = $"{targetRackViewModel.Title} 제품 이동 중 ...",
+                            MissionType = "8",
+                            ToNode = "Turn_Rack_27_32",
+                            Payload = _mainViewModel.WarehousePayload,
+                            IsLinkable = true, LinkedMission = null,
+                            LinkWaitTimeout = 3600
+                        },
+                        // 2. 랩핑 드롭 (랩핑 스테이션으로 이동하여 드롭)
+                        new MissionStepDefinition
+                        {
+                            ProcessStepDescription = $"출고 장소로 이동 & {targetRackViewModel.Title} 제품 드롭",
+                            MissionType = "8",
+                            ToNode = "WaitProduct_1_Drop",
+                            Payload = _mainViewModel.WarehousePayload,
+                            IsLinkable = true, LinkedMission = null,
+                            LinkWaitTimeout = 3600,
+                            SourceRackId = _mainViewModel.RackList?.FirstOrDefault(r => r.Title.Equals("AMR")).Id,
+                            DestinationRackId = null // 출고는 소스 랙만 비우므로 SourceRackId만 설정
                         },
                         // 3. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
-                        new MissionStepDefinition {
-                            ProcessStepDescription = $"충전소로 복귀", MissionType = "8", ToNode = "Charge1", Payload = _mainViewModel.WarehousePayload, IsLinkable = false, LinkedMission = null, LinkWaitTimeout = 3600,
-                            SourceRackId = null, DestinationRackId = null // 충전소 복귀는 랙 상태 변화가 없음
+                        new MissionStepDefinition
+                        {
+                            ProcessStepDescription = $"충전소로 복귀",
+                            MissionType = "8",
+                            ToNode = "Charge1",
+                            Payload = _mainViewModel.WarehousePayload,
+                            IsLinkable = false,
+                            LinkedMission = null,
+                            LinkWaitTimeout = 3600,
+                            SourceRackId = null,
+                            DestinationRackId = null // 충전소 복귀는 랙 상태 변화가 없음
                         }
                     };
                 }
