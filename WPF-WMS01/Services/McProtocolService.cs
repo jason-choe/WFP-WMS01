@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using System.Threading.Tasks;
 using System.Diagnostics;
 using System.Linq; // For byte array manipulation
+using System.Text; // For string encoding
 
 namespace WPF_WMS01.Services
 {
@@ -320,16 +321,17 @@ namespace WPF_WMS01.Services
         }
 
         /// <summary>
-        /// PLC의 워드 디바이스 값을 읽습니다.
+        /// PLC의 워드 디바이스에서 여러 워드 값을 읽습니다.
         /// </summary>
         /// <param name="deviceCode">디바이스 코드 (예: "D", "R").</param>
-        /// <param name="address">디바이스 주소.</param>
-        /// <returns>읽은 워드 값.</returns>
-        public async Task<ushort> ReadWordAsync(string deviceCode, int address)
+        /// <param name="startAddress">시작 디바이스 주소.</param>
+        /// <param name="numberOfWords">읽을 워드 개수.</param>
+        /// <returns>읽은 워드 값 배열.</returns>
+        public async Task<ushort[]> ReadWordsAsync(string deviceCode, int startAddress, ushort numberOfWords)
         {
             if (!IsConnected)
             {
-                Debug.WriteLine("[McProtocolService] Not connected. Attempting to reconnect for ReadWordAsync.");
+                Debug.WriteLine("[McProtocolService] Not connected. Attempting to reconnect for ReadWordsAsync.");
                 if (!await ConnectAsync().ConfigureAwait(false))
                 {
                     throw new InvalidOperationException("MC Protocol PLC에 연결되어 있지 않습니다.");
@@ -348,16 +350,16 @@ namespace WPF_WMS01.Services
             command[3] = 0x00; // Sub-command High
 
             // Device Address (3 bytes, Little Endian)
-            command[4] = (byte)(address & 0xFF);
-            command[5] = (byte)((address >> 8) & 0xFF);
-            command[6] = (byte)((address >> 16) & 0xFF);
+            command[4] = (byte)(startAddress & 0xFF);
+            command[5] = (byte)((startAddress >> 8) & 0xFF);
+            command[6] = (byte)((startAddress >> 16) & 0xFF);
 
             // Device Code (1 byte)
             command[7] = GetDeviceCodeByte(deviceCode);
 
-            // Number of Devices (2 bytes) - 1 word
-            command[8] = 0x01;
-            command[9] = 0x00;
+            // Number of Devices (2 bytes)
+            command[8] = (byte)(numberOfWords & 0xFF);
+            command[9] = (byte)((numberOfWords >> 8) & 0xFF);
 
             ushort dataLength = (ushort)command.Length;
             byte[] header = CreateMcProtocolHeader(dataLength);
@@ -377,32 +379,37 @@ namespace WPF_WMS01.Services
                 bytesRead = await _networkStream.ReadAsync(responseData, 0, responseData.Length).ConfigureAwait(false);
                 if (bytesRead != responseData.Length) throw new Exception("MC Protocol 응답 데이터 읽기 실패.");
 
-                // 워드 응답은 2바이트 (Little Endian)
-                if (responseData.Length >= 2)
+                if (responseData.Length != numberOfWords * 2)
                 {
-                    return (ushort)(responseData[0] | (responseData[1] << 8));
+                    throw new Exception($"예상한 워드 데이터 길이({numberOfWords * 2})와 다릅니다. 실제: {responseData.Length}");
                 }
-                throw new Exception("MC Protocol 워드 읽기 응답 데이터 없음.");
+
+                ushort[] resultWords = new ushort[numberOfWords];
+                for (int i = 0; i < numberOfWords; i++)
+                {
+                    resultWords[i] = (ushort)(responseData[i * 2] | (responseData[i * 2 + 1] << 8));
+                }
+                return resultWords;
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[McProtocolService] ReadWordAsync error: {ex.Message}");
+                Debug.WriteLine($"[McProtocolService] ReadWordsAsync error: {ex.Message}");
                 throw;
             }
         }
 
         /// <summary>
-        /// PLC의 워드 디바이스 값을 씁니다.
+        /// PLC의 워드 디바이스에 여러 워드 값을 씁니다.
         /// </summary>
         /// <param name="deviceCode">디바이스 코드 (예: "D", "R").</param>
-        /// <param name="address">디바이스 주소.</param>
-        /// <param name="value">쓸 워드 값.</param>
+        /// <param name="startAddress">시작 디바이스 주소.</param>
+        /// <param name="values">쓸 워드 값 배열.</param>
         /// <returns>쓰기 성공 여부.</returns>
-        public async Task<bool> WriteWordAsync(string deviceCode, int address, ushort value)
+        public async Task<bool> WriteWordsAsync(string deviceCode, int startAddress, ushort[] values)
         {
             if (!IsConnected)
             {
-                Debug.WriteLine("[McProtocolService] Not connected. Attempting to reconnect for WriteWordAsync.");
+                Debug.WriteLine("[McProtocolService] Not connected. Attempting to reconnect for WriteWordsAsync.");
                 if (!await ConnectAsync().ConfigureAwait(false))
                 {
                     throw new InvalidOperationException("MC Protocol PLC에 연결되어 있지 않습니다.");
@@ -413,29 +420,33 @@ namespace WPF_WMS01.Services
             // Sub-command (2 bytes): 0x0000 (Word Write)
             // Device Code (1 byte) + Device Address (3 bytes)
             // Number of Devices (2 bytes)
-            // Write Data (2 bytes)
+            // Write Data (N bytes)
 
-            byte[] command = new byte[12];
+            byte[] command = new byte[10 + values.Length * 2]; // 10 bytes for command + header, 2 bytes per word
             command[0] = 0x02; // Command Low (Batch Write)
             command[1] = 0x04; // Command High
             command[2] = 0x00; // Sub-command Low (Word Write)
             command[3] = 0x00; // Sub-command High
 
             // Device Address (3 bytes, Little Endian)
-            command[4] = (byte)(address & 0xFF);
-            command[5] = (byte)((address >> 8) & 0xFF);
-            command[6] = (byte)((address >> 16) & 0xFF);
+            command[4] = (byte)(startAddress & 0xFF);
+            command[5] = (byte)((startAddress >> 8) & 0xFF);
+            command[6] = (byte)((startAddress >> 16) & 0xFF);
 
             // Device Code (1 byte)
             command[7] = GetDeviceCodeByte(deviceCode);
 
-            // Number of Devices (2 bytes) - 1 word
-            command[8] = 0x01;
-            command[9] = 0x00;
+            // Number of Devices (2 bytes)
+            ushort numberOfWords = (ushort)values.Length;
+            command[8] = (byte)(numberOfWords & 0xFF);
+            command[9] = (byte)((numberOfWords >> 8) & 0xFF);
 
-            // Write Data (2 bytes, Little Endian)
-            command[10] = (byte)(value & 0xFF);
-            command[11] = (byte)((value >> 8) & 0xFF);
+            // Write Data (N bytes, Little Endian)
+            for (int i = 0; i < values.Length; i++)
+            {
+                command[10 + i * 2] = (byte)(values[i] & 0xFF);
+                command[11 + i * 2] = (byte)((values[i] >> 8) & 0xFF);
+            }
 
             ushort dataLength = (ushort)command.Length;
             byte[] header = CreateMcProtocolHeader(dataLength);
@@ -456,8 +467,170 @@ namespace WPF_WMS01.Services
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[McProtocolService] WriteWordAsync error: {ex.Message}");
+                Debug.WriteLine($"[McProtocolService] WriteWordsAsync error: {ex.Message}");
                 throw;
+            }
+        }
+
+        /// <summary>
+        /// PLC의 워드 디바이스 값을 읽습니다. (단일 워드)
+        /// </summary>
+        /// <param name="deviceCode">디바이스 코드 (예: "D", "R").</param>
+        /// <param name="address">디바이스 주소.</param>
+        /// <returns>읽은 워드 값.</returns>
+        public async Task<ushort> ReadWordAsync(string deviceCode, int address)
+        {
+            // ReadWordsAsync를 사용하여 단일 워드를 읽습니다.
+            ushort[] result = await ReadWordsAsync(deviceCode, address, 1).ConfigureAwait(false);
+            if (result != null && result.Length > 0)
+            {
+                return result[0];
+            }
+            throw new Exception("MC Protocol 워드 읽기 응답 데이터 없음.");
+        }
+
+        /// <summary>
+        /// PLC의 워드 디바이스 값을 씁니다. (단일 워드)
+        /// </summary>
+        /// <param name="deviceCode">디바이스 코드 (예: "D", "R").</param>
+        /// <param name="address">디바이스 주소.</param>
+        /// <param name="value">쓸 워드 값.</param>
+        /// <returns>쓰기 성공 여부.</returns>
+        public async Task<bool> WriteWordAsync(string deviceCode, int address, ushort value)
+        {
+            // WriteWordsAsync를 사용하여 단일 워드를 씁니다.
+            return await WriteWordsAsync(deviceCode, address, new ushort[] { value }).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// PLC의 워드 디바이스에서 20바이트(10워드) 문자열을 읽습니다.
+        /// 연결 및 해제를 포함한 단일 시퀀스로 처리됩니다.
+        /// </summary>
+        /// <param name="deviceCode">디바이스 코드 (예: "D", "R").</param>
+        /// <param name="address">시작 디바이스 주소.</param>
+        /// <returns>읽은 문자열.</returns>
+        public async Task<string> ReadStringDataAsync(string deviceCode, int address)
+        {
+            try
+            {
+                await ConnectAsync().ConfigureAwait(false);
+                const ushort STRING_WORD_LENGTH = 10; // 20 bytes = 10 words
+                ushort[] words = await ReadWordsAsync(deviceCode, address, STRING_WORD_LENGTH).ConfigureAwait(false);
+
+                byte[] bytes = new byte[STRING_WORD_LENGTH * 2];
+                for (int i = 0; i < STRING_WORD_LENGTH; i++)
+                {
+                    bytes[i * 2] = (byte)(words[i] & 0xFF);
+                    bytes[i * 2 + 1] = (byte)((words[i] >> 8) & 0xFF);
+                }
+                // ASCII 인코딩을 사용하여 바이트 배열을 문자열로 변환합니다.
+                return Encoding.ASCII.GetString(bytes).TrimEnd('\0'); // 널 문자 제거
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[McProtocolService] ReadStringDataAsync error: {ex.Message}");
+                throw;
+            }
+            finally
+            {
+                Disconnect();
+            }
+        }
+
+        /// <summary>
+        /// PLC의 워드 디바이스에 20바이트(10워드) 문자열을 씁니다.
+        /// 연결 및 해제를 포함한 단일 시퀀스로 처리됩니다.
+        /// </summary>
+        /// <param name="deviceCode">디바이스 코드 (예: "D", "R").</param>
+        /// <param name="address">시작 디바이스 주소.</param>
+        /// <param name="value">쓸 문자열 (20바이트로 패딩/잘림).</param>
+        /// <returns>쓰기 성공 여부.</returns>
+        public async Task<bool> WriteStringDataAsync(string deviceCode, int address, string value)
+        {
+            try
+            {
+                await ConnectAsync().ConfigureAwait(false);
+                const ushort STRING_BYTE_LENGTH = 20;
+                const ushort STRING_WORD_LENGTH = 10; // 20 bytes = 10 words
+
+                byte[] stringBytes = Encoding.ASCII.GetBytes(value);
+                byte[] paddedBytes = new byte[STRING_BYTE_LENGTH];
+                Array.Copy(stringBytes, paddedBytes, Math.Min(stringBytes.Length, STRING_BYTE_LENGTH));
+
+                ushort[] words = new ushort[STRING_WORD_LENGTH];
+                for (int i = 0; i < STRING_WORD_LENGTH; i++)
+                {
+                    words[i] = (ushort)(paddedBytes[i * 2] | (paddedBytes[i * 2 + 1] << 8));
+                }
+                return await WriteWordsAsync(deviceCode, address, words).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[McProtocolService] WriteStringDataAsync error: {ex.Message}");
+                throw;
+            }
+            finally
+            {
+                Disconnect();
+            }
+        }
+
+        /// <summary>
+        /// PLC의 워드 디바이스에서 32비트 정수(int)를 읽습니다. (2워드)
+        /// 연결 및 해제를 포함한 단일 시퀀스로 처리됩니다.
+        /// </summary>
+        /// <param name="deviceCode">디바이스 코드 (예: "D", "R").</param>
+        /// <param name="address">시작 디바이스 주소.</param>
+        /// <returns>읽은 정수 값.</returns>
+        public async Task<int> ReadIntDataAsync(string deviceCode, int address)
+        {
+            try
+            {
+                await ConnectAsync().ConfigureAwait(false);
+                const ushort INT_WORD_LENGTH = 2; // 32-bit int = 2 words
+                ushort[] words = await ReadWordsAsync(deviceCode, address, INT_WORD_LENGTH).ConfigureAwait(false);
+
+                // Little Endian으로 ushort 2개를 int로 결합
+                int result = (words[0] | (words[1] << 16));
+                return result;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[McProtocolService] ReadIntDataAsync error: {ex.Message}");
+                throw;
+            }
+            finally
+            {
+                Disconnect();
+            }
+        }
+
+        /// <summary>
+        /// PLC의 워드 디바이스에 32비트 정수(int)를 씁니다. (2워드)
+        /// 연결 및 해제를 포함한 단일 시퀀스로 처리됩니다.
+        /// </summary>
+        /// <param name="deviceCode">디바이스 코드 (예: "D", "R").</param>
+        /// <param name="address">시작 디바이스 주소.</param>
+        /// <param name="value">쓸 정수 값.</param>
+        /// <returns>쓰기 성공 여부.</returns>
+        public async Task<bool> WriteIntDataAsync(string deviceCode, int address, int value)
+        {
+            try
+            {
+                await ConnectAsync().ConfigureAwait(false);
+                ushort[] words = new ushort[2];
+                words[0] = (ushort)(value & 0xFFFF); // 하위 16비트
+                words[1] = (ushort)((value >> 16) & 0xFFFF); // 상위 16비트
+                return await WriteWordsAsync(deviceCode, address, words).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[McProtocolService] WriteIntDataAsync error: {ex.Message}");
+                throw;
+            }
+            finally
+            {
+                Disconnect();
             }
         }
 

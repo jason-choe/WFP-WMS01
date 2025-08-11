@@ -940,7 +940,8 @@ namespace WPF_WMS01.ViewModels
                             MissionType = "8",
                             ToNode = "Turn_Rack_27_32",
                             Payload = _mainViewModel.WarehousePayload,
-                            IsLinkable = true, LinkedMission = null,
+                            IsLinkable = true,
+                            LinkedMission = null,
                             LinkWaitTimeout = 3600
                         },
                         // 2. 랩핑 드롭 (랩핑 스테이션으로 이동하여 드롭)
@@ -950,7 +951,8 @@ namespace WPF_WMS01.ViewModels
                             MissionType = "8",
                             ToNode = "WaitProduct_1_Drop",
                             Payload = _mainViewModel.WarehousePayload,
-                            IsLinkable = true, LinkedMission = null,
+                            IsLinkable = true,
+                            LinkedMission = null,
                             LinkWaitTimeout = 3600,
                             SourceRackId = _mainViewModel.RackList?.FirstOrDefault(r => r.Title.Equals("AMR")).Id,
                             DestinationRackId = null // 출고는 소스 랙만 비우므로 SourceRackId만 설정

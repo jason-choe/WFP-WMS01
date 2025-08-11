@@ -2316,7 +2316,7 @@ namespace WPF_WMS01.ViewModels
                                 MissionType = "8",
                                 ToNode = "WaitProduct_1_Drop",
                                 Payload = WarehousePayload,
-                                IsLinkable = false,
+                                IsLinkable = true,
                                 LinkedMission = null,
                                 LinkWaitTimeout = 3600,
                                 SourceRackId = RackList?.FirstOrDefault(r => r.Title.Equals("AMR")).Id,
