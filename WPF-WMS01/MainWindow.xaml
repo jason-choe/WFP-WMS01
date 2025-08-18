@@ -617,7 +617,7 @@
                                 Style="{StaticResource NoChromeButton}"
                                 HorizontalContentAlignment="Stretch"
                                 VerticalContentAlignment="Stretch">
-                            <Border BorderBrush="DarkGray" BorderThickness="1" Margin="5"
+                            <Border Width="73" Height="93" BorderBrush="DarkGray" BorderThickness="1" Margin="5"
                                     Visibility="{Binding IsVisible, Converter={StaticResource BooleanToVisibilityConverterForHidden}}">
                                 <StackPanel Orientation="Vertical"
                                             Background="{Binding IsLocked, Converter={StaticResource BackgroundColorConverter}}">

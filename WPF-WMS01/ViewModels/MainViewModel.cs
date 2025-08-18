@@ -1821,7 +1821,7 @@ namespace WPF_WMS01.ViewModels
 
         private async void ExecuteInboundProduct(object parameter)
         {
-            var emptyRacks = RackList?.Where(r => r.ImageIndex == 0 && r.IsVisible).ToList();
+            var emptyRacks = RackList?.Where(r => r.ImageIndex == 0 && r.IsVisible && !r.Title.Equals("AMR")).ToList();
 
             if (emptyRacks == null || !emptyRacks.Any())
             {
