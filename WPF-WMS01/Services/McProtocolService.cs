@@ -14,8 +14,8 @@ namespace WPF_WMS01.Services
     /// </summary>
     public class McProtocolService : IMcProtocolService
     {
-        private readonly string _ipAddress;
-        private readonly int _port;
+        private string _ipAddress; // 초기화 시점에 설정되거나 ConnectAsync에서 변경될 수 있음
+        private int _port; // 초기화 시점에 설정되거나 ConnectAsync에서 변경될 수 있음
         private readonly byte _cpuType; // CPU 타입 (예: 0x90 for QCPU)
         private readonly byte _networkNo; // 네트워크 번호 (기본 0x00)
         private readonly byte _pcNo; // PC 번호 (기본 0xFF)
@@ -26,6 +26,7 @@ namespace WPF_WMS01.Services
         private readonly object _lock = new object(); // 통신 중복 방지 락
 
         public bool IsConnected => _isConnected && _tcpClient?.Connected == true;
+        public string ConnectedIpAddress => _ipAddress; // 현재 연결된 IP 주소 반환
 
         /// <summary>
         /// McProtocolService의 새 인스턴스를 초기화합니다.
@@ -48,11 +49,34 @@ namespace WPF_WMS01.Services
         /// <summary>
         /// PLC에 연결합니다.
         /// </summary>
+        /// <returns>연결 성공 여부.</returns>
         public async Task<bool> ConnectAsync()
         {
+            return await ConnectAsync(_ipAddress, _port).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// 지정된 IP 주소와 포트로 PLC에 연결합니다.
+        /// 기존 연결이 있다면 해제 후 새로 연결합니다.
+        /// </summary>
+        /// <param name="ipAddress">연결할 PLC의 IP 주소.</param>
+        /// <param name="port">연결할 PLC의 포트 번호.</param>
+        /// <returns>연결 성공 여부.</returns>
+        public async Task<bool> ConnectAsync(string ipAddress, int? port = null)
+        {
+            // IP 주소나 포트가 변경되었다면 기존 연결 해제
+            if (IsConnected && (_ipAddress != ipAddress || _port != (port ?? _port)))
+            {
+                Disconnect();
+            }
+
+            // 새로운 IP 주소와 포트 업데이트 (null이 아니면)
+            if (ipAddress != null) _ipAddress = ipAddress;
+            if (port.HasValue) _port = port.Value;
+
             if (IsConnected)
             {
-                Debug.WriteLine("[McProtocolService] Already connected.");
+                Debug.WriteLine($"[McProtocolService] Already connected to {_ipAddress}:{_port}.");
                 return true;
             }
 
@@ -179,146 +203,7 @@ namespace WPF_WMS01.Services
             return dataLength;
         }
 
-        /// <summary>
-        /// PLC의 비트 디바이스 값을 읽습니다.
-        /// </summary>
-        /// <param name="deviceCode">디바이스 코드 (예: "M", "D").</param>
-        /// <param name="address">디바이스 주소.</param>
-        /// <returns>읽은 비트 값.</returns>
-        public async Task<bool> ReadBitAsync(string deviceCode, int address)
-        {
-            if (!IsConnected)
-            {
-                Debug.WriteLine("[McProtocolService] Not connected. Attempting to reconnect for ReadBitAsync.");
-                if (!await ConnectAsync().ConfigureAwait(false))
-                {
-                    throw new InvalidOperationException("MC Protocol PLC에 연결되어 있지 않습니다.");
-                }
-            }
-
-            // Command (2 bytes): 0x0401 (Batch Read)
-            // Sub-command (2 bytes): 0x0001 (Bit Read)
-            // Device Code (1 byte) + Device Address (3 bytes)
-            // Number of Devices (2 bytes)
-
-            byte[] command = new byte[10];
-            command[0] = 0x01; // Command Low (Batch Read)
-            command[1] = 0x04; // Command High
-            command[2] = 0x01; // Sub-command Low (Bit Read)
-            command[3] = 0x00; // Sub-command High
-
-            // Device Address (3 bytes, Little Endian)
-            command[4] = (byte)(address & 0xFF);
-            command[5] = (byte)((address >> 8) & 0xFF);
-            command[6] = (byte)((address >> 16) & 0xFF);
-
-            // Device Code (1 byte) - 예시: M=0x90, D=0xA8, X=0x9C, Y=0x9D
-            command[7] = GetDeviceCodeByte(deviceCode);
-
-            // Number of Devices (2 bytes) - 1 bit
-            command[8] = 0x01;
-            command[9] = 0x00;
-
-            ushort dataLength = (ushort)command.Length;
-            byte[] header = CreateMcProtocolHeader(dataLength);
-            byte[] request = header.Concat(command).ToArray();
-
-            try
-            {
-                await _networkStream.WriteAsync(request, 0, request.Length).ConfigureAwait(false);
-
-                byte[] responseHeader = new byte[11];
-                int bytesRead = await _networkStream.ReadAsync(responseHeader, 0, responseHeader.Length).ConfigureAwait(false);
-                if (bytesRead != responseHeader.Length) throw new Exception("MC Protocol 응답 헤더 읽기 실패.");
-
-                ushort responseDataLength = ParseMcProtocolResponseHeader(responseHeader);
-
-                byte[] responseData = new byte[responseDataLength - 2]; // -2 for completion code
-                bytesRead = await _networkStream.ReadAsync(responseData, 0, responseData.Length).ConfigureAwait(false);
-                if (bytesRead != responseData.Length) throw new Exception("MC Protocol 응답 데이터 읽기 실패.");
-
-                // 비트 응답은 0x00 (OFF) 또는 0x01 (ON)으로 옵니다.
-                if (responseData.Length > 0)
-                {
-                    return responseData[0] == 0x01;
-                }
-                throw new Exception("MC Protocol 비트 읽기 응답 데이터 없음.");
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[McProtocolService] ReadBitAsync error: {ex.Message}");
-                throw;
-            }
-        }
-
-        /// <summary>
-        /// PLC의 비트 디바이스 값을 씁니다.
-        /// </summary>
-        /// <param name="deviceCode">디바이스 코드 (예: "M", "D").</param>
-        /// <param name="address">디바이스 주소.</param>
-        /// <param name="value">쓸 비트 값.</param>
-        /// <returns>쓰기 성공 여부.</returns>
-        public async Task<bool> WriteBitAsync(string deviceCode, int address, bool value)
-        {
-            if (!IsConnected)
-            {
-                Debug.WriteLine("[McProtocolService] Not connected. Attempting to reconnect for WriteBitAsync.");
-                if (!await ConnectAsync().ConfigureAwait(false))
-                {
-                    throw new InvalidOperationException("MC Protocol PLC에 연결되어 있지 않습니다.");
-                }
-            }
-
-            // Command (2 bytes): 0x0402 (Batch Write)
-            // Sub-command (2 bytes): 0x0001 (Bit Write)
-            // Device Code (1 byte) + Device Address (3 bytes)
-            // Number of Devices (2 bytes)
-            // Write Data (N bytes)
-
-            byte[] command = new byte[11];
-            command[0] = 0x02; // Command Low (Batch Write)
-            command[1] = 0x04; // Command High
-            command[2] = 0x01; // Sub-command Low (Bit Write)
-            command[3] = 0x00; // Sub-command High
-
-            // Device Address (3 bytes, Little Endian)
-            command[4] = (byte)(address & 0xFF);
-            command[5] = (byte)((address >> 8) & 0xFF);
-            command[6] = (byte)((address >> 16) & 0xFF);
-
-            // Device Code (1 byte)
-            command[7] = GetDeviceCodeByte(deviceCode);
-
-            // Number of Devices (2 bytes) - 1 bit
-            command[8] = 0x01;
-            command[9] = 0x00;
-
-            // Write Data (1 byte for 1 bit)
-            command[10] = value ? (byte)0x01 : (byte)0x00;
-
-            ushort dataLength = (ushort)command.Length;
-            byte[] header = CreateMcProtocolHeader(dataLength);
-            byte[] request = header.Concat(command).ToArray();
-
-            try
-            {
-                await _networkStream.WriteAsync(request, 0, request.Length).ConfigureAwait(false);
-
-                byte[] responseHeader = new byte[11];
-                int bytesRead = await _networkStream.ReadAsync(responseHeader, 0, responseHeader.Length).ConfigureAwait(false);
-                if (bytesRead != responseHeader.Length) throw new Exception("MC Protocol 응답 헤더 읽기 실패.");
-
-                ParseMcProtocolResponseHeader(responseHeader); // 오류 확인
-
-                // 쓰기 응답은 성공 시 헤더만 오고 데이터는 없습니다.
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[McProtocolService] WriteBitAsync error: {ex.Message}");
-                throw;
-            }
-        }
+        // 기존의 ReadBitAsync, WriteBitAsync 메서드는 제거됩니다.
 
         /// <summary>
         /// PLC의 워드 디바이스에서 여러 워드 값을 읽습니다.
@@ -375,6 +260,7 @@ namespace WPF_WMS01.Services
 
                 ushort responseDataLength = ParseMcProtocolResponseHeader(responseHeader);
 
+                // 응답 데이터 길이 = 요청한 워드 수 * 2 바이트 (워드당 2바이트)
                 byte[] responseData = new byte[responseDataLength - 2]; // -2 for completion code
                 bytesRead = await _networkStream.ReadAsync(responseData, 0, responseData.Length).ConfigureAwait(false);
                 if (bytesRead != responseData.Length) throw new Exception("MC Protocol 응답 데이터 읽기 실패.");
@@ -387,6 +273,7 @@ namespace WPF_WMS01.Services
                 ushort[] resultWords = new ushort[numberOfWords];
                 for (int i = 0; i < numberOfWords; i++)
                 {
+                    // Little Endian 바이트 순서로 워드 값 재구성
                     resultWords[i] = (ushort)(responseData[i * 2] | (responseData[i * 2 + 1] << 8));
                 }
                 return resultWords;
@@ -513,7 +400,7 @@ namespace WPF_WMS01.Services
         {
             try
             {
-                await ConnectAsync().ConfigureAwait(false);
+                await ConnectAsync().ConfigureAwait(false); // 매 호출마다 연결
                 const ushort STRING_WORD_LENGTH = 10; // 20 bytes = 10 words
                 ushort[] words = await ReadWordsAsync(deviceCode, address, STRING_WORD_LENGTH).ConfigureAwait(false);
 
@@ -533,7 +420,7 @@ namespace WPF_WMS01.Services
             }
             finally
             {
-                Disconnect();
+                Disconnect(); // 매 호출마다 연결 해제
             }
         }
 
@@ -549,7 +436,7 @@ namespace WPF_WMS01.Services
         {
             try
             {
-                await ConnectAsync().ConfigureAwait(false);
+                await ConnectAsync().ConfigureAwait(false); // 매 호출마다 연결
                 const ushort STRING_BYTE_LENGTH = 20;
                 const ushort STRING_WORD_LENGTH = 10; // 20 bytes = 10 words
 
@@ -571,7 +458,7 @@ namespace WPF_WMS01.Services
             }
             finally
             {
-                Disconnect();
+                Disconnect(); // 매 호출마다 연결 해제
             }
         }
 
@@ -586,7 +473,7 @@ namespace WPF_WMS01.Services
         {
             try
             {
-                await ConnectAsync().ConfigureAwait(false);
+                await ConnectAsync().ConfigureAwait(false); // 매 호출마다 연결
                 const ushort INT_WORD_LENGTH = 2; // 32-bit int = 2 words
                 ushort[] words = await ReadWordsAsync(deviceCode, address, INT_WORD_LENGTH).ConfigureAwait(false);
 
@@ -601,7 +488,7 @@ namespace WPF_WMS01.Services
             }
             finally
             {
-                Disconnect();
+                Disconnect(); // 매 호출마다 연결 해제
             }
         }
 
@@ -617,7 +504,7 @@ namespace WPF_WMS01.Services
         {
             try
             {
-                await ConnectAsync().ConfigureAwait(false);
+                await ConnectAsync().ConfigureAwait(false); // 매 호출마다 연결
                 ushort[] words = new ushort[2];
                 words[0] = (ushort)(value & 0xFFFF); // 하위 16비트
                 words[1] = (ushort)((value >> 16) & 0xFFFF); // 상위 16비트
@@ -630,7 +517,7 @@ namespace WPF_WMS01.Services
             }
             finally
             {
-                Disconnect();
+                Disconnect(); // 매 호출마다 연결 해제
             }
         }
 

@@ -506,9 +506,6 @@ namespace WPF_WMS01.ViewModels
                     string processId = await _mainViewModel.InitiateRobotMissionProcess(
                         "WaitToWrapTransfer", // 미션 프로세스 유형
                         missionSteps,
-                        null, // SourceRack은 이제 MissionStepDefinition의 ID로 관리
-                        null, // DestinationRack은 이제 MissionStepDefinition의 ID로 관리
-                        null,
                         lockedRackIds,
                         null, // racksToProcess
                         null, // initiatingCoilAddress
@@ -679,9 +676,6 @@ namespace WPF_WMS01.ViewModels
                         string processId = await _mainViewModel.InitiateRobotMissionProcess(
                             "HandleHalfPalletExport", // 미션 프로세스 유형
                             missionSteps,
-                            null, // SourceRack은 이제 MissionStepDefinition의 ID로 관리
-                            null, // DestinationRack은 이제 MissionStepDefinition의 ID로 관리
-                            null,
                             lockedRackIds, // 잠긴 랙 ID 목록 전달
                             null, // racksToProcess
                             null, // initiatingCoilAddress
@@ -816,9 +810,6 @@ namespace WPF_WMS01.ViewModels
                     string processId = await _mainViewModel.InitiateRobotMissionProcess(
                         "HandleRackTransfer", // 미션 프로세스 유형
                         missionSteps,
-                        null, // SourceRack은 이제 MissionStepDefinition의 ID로 관리
-                        null, // DestinationRack은 이제 MissionStepDefinition의 ID로 관리
-                        null,
                         lockedRackIds, // 잠긴 랙 ID 목록 전달
                         null, // racksToProcess
                         null, // initiatingCoilAddress
@@ -979,9 +970,6 @@ namespace WPF_WMS01.ViewModels
                     string processId = await _mainViewModel.InitiateRobotMissionProcess(
                         "HandleRackShipout", // 미션 프로세스 유형
                         missionSteps,
-                        null, // SourceRack은 이제 MissionStepDefinition의 ID로 관리
-                        null, // DestinationRack은 이제 MissionStepDefinition의 ID로 관리
-                        null,
                         lockedRackIds, // 잠긴 랙 ID 목록 전달 
                         null, // racksToProcess
                         null, // initiatingCoilAddress

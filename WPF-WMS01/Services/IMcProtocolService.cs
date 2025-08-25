@@ -12,8 +12,10 @@ namespace WPF_WMS01.Services
         /// <summary>
         /// PLC에 연결합니다.
         /// </summary>
+        /// <param name="ipAddress">PLC의 IP 주소.</param>
+        /// <param name="port">PLC의 포트 번호 (선택 사항, 기본값 사용 시 null).</param>
         /// <returns>연결 성공 여부.</returns>
-        Task<bool> ConnectAsync();
+        Task<bool> ConnectAsync(string ipAddress, int? port = null);
 
         /// <summary>
         /// PLC 연결을 해제합니다.
@@ -26,24 +28,15 @@ namespace WPF_WMS01.Services
         bool IsConnected { get; }
 
         /// <summary>
-        /// PLC의 비트 디바이스(예: X, Y, M, B) 값을 읽습니다.
+        /// 현재 연결된 PLC의 IP 주소를 가져옵니다.
         /// </summary>
-        /// <param name="deviceCode">디바이스 코드 (예: "M", "D").</param>
-        /// <param name="address">디바이스 주소.</param>
-        /// <returns>읽은 비트 값.</returns>
-        Task<bool> ReadBitAsync(string deviceCode, int address);
+        string ConnectedIpAddress { get; }
+
+        // 기존의 ReadBitAsync, WriteBitAsync는 MC Protocol이 Word 단위로 동작하므로 제거합니다.
+        // 대신 ReadWordAsync, WriteWordAsync를 사용하여 비트 상태를 워드 값으로 처리합니다.
 
         /// <summary>
-        /// PLC의 비트 디바이스(예: X, Y, M, B) 값을 씁니다.
-        /// </summary>
-        /// <param name="deviceCode">디바이스 코드 (예: "M", "D").</param>
-        /// <param name="address">디바이스 주소.</param>
-        /// <param name="value">쓸 비트 값.</param>
-        /// <returns>쓰기 성공 여부.</returns>
-        Task<bool> WriteBitAsync(string deviceCode, int address, bool value);
-
-        /// <summary>
-        /// PLC의 워드 디바이스(예: D, W, R) 값을 읽습니다.
+        /// PLC의 워드 디바이스(예: D, W, R) 값을 읽습니다. (단일 워드)
         /// </summary>
         /// <param name="deviceCode">디바이스 코드 (예: "D", "R").</param>
         /// <param name="address">디바이스 주소.</param>
@@ -51,15 +44,13 @@ namespace WPF_WMS01.Services
         Task<ushort> ReadWordAsync(string deviceCode, int address);
 
         /// <summary>
-        /// PLC의 워드 디바이스(예: D, W, R) 값을 씁니다.
+        /// PLC의 워드 디바이스(예: D, W, R) 값을 씁니다. (단일 워드)
         /// </summary>
         /// <param name="deviceCode">디바이스 코드 (예: "D", "R").</param>
         /// <param name="address">디바이스 주소.</param>
         /// <param name="value">쓸 워드 값.</param>
         /// <returns>쓰기 성공 여부.</returns>
         Task<bool> WriteWordAsync(string deviceCode, int address, ushort value);
-
-        // --- 새로운 기능 추가 ---
 
         /// <summary>
         /// PLC의 워드 디바이스에서 여러 워드 값을 읽습니다.

@@ -24,6 +24,7 @@ namespace WPF_WMS01.Services
     {
         private readonly HttpService _httpService;
         private readonly DatabaseService _databaseService;
+        private readonly IMcProtocolService _mcProtocolService; // MC Protocol 서비스 주입
         private DispatcherTimer _robotMissionPollingTimer;
         private readonly ModbusClientService _missionCheckModbusService; // 미션 실패 확인용 ModbusClientService
 
@@ -44,9 +45,9 @@ namespace WPF_WMS01.Services
         private DispatcherTimer _modbusErrorMessageSuppressionTimer;
         private const int MODBUS_ERROR_MESSAGE_SUPPRESSION_SECONDS = 30; // 30초 동안 메시지 억제
 
-        // Modbus 연결 재시도 관련 상수 추가
-        private const int MAX_MODBUS_CONNECT_RETRIES = 3; // Modbus 연결 시도 최대 재시도 횟수
-        private const int MODBUS_CONNECT_RETRY_DELAY_SECONDS = 5; // Modbus 재시도 간 지연 시간
+        // PLC 연결 재시도 관련 상수 추가
+        private const int MAX_PLC_CONNECT_RETRIES = 3; // MC Protocol 연결 시도 최대 재시도 횟수 // MAX_PLC_CONNECT_RETRIES
+        private const int PLC_CONNECT_RETRY_DELAY_SECONDS = 5; // MC Protocol 재시도 간 지연 시간 // PLC_CONNECT_RETRY_DELAY_SECONDS
 
         private bool _isPollingInProgress = false; // 폴링 타이머 재진입 방지 플래그
 
@@ -63,27 +64,36 @@ namespace WPF_WMS01.Services
 
         /// <summary>
         /// RobotMissionService의 새 인스턴스를 초기화합니다.
-        /// 이 생성자는 미션 실패 확인을 위해 ModbusClientService 인스턴스를 주입받습니다.
+        /// 이 생성자는 미션 실패 확인을 위해 ModbusClientService 인스턴스와 MC Protocol 서비스 인스턴스를 주입받습니다.
         /// </summary>
         /// <param name="httpService">HTTP 통신을 위한 서비스 인스턴스.</param>
         /// <param name="databaseService">데이터베이스 접근을 위한 서비스 인스턴스.</param>
+        /// <param name="mcProtocolService">MC Protocol 통신을 위한 서비스 인스턴스.</param>
         /// <param name="waitRackTitle">WAIT 랙의 타이틀 문자열.</param>
         /// <param name="militaryCharacter">군수품 문자 배열.</param>
         /// <param name="getRackViewModelByIdFunc">Rack ID로 RackViewModel을 가져오는 함수.</param>
         /// <param name="missionCheckModbusService">미션 실패 확인용으로 미리 설정된 ModbusClientService 인스턴스.</param>
+        /// <param name="getInputStringForButtonFunc">InputStringForButton 값을 가져오는 델리게이트 (사용자 입력값).</param>
+        /// <param name="getInputStringForBoxesFunc">InputStringForBoxes 값을 가져오는 델리게이트 (사용자 입력값).</param>
         public RobotMissionService(
             HttpService httpService,
             DatabaseService databaseService,
+            IMcProtocolService mcProtocolService, // MC Protocol Service 주입
             string waitRackTitle,
             char[] militaryCharacter,
             Func<int, RackViewModel> getRackViewModelByIdFunc,
-            ModbusClientService missionCheckModbusService) // ModbusClientService 인스턴스를 직접 주입받도록 변경
+            ModbusClientService missionCheckModbusService, // ModbusClientService 인스턴스를 직접 주입받도록 변경
+            Func<string> getInputStringForButtonFunc, // 델리게이트 재추가
+            Func<string> getInputStringForBoxesFunc) // 델리게이트 재추가
         {
             _httpService = httpService ?? throw new ArgumentNullException(nameof(httpService));
             _databaseService = databaseService ?? throw new ArgumentNullException(nameof(databaseService));
+            _mcProtocolService = mcProtocolService ?? throw new ArgumentNullException(nameof(mcProtocolService)); // MC Protocol 서비스 초기화
             _waitRackTitle = waitRackTitle;
             _militaryCharacter = militaryCharacter;
             _getRackViewModelByIdFunc = getRackViewModelByIdFunc ?? throw new ArgumentNullException(nameof(getRackViewModelByIdFunc));
+            _getInputStringForButtonFunc = getInputStringForButtonFunc ?? throw new ArgumentNullException(nameof(getInputStringForButtonFunc)); // 델리게이트 초기화
+            _getInputStringForBoxesFunc = getInputStringForBoxesFunc ?? throw new ArgumentNullException(nameof(getInputStringForBoxesFunc)); // 델리게이트 초기화
 
             // 미션 실패 확인용 ModbusClientService 인스턴스 주입
             _missionCheckModbusService = missionCheckModbusService ?? throw new ArgumentNullException(nameof(missionCheckModbusService));
@@ -384,12 +394,7 @@ namespace WPF_WMS01.Services
         /// </summary>
         /// <param name="processType">미션 프로세스의 유형 (예: "WaitToWrapTransfer", "RackTransfer").</param>
         /// <param name="missionSteps">이 프로세스를 구성하는 순차적인 미션 단계 목록.</param>
-        /// <param name="sourceRack">원본 랙 ViewModel (더 이상 사용되지 않음, MissionStepDefinition의 SourceRackId 사용).</param>
-        /// <param name="destinationRack">목적지 랙 ViewModel (더 이상 사용되지 않음, MissionStepDefinition의 DestinationRackId 사용).</param>
-        /// <param name="destinationLine">목적지 생산 라인 (선택 사항).</param>
-        /// <param name="getInputStringForButtonFunc">MainViewModel의 InputStringForButton 값을 가져오는 델리게이트.</param>
-        /// <param name="getInputStringForBoxesFunc">MainViewModel의 InputStringForButton 값을 가져오는 델리게이트.</param>
-        /// <param name="racksLockedByProcess">이 프로세스 시작 시 잠긴 모든 랙의 ID 목록.</param>
+        /// <param name="racksLockedAtStart">이 프로세스 시작 시 잠긴 모든 랙의 ID 목록.</param>
         /// <param name="racksToProcess">여러 랙을 처리할 경우 (예: 출고) 해당 랙들의 ViewModel 목록.</param>
         /// <param name="initiatingCoilAddress">이 미션을 시작한 Modbus Coil의 주소 (경광등 제어용).</param>
         /// <param name="amrPayload">미션에 사용될 AMR Payload (WarehouseAMR 또는 ProductionLineAMR).</param>
@@ -398,31 +403,33 @@ namespace WPF_WMS01.Services
         public async Task<string> InitiateRobotMissionProcess(
             string processType,
             List<MissionStepDefinition> missionSteps,
-            RackViewModel sourceRack, // 이 파라미터는 더 이상 사용되지 않지만, IRobotMissionService 인터페이스 호환을 위해 유지.
-            RackViewModel destinationRack, // 이 파라미터는 더 이상 사용되지 않지만, IRobotMissionService 인터페이스 호환을 위해 유지.
-            Location destinationLine,
-            Func<string> getInputStringForButtonFunc,
-            Func<string> getInputStringForBoxesFunc,
-            List<int> racksLockedByProcess, // 새로 추가된 파라미터
+            List<int> racksLockedAtStart, // 새로 추가된 파라미터
             List<RackViewModel> racksToProcess = null, // 새로 추가된 파라미터
             ushort? initiatingCoilAddress = null, // 새로운 파라미터 추가
             bool isWarehouseMission = false) // isWarehouseMission 파라미터 추가
         {
-            // MainViewModel로부터 받은 델리게이트를 저장하여 필요할 때 사용합니다.
-            _getInputStringForButtonFunc = getInputStringForButtonFunc;
-            _getInputStringForBoxesFunc = getInputStringForBoxesFunc;
+            // MainViewModel로부터 받은 델리게이트는 App.xaml.cs에서 MainViewModel 생성 시 직접 주입받습니다.
+            // 여기서는 _getInputStringForButtonFunc와 _getInputStringForBoxesFunc에 MainViewModel의 해당 델리게이트를 할당하는 것이 필요합니다.
+            // App.xaml.cs에서 RobotMissionService를 생성할 때 이 델리게이트들을 전달하도록 구성해야 합니다.
+            // 예시:
+            // services.AddSingleton<IRobotMissionService>(provider =>
+            // {
+            //     var mainViewModel = provider.GetRequiredService<MainViewModel>();
+            //     return new RobotMissionService(
+            //         ...,
+            //         () => mainViewModel.InputStringForButton, // getInputStringForButtonFunc
+            //         () => mainViewModel.InputStringForBoxes,  // getInputStringForBoxesFunc
+            //         ...
+            //     );
+            // });
 
             // 새로운 미션이 시작될 때 Modbus 오류 플래그를 리셋합니다.
             _hasMissionCriticalModbusErrorBeenDisplayed = false;
             _modbusErrorMessageSuppressionTimer.Stop(); // 타이머도 중지하여 다음 오류 메시지 표시를 허용
 
             string processId = Guid.NewGuid().ToString(); // 고유한 프로세스 ID 생성
-            var newMissionProcess = new RobotMissionInfo(processId, processType, missionSteps, racksLockedByProcess, initiatingCoilAddress, isWarehouseMission) // 생성자에 racksLockedByProcess와 initiatingCoilAddress 전달
+            var newMissionProcess = new RobotMissionInfo(processId, processType, missionSteps, racksLockedAtStart, initiatingCoilAddress, isWarehouseMission)
             {
-                // SourceRack과 DestinationRack은 이제 MissionStepDefinition 내에서 ID로 관리됩니다.
-                // 여기에 직접 ViewModel을 할당하지 않습니다.
-                // SourceRack = sourceRack, // 제거
-                // DestinationRack = destinationRack, // 제거
                 RacksToProcess = racksToProcess ?? new List<RackViewModel>(), // racksToProcess 설정
             };
 
@@ -440,50 +447,64 @@ namespace WPF_WMS01.Services
         }
 
         /// <summary>
-        /// 특정 로봇 미션 프로세스를 취소합니다.
+        /// 특정 로봇 미션 프로세스의 HMI 상태를 업데이트합니다.
         /// </summary>
-        /// <param name="processId">취소할 미션 프로세스의 고유 ID.</param>
-/*        public async Task CancelRobotMissionProcess(string processId)
+        /// <param name="processId">업데이트할 미션 프로세스의 고유 ID.</param>
+        /// <param name="status">새로운 상태 문자열.</param>
+        /// <param name="progressPercentage">새로운 진행률 (0-100).</param>
+        /// <param name="currentStepDescription">현재 단계에 대한 설명.</param>
+        public Task UpdateHmiStatus(string processId, string status, int progressPercentage, string currentStepDescription)
         {
-            RobotMissionInfo processInfo;
             lock (_activeRobotProcessesLock)
             {
-                if (!_activeRobotProcesses.TryGetValue(processId, out processInfo))
+                if (_activeRobotProcesses.TryGetValue(processId, out var processInfo))
                 {
-                    OnShowAutoClosingMessage?.Invoke($"미션 프로세스 {processId}를 찾을 수 없습니다.");
-                    return;
+                    processInfo.HmiStatus.Status = status;
+                    processInfo.HmiStatus.ProgressPercentage = progressPercentage;
+                    processInfo.HmiStatus.CurrentStepDescription = currentStepDescription;
+                    OnMissionProcessUpdated?.Invoke(processInfo);
                 }
             }
+            return Task.CompletedTask;
+        }
 
-            // ANT 서버에 미션 취소 요청 (현재 진행 중인 미션이 있다면)
-            if (processInfo.LastSentMissionId.HasValue)
+        /// <summary>
+        /// 특정 로봇 미션 프로세스의 단계를 완료 또는 실패로 표시합니다.
+        /// </summary>
+        /// <param name="processId">미션 프로세스의 고유 ID.</param>
+        /// <param name="stepIndex">완료된 단계의 인덱스.</param>
+        /// <param name="status">단계의 최종 상태 (COMPLETED, FAILED 등).</param>
+        /// <param name="message">관련 메시지 (선택 사항).</param>
+        public Task CompleteMissionStep(string processId, int stepIndex, MissionStatusEnum status, string message = null)
+        {
+            lock (_activeRobotProcessesLock)
             {
-                try
+                if (_activeRobotProcesses.TryGetValue(processId, out var processInfo))
                 {
-                    // HttpService의 CancelMissionAsync 메서드 시그니처에 맞게 호출
-                    bool cancelSuccess = await _httpService.CancelMissionAsync(processInfo.LastSentMissionId.Value);
-                    if (cancelSuccess)
+                    // 이 메서드는 외부에서 강제로 단계를 완료/실패 처리할 때 사용될 수 있습니다.
+                    // 현재 폴링 로직에서 대부분의 상태 변경을 처리하므로, 필요에 따라 구현을 조정합니다.
+                    Debug.WriteLine($"[RobotMissionService] External CompleteMissionStep called for Process {processId}, Step {stepIndex} with status {status}. Message: {message}");
+                    processInfo.CurrentStepIndex = stepIndex; // 강제로 단계 인덱스 설정
+                    processInfo.HmiStatus.Status = status.ToString();
+                    processInfo.HmiStatus.CurrentStepDescription = message ?? $"단계 {stepIndex} 완료/실패";
+                    processInfo.HmiStatus.ProgressPercentage = (int)(((double)(stepIndex + 1) / processInfo.TotalSteps) * 100);
+                    processInfo.CurrentStatus = status; // RobotMissionInfo 내부 상태 업데이트
+
+                    if (status == MissionStatusEnum.COMPLETED && stepIndex >= processInfo.TotalSteps - 1) // 마지막 단계 완료
                     {
-                        OnShowAutoClosingMessage?.Invoke($"미션 {processInfo.LastSentMissionId.Value} 취소 요청 성공.");
+                        processInfo.IsFinished = true;
+                        // HandleRobotMissionCompletion(processInfo); // 여기서 호출하면 중복될 수 있으므로 주의
                     }
-                    else
+                    else if (status == MissionStatusEnum.FAILED || status == MissionStatusEnum.CANCELLED || status == MissionStatusEnum.REJECTED)
                     {
-                        OnShowAutoClosingMessage?.Invoke($"미션 {processInfo.LastSentMissionId.Value} 취소 요청 실패.");
+                        processInfo.IsFailed = true;
+                        // HandleRobotMissionCompletion(processInfo); // 여기서 호출하면 중복될 수 있으므로 주의
                     }
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[RobotMissionService] Failed to cancel mission {processInfo.LastSentMissionId.Value} on ANT server: {ex.Message}");
-                    OnShowAutoClosingMessage?.Invoke($"미션 {processInfo.LastSentMissionId.Value} 취소 요청 실패: {ex.Message}");
+                    OnMissionProcessUpdated?.Invoke(processInfo); // 외부 호출에 의한 상태 변경도 팝업에 알림
                 }
             }
-
-            // 프로세스 상태를 CANCELLED로 업데이트하고 완료 처리
-            processInfo.CurrentStatus = MissionStatusEnum.CANCELLED;
-            processInfo.IsFailed = true; // 취소도 실패로 간주하여 완료 처리 로직을 타도록 함
-            processInfo.CancellationTokenSource.Cancel(); // 미션 취소 요청
-            await HandleRobotMissionCompletion(processInfo); // 완료 처리 로직 호출
-        }*/
+            return Task.CompletedTask;
+        }
 
         /// <summary>
         /// 현재 STARTED 상태이면서 창고 미션인 첫 번째 미션 프로세스를 반환합니다.
@@ -501,6 +522,587 @@ namespace WPF_WMS01.Services
             }
         }
 
+        /// <summary>
+        /// 주어진 랙 ID 목록에 대해 잠금을 해제합니다.
+        /// </summary>
+        /// <param name="rackIds">잠금을 해제할 랙 ID 목록.</param>
+        private async Task UnlockAllRacksInProcess(List<int> rackIds)
+        {
+            foreach (var rackId in rackIds.Distinct()) // 중복 ID 제거
+            {
+                try
+                {
+                    await _databaseService.UpdateIsLockedAsync(rackId, false);
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        OnRackLockStateChanged?.Invoke(rackId, false); // MainViewModel에 잠금 해제 알림
+                    });
+                    Debug.WriteLine($"[RobotMissionService] Rack {rackId} unlocked.");
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[RobotMissionService] Failed to unlock rack {rackId}: {ex.Message}");
+                    OnShowAutoClosingMessage?.Invoke($"랙 {rackId} 잠금 해제 실패: {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// 로봇 미션이 최종적으로 완료(성공 또는 실패)되었을 때 데이터베이스 및 UI를 업데이트합니다.
+        /// 이 메서드는 RobotMissionService의 폴링 로직에서 호출되어야 합니다.
+        /// </summary>
+        /// <param name="missionInfo">완료된 미션 프로세스 정보.</param>
+        private async Task HandleRobotMissionCompletion(RobotMissionInfo missionInfo)
+        {
+            // === 중단점: 로봇 미션 프로세스 최종 완료/실패 시점 ===
+            Debug.WriteLine($"[RobotMissionService - BREAKPOINT] Handling completion for process {missionInfo.ProcessId}. Final Status: {missionInfo.HmiStatus.Status}. IsFailed: {missionInfo.IsFailed}");
+
+            try
+            {
+                if (missionInfo.IsFinished) // 프로세스 성공 시 (모든 개별 IsLinkable=false 단계가 이미 처리됨)
+                {
+                    OnShowAutoClosingMessage?.Invoke($"로봇 미션 프로세스 성공적으로 완료: {missionInfo.ProcessType} (ID: {missionInfo.ProcessId})");
+                    // 모든 랙 잠금 해제 (전체 프로세스 시작 시 잠긴 모든 랙)
+                    await UnlockAllRacksInProcess(missionInfo.RacksLockedByProcess);
+                }
+                else if (missionInfo.IsFailed) // 프로세스 실패 시
+                {
+                    OnShowAutoClosingMessage?.Invoke($"로봇 미션 프로세스 실패! 관련된 모든 랙 잠금 해제 중...");
+                    await UnlockAllRacksInProcess(missionInfo.RacksLockedByProcess);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[RobotMissionService] Error in HandleRobotMissionCompletion: {ex.Message}");
+                OnShowAutoClosingMessage?.Invoke($"로봇 미션 최종 처리 중 오류 발생: {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}");
+            }
+            finally
+            {
+                // 미션이 시작된 콜 버튼의 경광등을 끕니다. (MainViewModel에게 이벤트로 요청)
+                if (missionInfo.InitiatingCoilAddress.HasValue)
+                {
+                    OnTurnOffAlarmLightRequest?.Invoke(missionInfo.InitiatingCoilAddress.Value);
+                    Debug.WriteLine($"[RobotMissionService] Requested MainViewModel to turn OFF Alarm Light Coil {missionInfo.InitiatingCoilAddress.Value}.");
+                }
+
+                // 프로세스가 최종적으로 완료되거나 실패하면, activeRobotProcesses에서 제거
+                lock (_activeRobotProcessesLock)
+                {
+                    if (_activeRobotProcesses.ContainsKey(missionInfo.ProcessId))
+                    {
+                        _activeRobotProcesses.Remove(missionInfo.ProcessId);
+                        Debug.WriteLine($"[RobotMissionService] Process {missionInfo.ProcessId} explicitly removed from active processes.");
+                    }
+                }
+                // 최종 상태 업데이트를 팝업에 알림 (팝업이 닫히지 않고 최종 상태를 표시하도록)
+                OnMissionProcessUpdated?.Invoke(missionInfo);
+            }
+        }
+
+        /// <summary>
+        /// 미션 단계 내의 개별 서브 동작을 수행합니다.
+        /// </summary>
+        /// <param name="subOp">수행할 서브 동작 정의.</param>
+        /// <param name="processInfo">현재 미션 프로세스 정보.</param>
+        /// <returns>비동기 작업.</returns>
+        private async Task PerformSubOperation(MissionSubOperation subOp, RobotMissionInfo processInfo)
+        {
+            Debug.WriteLine($"[RobotMissionService] Performing Sub Operation: {subOp.Type} - {subOp.Description}");
+
+            // MC Protocol IP 주소가 지정된 경우, 해당 IP로 연결 시도. 아니면 서비스의 기본 IP 사용.
+            string mcIpAddress = subOp.McProtocolIpAddress ?? _mcProtocolService.ConnectedIpAddress;
+
+            try
+            {
+                switch (subOp.Type)
+                {
+                    case SubOperationType.McReadLotNoBoxCount:
+                        if (!subOp.McWordAddress.HasValue || !subOp.McStringLengthWords.HasValue)
+                        {
+                            throw new ArgumentException("McReadLotNoBoxCount: WordAddress 또는 StringLengthWords가 지정되지 않았습니다.");
+                        }
+
+                        // ConnectAsync는 내부적으로 재연결 로직을 포함하고 있으므로 여기서 직접 Connect/Disconnect를 관리하지 않아도 됩니다.
+                        string lotNoPart1 = await _mcProtocolService.ReadStringDataAsync(subOp.WordDeviceCode, subOp.McWordAddress.Value).ConfigureAwait(false);
+                        int lotNoPart2 = await _mcProtocolService.ReadIntDataAsync(subOp.WordDeviceCode, subOp.McWordAddress.Value + subOp.McStringLengthWords.Value).ConfigureAwait(false);
+                        int boxCount = await _mcProtocolService.ReadIntDataAsync(subOp.WordDeviceCode, subOp.McWordAddress.Value + subOp.McStringLengthWords.Value + 2).ConfigureAwait(false);
+
+                        processInfo.ReadStringValue = $"{lotNoPart1.Trim()}-{lotNoPart2:D4}"; // "5-3"에 따라 LotNo 조합
+                        processInfo.ReadIntValue = boxCount; // Box Count 저장
+
+                        Debug.WriteLine($"[RobotMissionService] McReadLotNoBoxCount: LotNo '{processInfo.ReadStringValue}', BoxCount {processInfo.ReadIntValue}");
+                        break;
+
+                    case SubOperationType.McReadSingleWord:
+                        if (!subOp.McWordAddress.HasValue)
+                        {
+                            throw new ArgumentException("McReadSingleWord: WordAddress가 지정되지 않았습니다.");
+                        }
+                        ushort readWord = await _mcProtocolService.ReadWordAsync(subOp.WordDeviceCode, subOp.McWordAddress.Value).ConfigureAwait(false);
+                        processInfo.ReadIntValue = readWord;
+                        Debug.WriteLine($"[RobotMissionService] McReadSingleWord: Device '{subOp.WordDeviceCode}', Address {subOp.McWordAddress.Value}, Value {readWord}");
+                        break;
+
+                    case SubOperationType.McWriteLotNoBoxCount:
+                        if (!subOp.McWordAddress.HasValue || !subOp.McStringLengthWords.HasValue || string.IsNullOrEmpty(processInfo.ReadStringValue) || !processInfo.ReadIntValue.HasValue)
+                        {
+                            throw new ArgumentException("McWriteLotNoBoxCount: 필요한 파라미터 (WordAddress, StringLengthWords, ReadStringValue, ReadIntValue)가 충분하지 않습니다.");
+                        }
+
+                        string[] lotNoParts = processInfo.ReadStringValue.Split('-');
+                        if (lotNoParts.Length != 2)
+                        {
+                            throw new FormatException($"LotNo 형식 오류: {processInfo.ReadStringValue}. '부분1-부분2' 형식이어야 합니다.");
+                        }
+                        string writeLotNoPart1 = lotNoParts[0];
+                        int writeLotNoPart2 = int.Parse(lotNoParts[1]);
+
+                        await _mcProtocolService.WriteStringDataAsync(subOp.WordDeviceCode, subOp.McWordAddress.Value, writeLotNoPart1).ConfigureAwait(false);
+                        await _mcProtocolService.WriteIntDataAsync(subOp.WordDeviceCode, subOp.McWordAddress.Value + subOp.McStringLengthWords.Value, writeLotNoPart2).ConfigureAwait(false);
+                        await _mcProtocolService.WriteIntDataAsync(subOp.WordDeviceCode, subOp.McWordAddress.Value + subOp.McStringLengthWords.Value + 2, processInfo.ReadIntValue.Value).ConfigureAwait(false);
+
+                        Debug.WriteLine($"[RobotMissionService] McWriteLotNoBoxCount: LotNo '{processInfo.ReadStringValue}', BoxCount {processInfo.ReadIntValue.Value} Written.");
+                        break;
+
+                    case SubOperationType.McWriteSingleWord:
+                        if (!subOp.McWordAddress.HasValue || !subOp.McWriteValueInt.HasValue)
+                        {
+                            throw new ArgumentException("McWriteSingleWord: WordAddress 또는 WriteValueInt가 지정되지 않았습니다.");
+                        }
+                        await _mcProtocolService.WriteWordAsync(subOp.WordDeviceCode, subOp.McWordAddress.Value, (ushort)subOp.McWriteValueInt.Value).ConfigureAwait(false);
+                        Debug.WriteLine($"[RobotMissionService] McWriteSingleWord: Device '{subOp.WordDeviceCode}', Address {subOp.McWordAddress.Value}, Value {(ushort)subOp.McWriteValueInt.Value}");
+                        break;
+
+                    case SubOperationType.McWaitSensorOff:
+                    case SubOperationType.McWaitSensorOn:
+                        if (!subOp.McWordAddress.HasValue || !subOp.McWriteValueInt.HasValue)
+                        {
+                            throw new ArgumentException("McWaitSensorOff/On: WordAddress 또는 WriteValueInt가 지정되지 않았습니다.");
+                        }
+                        if (!subOp.WaitTimeoutSeconds.HasValue || subOp.WaitTimeoutSeconds.Value <= 0)
+                        {
+                            subOp.WaitTimeoutSeconds = 30; // 기본 타임아웃 30초
+                            Debug.WriteLine($"[RobotMissionService] McWaitSensor: WaitTimeoutSeconds가 지정되지 않아 기본값 30초 사용.");
+                        }
+
+                        // 센서 명령 (켜거나 끄기)
+                        await _mcProtocolService.WriteWordAsync(subOp.WordDeviceCode, subOp.McWordAddress.Value, (ushort)subOp.McWriteValueInt.Value).ConfigureAwait(false);
+                        Debug.WriteLine($"[RobotMissionService] McWaitSensor: Command written to Device '{subOp.WordDeviceCode}', Address {subOp.McWordAddress.Value}, Value {(ushort)subOp.McWriteValueInt.Value}. Waiting for sensor state...");
+
+                        bool targetState = (subOp.Type == SubOperationType.McWaitSensorOn); // ON을 기다리면 true, OFF를 기다리면 false
+                        DateTime startTime = DateTime.Now;
+                        bool sensorStateReached = false;
+
+                        while (DateTime.Now - startTime < TimeSpan.FromSeconds(subOp.WaitTimeoutSeconds.Value) && !processInfo.CancellationTokenSource.Token.IsCancellationRequested)
+                        {
+                            ushort currentState = await _mcProtocolService.ReadWordAsync(subOp.WordDeviceCode, subOp.McWordAddress.Value).ConfigureAwait(false);
+                            if ((currentState != 0) == targetState) // 0이 아니면 ON, 0이면 OFF로 간주
+                            {
+                                sensorStateReached = true;
+                                break;
+                            }
+                            await Task.Delay(500).ConfigureAwait(false); // 0.5초마다 체크
+                        }
+
+                        if (!sensorStateReached)
+                        {
+                            processInfo.CancellationTokenSource.Token.ThrowIfCancellationRequested(); // 취소된 경우 예외 던지기
+                            throw new TimeoutException($"McWaitSensor: 센서 상태 대기 시간 초과 ({subOp.WaitTimeoutSeconds.Value}초). 목표 상태: {(targetState ? "ON" : "OFF")}");
+                        }
+                        Debug.WriteLine($"[RobotMissionService] McWaitSensor: Sensor state {(targetState ? "ON" : "OFF")} reached.");
+                        break;
+
+                    case SubOperationType.DbReadRackData:
+                        if (!subOp.TargetRackId.HasValue)
+                        {
+                            throw new ArgumentException("DbReadRackData: TargetRackId가 지정되지 않았습니다.");
+                        }
+                        var rack = await _databaseService.GetRackByIdAsync(subOp.TargetRackId.Value).ConfigureAwait(false);
+                        if (rack != null)
+                        {
+                            processInfo.ReadStringValue = rack.LotNumber;
+                            processInfo.ReadIntValue = rack.BoxCount;
+                            Debug.WriteLine($"[RobotMissionService] DbReadRackData: Rack {rack.Title} (ID: {rack.Id}) - LotNo '{processInfo.ReadStringValue}', BoxCount {processInfo.ReadIntValue}");
+                        }
+                        else
+                        {
+                            Debug.WriteLine($"[RobotMissionService] DbReadRackData: Rack ID {subOp.TargetRackId.Value} not found in DB.");
+                            processInfo.ReadStringValue = null;
+                            processInfo.ReadIntValue = null;
+                        }
+                        break;
+
+                    case SubOperationType.DbUpdateRackState:
+                        // PerformDbUpdateForCompletedStep의 로직을 여기에 통합하거나, 별도의 헬퍼 메서드로 분리하여 호출
+                        if (!subOp.SourceRackIdForDbUpdate.HasValue && !subOp.DestRackIdForDbUpdate.HasValue)
+                        {
+                            throw new ArgumentException("DbUpdateRackState: SourceRackIdForDbUpdate 또는 DestRackIdForDbUpdate가 지정되지 않았습니다.");
+                        }
+                        await PerformDbUpdateForCompletedStepLogic(processInfo, subOp.SourceRackIdForDbUpdate, subOp.DestRackIdForDbUpdate).ConfigureAwait(false);
+                        break;
+
+                    case SubOperationType.UiDisplayLotNoBoxCount:
+                        if (string.IsNullOrEmpty(processInfo.ReadStringValue) || !processInfo.ReadIntValue.HasValue)
+                        {
+                            Debug.WriteLine($"[RobotMissionService] UiDisplayLotNoBoxCount: 표시할 LotNo 또는 BoxCount 데이터가 없습니다.");
+                            OnShowAutoClosingMessage?.Invoke("UI 표시: LotNo/BoxCount 데이터 없음.");
+                        }
+                        else
+                        {
+                            OnShowAutoClosingMessage?.Invoke($"UI 표시: LotNo: {processInfo.ReadStringValue}, BoxCount: {processInfo.ReadIntValue.Value}");
+                            // MainViewModel에 직접 값을 전달하는 이벤트 또는 델리게이트가 필요합니다.
+                            // 현재는 OnShowAutoClosingMessage로만 표시합니다.
+                        }
+                        break;
+
+                    case SubOperationType.CheckModbusDiscreteInput:
+                        // 이 로직은 원래 SendAndTrackMissionStepsForProcess에 있었으나,
+                        // SubOperationType으로 관리되므로 여기에 구현하거나, 별도의 헬퍼를 호출합니다.
+                        // 이전에 구현했던 Modbus Discrete Input 체크 로직을 여기에 통합.
+                        await PerformModbusDiscreteInputCheck(processInfo, subOp.McDiscreteInputAddress).ConfigureAwait(false);
+                        break;
+
+                    case SubOperationType.None:
+                        // 아무 작업 없음
+                        break;
+                    default:
+                        Debug.WriteLine($"[RobotMissionService] Unknown SubOperationType: {subOp.Type}");
+                        break;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                Debug.WriteLine($"[RobotMissionService] Sub operation {subOp.Type} cancelled for Process {processInfo.ProcessId}.");
+                throw; // 취소 예외는 상위 호출자에게 전파
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[RobotMissionService] Error performing sub operation {subOp.Type} for Process {processInfo.ProcessId}: {ex.Message}");
+                // 실패 시 미션 프로세스를 실패로 마크
+                processInfo.IsFailed = true;
+                processInfo.CurrentStatus = MissionStatusEnum.FAILED;
+                processInfo.HmiStatus.Status = MissionStatusEnum.FAILED.ToString();
+                processInfo.HmiStatus.CurrentStepDescription = $"서브 동작 '{subOp.Description}' 실패: {ex.Message}";
+                OnShowAutoClosingMessage?.Invoke($"미션 {processInfo.ProcessType} (ID: {processInfo.ProcessId}) 실패: {subOp.Description} - {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}");
+                await HandleRobotMissionCompletion(processInfo); // 실패 처리
+                throw; // 예외를 다시 던져 상위 호출자가 이를 인지하게 함
+            }
+            finally
+            {
+                // 각 SubOperation이 독립적인 MC Protocol 연결을 사용하므로,
+                // McProtocolService 내부에서 Connect/Disconnect를 관리하도록 위임합니다.
+            }
+        }
+
+        /// <summary>
+        /// 주어진 Modbus Discrete Input 주소를 확인하고, 1일 경우 미션 프로세스를 취소합니다.
+        /// 이 메서드는 PerformSubOperation에서 CheckModbusDiscreteInput 타입으로 호출됩니다.
+        /// </summary>
+        /// <param name="processInfo">현재 미션 프로세스 정보.</param>
+        /// <param name="discreteInputAddress">확인할 Discrete Input 주소.</param>
+        /// <returns>비동기 작업.</returns>
+        private async Task PerformModbusDiscreteInputCheck(RobotMissionInfo processInfo, ushort? discreteInputAddress)
+        {
+            if (!discreteInputAddress.HasValue)
+            {
+                throw new ArgumentException("CheckModbusDiscreteInput: DiscreteInputAddress가 지정되지 않았습니다.");
+            }
+
+            int modbusConnectRetryCount = 0;
+
+            while (modbusConnectRetryCount < MAX_PLC_CONNECT_RETRIES) // MAX_MODBUS_CONNECT_RETRIES를 MC_PROTOCOL_CONNECT_RETRIES로 변경
+            {
+                try
+                {
+                    Debug.WriteLine($"[RobotMissionService] Checking Modbus Discrete Input {discreteInputAddress.Value} before sending mission step. Attempt {modbusConnectRetryCount + 1}/{MAX_PLC_CONNECT_RETRIES}.");
+
+                    // Modbus 연결이 끊겼다면 재연결 시도
+                    if (!_missionCheckModbusService.IsConnected)
+                    {
+                        Debug.WriteLine("[RobotMissionService] Modbus Check Service: Not Connected. Attempting to reconnect...");
+                        await _missionCheckModbusService.ConnectAsync().ConfigureAwait(false);
+                        if (!_missionCheckModbusService.IsConnected) // 연결 시도 후에도 연결되지 않았다면
+                        {
+                            throw new InvalidOperationException("Modbus 연결에 실패했습니다. Discrete Input을 읽을 수 없습니다.");
+                        }
+                        Debug.WriteLine("[RobotMissionService] Modbus Check Service: Reconnected successfully.");
+                    }
+
+                    // Modbus 연결이 여전히 안 되어 있다면 예외 발생 (위에서 이미 처리하지만, 방어적으로 한 번 더)
+                    if (!_missionCheckModbusService.IsConnected)
+                    {
+                        throw new InvalidOperationException("Modbus 연결이 활성화되지 않아 Discrete Input을 읽을 수 없습니다.");
+                    }
+
+                    // ReadDiscreteInputStatesAsync는 bool[]을 반환하므로, 첫 번째 값만 확인
+                    bool[] discreteInputStates = await _missionCheckModbusService.ReadDiscreteInputStatesAsync(discreteInputAddress.Value, 1).ConfigureAwait(false);
+
+                    if (discreteInputStates != null && discreteInputStates.Length > 0 && discreteInputStates[0])
+                    {
+                        // Discrete input이 1이므로 미션 단계 실패 처리
+                        await Application.Current.Dispatcher.Invoke(async () =>
+                        {
+                            MessageBox.Show(Application.Current.MainWindow, $"Modbus Discrete Input {discreteInputAddress.Value}이(가) 1입니다. 미션 단계를 시작할 수 없습니다. 미션 프로세스를 취소합니다.", "미션 취소", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        });
+                        Debug.WriteLine($"[RobotMissionService] Modbus Discrete Input {discreteInputAddress.Value} is 1. Cancelling mission process {processInfo.ProcessId}.");
+                        // 이 시점에서 미션 프로세스를 실패 상태로 마크하고 완료 처리
+                        processInfo.CurrentStatus = MissionStatusEnum.FAILED;
+                        processInfo.HmiStatus.Status = "FAILED";
+                        processInfo.HmiStatus.ProgressPercentage = 100;
+                        processInfo.IsFailed = true; // 프로세스 실패 플래그 설정
+                        processInfo.CancellationTokenSource.Cancel(); // 미션 취소 요청
+                        await HandleRobotMissionCompletion(processInfo);
+                        throw new OperationCanceledException($"Modbus Discrete Input {discreteInputAddress.Value} is 1. Mission cancelled.");
+                    }
+                    else
+                    {
+                        Debug.WriteLine($"[RobotMissionService] Modbus Discrete Input {discreteInputAddress.Value} is 0. Proceeding with mission step.");
+                        return; // Modbus 체크 성공, 함수 종료
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    throw; // 상위 호출자로 취소 예외 전파
+                }
+                catch (InvalidOperationException ex) // ModbusClientService에서 던지는 연결/작업 오류 예외
+                {
+                    modbusConnectRetryCount++;
+                    Debug.WriteLine($"[RobotMissionService] Modbus check attempt {modbusConnectRetryCount}/{MAX_PLC_CONNECT_RETRIES} failed: {ex.Message}");
+                    _missionCheckModbusService.Dispose(); // 다음 재시도를 위해 자원 정리
+
+                    if (modbusConnectRetryCount >= MAX_PLC_CONNECT_RETRIES)
+                    {
+                        // 최대 재시도 횟수 도달, 미션 실패로 마크
+                        await Application.Current.Dispatcher.Invoke(async () =>
+                        {
+                            MessageBox.Show(Application.Current.MainWindow, $"Modbus 연결/통신 오류: InvalidOperationException: {ex.Message}. 미션 프로세스를 취소합니다.", "미션 취소", MessageBoxButton.OK, MessageBoxImage.Error);
+                        });
+                        Debug.WriteLine($"[RobotMissionService] Modbus Connection/Communication Error during check: {ex.Message}. Cancelling mission process {processInfo.ProcessId}.");
+                        processInfo.CurrentStatus = MissionStatusEnum.FAILED;
+                        processInfo.HmiStatus.Status = "FAILED";
+                        processInfo.HmiStatus.ProgressPercentage = 100;
+                        processInfo.IsFailed = true; // 프로세스 실패 플래그 설정
+                        processInfo.CancellationTokenSource.Cancel(); // 미션 취소 요청
+                        await HandleRobotMissionCompletion(processInfo);
+                        throw new Exception($"Modbus 연결/통신 오류 (최대 재시도 횟수 초과): {ex.Message}");
+                    }
+                    else
+                    {
+                        DisplayModbusErrorMessage($"AMR Modbus 연결/통신 오류: InvalidOperationException: {ex.Message}.");
+                        // 다음 재시도 전 지연
+                        await Task.Delay(TimeSpan.FromSeconds(PLC_CONNECT_RETRY_DELAY_SECONDS)).ConfigureAwait(false);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    modbusConnectRetryCount++;
+                    Debug.WriteLine($"[RobotMissionService] Modbus check attempt {modbusConnectRetryCount}/{MAX_PLC_CONNECT_RETRIES} failed: {ex.Message}");
+                    _missionCheckModbusService.Dispose(); // 다음 재시도를 위해 자원 정리
+
+                    if (modbusConnectRetryCount >= MAX_PLC_CONNECT_RETRIES)
+                    {
+                        // 최대 재시도 횟수 도달, 미션 실패로 마크
+                        await Application.Current.Dispatcher.Invoke(async () =>
+                        {
+                            MessageBox.Show(Application.Current.MainWindow, $"Modbus 연결/통신 오류: Exception: {ex.Message}. 미션 프로세스를 취소합니다.", "미션 취소", MessageBoxButton.OK, MessageBoxImage.Error);
+                        });
+                        Debug.WriteLine($"[RobotMissionService] Max Modbus check retries reached for process {processInfo.ProcessId}. Cancelling mission.");
+                        processInfo.CurrentStatus = MissionStatusEnum.FAILED;
+                        processInfo.HmiStatus.Status = "FAILED";
+                        processInfo.HmiStatus.ProgressPercentage = 100;
+                        processInfo.IsFailed = true;
+                        processInfo.CancellationTokenSource.Cancel();
+                        await HandleRobotMissionCompletion(processInfo);
+                        throw new Exception($"Modbus 연결/통신 오류 (최대 재시도 횟수 초과): {ex.Message}");
+                    }
+                    else
+                    {
+                        DisplayModbusErrorMessage($"AMR Modbus 연결/통신 오류: Exception: {ex.Message}.");
+                        // 다음 재시도 전 지연
+                        await Task.Delay(TimeSpan.FromSeconds(PLC_CONNECT_RETRY_DELAY_SECONDS)).ConfigureAwait(false);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// DbUpdateRackState 서브 동작을 위한 실제 DB 업데이트 로직을 수행합니다.
+        /// </summary>
+        /// <param name="processInfo">현재 미션 프로세스 정보.</param>
+        /// <param name="sourceRackId">원본 랙 ID.</param>
+        /// <param name="destinationRackId">목적지 랙 ID.</param>
+        private async Task PerformDbUpdateForCompletedStepLogic(RobotMissionInfo processInfo, int? sourceRackId, int? destinationRackId)
+        {
+            Debug.WriteLine($"[RobotMissionService] Performing DB update for completed step. ProcessType: {processInfo.ProcessType}, SourceRackId: {sourceRackId}, DestinationRackId: {destinationRackId}");
+
+            RackViewModel sourceRackVm = null;
+            if (sourceRackId.HasValue)
+            {
+                sourceRackVm = _getRackViewModelByIdFunc(sourceRackId.Value);
+                if (sourceRackVm == null)
+                {
+                    Debug.WriteLine($"[RobotMissionService] Warning: SourceRackViewModel not found for ID {sourceRackId.Value}.");
+                }
+            }
+
+            RackViewModel destinationRackVm = null;
+            if (destinationRackId.HasValue)
+            {
+                destinationRackVm = _getRackViewModelByIdFunc(destinationRackId.Value);
+                if (destinationRackVm == null)
+                {
+                    Debug.WriteLine($"[RobotMissionService] Warning: DestinationRackViewModel not found for ID {destinationRackId.Value}.");
+                }
+            }
+
+            try
+            {
+                if (sourceRackVm != null && destinationRackVm != null)
+                {
+                    // 1. Destination Rack에 Source Rack의 제품 정보 복사
+                    string sourceLotNumber;
+                    int sourceBoxCount;
+                    int sourceBulletType = sourceRackVm.BulletType;
+                    int newDestinationRackType = destinationRackVm.RackType; // 기본적으로 목적지 랙의 현재 RackType 유지
+                    int newSourceRackType = sourceRackVm.RackType; // 기본적으로 현재 RackType 유지
+
+                    // 특별한 경우 1): source rack이 WAIT rack일 경우
+                    if (sourceRackVm.Title.Equals(_waitRackTitle) && _getInputStringForButtonFunc != null && _getInputStringForBoxesFunc != null)
+                    {
+                        sourceLotNumber = _getInputStringForButtonFunc.Invoke().TrimStart().TrimEnd(_militaryCharacter);
+                        // BulletType은 이미 MainViewModel에서 WAIT 랙에 설정된 상태이므로 sourceRackVm.BulletType 사용
+                        sourceBoxCount = string.IsNullOrWhiteSpace(_getInputStringForBoxesFunc.Invoke()) ? 0 : Int32.Parse(_getInputStringForBoxesFunc.Invoke());
+                    }
+                    else
+                    {
+                        sourceLotNumber = sourceRackVm.LotNumber;
+                        sourceBoxCount = sourceRackVm.BoxCount;
+                    }
+
+                    // 특별한 경우 2): ProcessType이 "FakeExecuteInboundProduct"일 경우 RackType 변경
+                    if (processInfo.ProcessType == "FakeExecuteInboundProduct")
+                    {
+                        newDestinationRackType = 3; // 재공품 랙 타입으로 변경 (완제품 랙에서 재공품 랙으로)
+                    }
+                    else if (processInfo.ProcessType == "HandleHalfPalletExport")
+                    {
+                        newSourceRackType = 1;
+                    }
+
+                    await _databaseService.UpdateRackStateAsync(
+                        destinationRackVm.Id,
+                        newDestinationRackType,
+                        sourceBulletType
+                    );
+                    await _databaseService.UpdateLotNumberAsync(
+                        destinationRackVm.Id,
+                        sourceLotNumber,
+                        sourceBoxCount
+                    );
+                    Debug.WriteLine($"[RobotMissionService] DB Update: Rack {destinationRackVm.Title} (ID: {destinationRackVm.Id}) updated with BulletType {sourceBulletType}, LotNumber '{sourceLotNumber}', RackType {newDestinationRackType}.");
+
+                    // 2. Source Rack의 파레트 정보 초기화 (BulletType = 0, Lot No. = null)
+                    // Source Rack의 RackType은 유지
+                    await _databaseService.UpdateRackStateAsync(
+                        sourceRackVm.Id,
+                        newSourceRackType,
+                        0 // BulletType을 0으로 설정 (비움)
+                    );
+                    await _databaseService.UpdateLotNumberAsync(
+                        sourceRackVm.Id,
+                        String.Empty, // LotNumber 비움
+                        0
+                    );
+                    if (sourceRackVm.Title.Equals(_waitRackTitle))
+                    {
+                        OnInputStringForButtonCleared?.Invoke(); // WAIT 랙 비우면 입력 필드 초기화
+                        OnInputStringForBoxesCleared?.Invoke();
+                        Debug.WriteLine($"[RobotMissionService] DB Update: WAIT rack {sourceRackVm.Title} cleared.");
+                    }
+                    Debug.WriteLine($"[RobotMissionService] DB Update: Source Rack {sourceRackVm.Title} (ID: {sourceRackVm.Id}) cleared.");
+
+                    // 3. 랙 잠금 해제 (이동 완료된 랙만 해제)
+                    await _databaseService.UpdateIsLockedAsync(sourceRackVm.Id, false);
+                    Application.Current.Dispatcher.Invoke(() => OnRackLockStateChanged?.Invoke(sourceRackVm.Id, false));
+                    await _databaseService.UpdateIsLockedAsync(destinationRackVm.Id, false);
+                    Application.Current.Dispatcher.Invoke(() => OnRackLockStateChanged?.Invoke(destinationRackVm.Id, false));
+                    Debug.WriteLine($"[RobotMissionService] Racks {sourceRackVm.Title} and {destinationRackVm.Title} unlocked.");
+
+                    OnShowAutoClosingMessage?.Invoke($"랙 {sourceRackVm.Title}에서 랙 {destinationRackVm.Title}으로 이동 및 업데이트 성공.");
+                }
+                else if (sourceRackVm != null && destinationRackId == null) // DestinationRackId가 null인 경우 (예: 출고, 반출)
+                {
+                    // HandleHalfPalletExport 또는 HandleRackShipout (단일 랙 출고)
+                    // 랙 비우기 (BulletType = 0, LotNumber = String.Empty)
+                    int newSourceRackType = sourceRackVm.RackType;
+                    if (processInfo.ProcessType == "HandleHalfPalletExport")
+                    {
+                        // 반출의 경우 RackType은 1 (완제품)으로 유지
+                        newSourceRackType = 1;
+                    }
+
+                    await _databaseService.UpdateRackStateAsync(
+                        sourceRackVm.Id,
+                        newSourceRackType,
+                        0 // BulletType을 0으로 설정 (비움)
+                    );
+                    await _databaseService.UpdateLotNumberAsync(
+                        sourceRackVm.Id,
+                        String.Empty, // LotNumber 비움
+                        0
+                    );
+                    Debug.WriteLine($"[RobotMissionService] DB Update: Rack {sourceRackVm.Title} (ID: {sourceRackVm.Id}) cleared for {processInfo.ProcessType}.");
+
+                    // 랙 잠금 해제
+                    await _databaseService.UpdateIsLockedAsync(sourceRackVm.Id, false);
+                    Application.Current.Dispatcher.Invoke(() => OnRackLockStateChanged?.Invoke(sourceRackVm.Id, false));
+                    Debug.WriteLine($"[RobotMissionService] Rack {sourceRackVm.Title} unlocked.");
+
+                    OnShowAutoClosingMessage?.Invoke($"랙 {sourceRackVm.Title} {processInfo.ProcessType} 성공.");
+                }
+                else if (processInfo.RacksToProcess != null && processInfo.RacksToProcess.Any() && processInfo.ProcessType == "ExecuteCheckoutProduct")
+                {
+                    // 다중 랙 출고 (ExecuteCheckoutProduct) - RacksToProcess 목록을 기반으로 처리
+                    // 이 부분은 위의 sourceRackVm != null && destinationRackId == null 로직으로 처리될 것임.
+                    Debug.WriteLine($"[RobotMissionService] Processing ExecuteCheckoutProduct completion for racks in RacksToProcess. (This path should be covered by single rack logic if SourceRackId is provided per step).");
+                }
+                else
+                {
+                    Debug.WriteLine($"[RobotMissionService] PerformDbUpdateForCompletedStepLogic: No specific rack handling logic for ProcessType '{processInfo.ProcessType}' with provided rack IDs. SourceRackId: {sourceRackId}, DestinationRackId: {destinationRackId}. No DB update performed.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[RobotMissionService] Error performing DB update for completed step: {ex.Message}");
+                OnShowAutoClosingMessage?.Invoke($"미션 완료 후 DB 업데이트 중 오류 발생: {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}");
+                throw; // 예외를 다시 던져 상위 호출자가 이를 인지하게 함
+            }
+        }
+
+
+        /// <summary>
+        /// 서비스 자원을 해제합니다.
+        /// </summary>
+        public void Dispose()
+        {
+            _robotMissionPollingTimer?.Stop();
+            _robotMissionPollingTimer.Tick -= RobotMissionPollingTimer_Tick;
+            _modbusErrorMessageSuppressionTimer?.Stop(); // 타이머 해제
+            _modbusErrorMessageSuppressionTimer.Tick -= (sender, e) => { /* empty */ }; // 이벤트 핸들러 해제
+
+            lock (_activeRobotProcessesLock)
+            {
+                foreach (var processInfo in _activeRobotProcesses.Values)
+                {
+                    processInfo.CancellationTokenSource?.Cancel();
+                    processInfo.CancellationTokenSource?.Dispose();
+                }
+                _activeRobotProcesses.Clear(); // 딕셔너리 비우기
+            }
+            _missionCheckModbusService?.Dispose(); // 미션 체크용 Modbus 서비스도 해제
+            _mcProtocolService?.Dispose(); // MC Protocol 서비스도 해제
+            Debug.WriteLine("[RobotMissionService] Disposed.");
+        }
 
         /// <summary>
         /// 주어진 로봇 미션 프로세스에서 현재 단계의 미션을 ANT 서버에 전송하고 추적을 시작합니다.
@@ -555,11 +1157,11 @@ namespace WPF_WMS01.Services
                 int modbusConnectRetryCount = 0;
                 bool modbusOperationSuccessful = false;
 
-                while (modbusConnectRetryCount < MAX_MODBUS_CONNECT_RETRIES)
+                while (modbusConnectRetryCount < MAX_PLC_CONNECT_RETRIES)
                 {
                     try
                     {
-                        Debug.WriteLine($"[RobotMissionService] Checking Modbus Discrete Input {currentStep.ModbusDiscreteInputAddressToCheck.Value} before sending mission step. Attempt {modbusConnectRetryCount + 1}/{MAX_MODBUS_CONNECT_RETRIES}.");
+                        Debug.WriteLine($"[RobotMissionService] Checking Modbus Discrete Input {currentStep.ModbusDiscreteInputAddressToCheck.Value} before sending mission step. Attempt {modbusConnectRetryCount + 1}/{MAX_PLC_CONNECT_RETRIES}.");
 
                         // Modbus 연결이 끊겼다면 재연결 시도
                         if (!_missionCheckModbusService.IsConnected)
@@ -608,10 +1210,10 @@ namespace WPF_WMS01.Services
                     catch (InvalidOperationException ex) // ModbusClientService에서 던지는 연결/작업 오류 예외
                     {
                         modbusConnectRetryCount++;
-                        Debug.WriteLine($"[RobotMissionService] Modbus check attempt {modbusConnectRetryCount}/{MAX_MODBUS_CONNECT_RETRIES} failed: {ex.Message}");
+                        Debug.WriteLine($"[RobotMissionService] Modbus check attempt {modbusConnectRetryCount}/{MAX_PLC_CONNECT_RETRIES} failed: {ex.Message}");
                         _missionCheckModbusService.Dispose(); // 다음 재시도를 위해 자원 정리
 
-                        if (modbusConnectRetryCount >= MAX_MODBUS_CONNECT_RETRIES)
+                        if (modbusConnectRetryCount >= MAX_PLC_CONNECT_RETRIES)
                         {
                             // 최대 재시도 횟수 도달, 미션 실패로 마크
                             await Application.Current.Dispatcher.Invoke(async () =>
@@ -631,17 +1233,17 @@ namespace WPF_WMS01.Services
                         {
                             DisplayModbusErrorMessage($"AMR Modbus 연결/통신 오류: InvalidOperationException: {ex.Message}.");
                             // 다음 재시도 전 지연
-                            await Task.Delay(TimeSpan.FromSeconds(MODBUS_CONNECT_RETRY_DELAY_SECONDS)).ConfigureAwait(false);
+                            await Task.Delay(TimeSpan.FromSeconds(PLC_CONNECT_RETRY_DELAY_SECONDS)).ConfigureAwait(false);
                         }
 
                     }
                     catch (Exception ex)
                     {
                         modbusConnectRetryCount++;
-                        Debug.WriteLine($"[RobotMissionService] Modbus check attempt {modbusConnectRetryCount}/{MAX_MODBUS_CONNECT_RETRIES} failed: {ex.Message}");
+                        Debug.WriteLine($"[RobotMissionService] Modbus check attempt {modbusConnectRetryCount}/{MAX_PLC_CONNECT_RETRIES} failed: {ex.Message}");
                         _missionCheckModbusService.Dispose(); // 다음 재시도를 위해 자원 정리
 
-                        if (modbusConnectRetryCount >= MAX_MODBUS_CONNECT_RETRIES)
+                        if (modbusConnectRetryCount >= MAX_PLC_CONNECT_RETRIES)
                         {
                             // 최대 재시도 횟수 도달, 미션 실패로 마크
                             await Application.Current.Dispatcher.Invoke(async () =>
@@ -661,7 +1263,7 @@ namespace WPF_WMS01.Services
                         {
                             DisplayModbusErrorMessage($"AMR Modbus 연결/통신 오류: Exception: {ex.Message}.");
                             // 다음 재시도 전 지연
-                            await Task.Delay(TimeSpan.FromSeconds(MODBUS_CONNECT_RETRY_DELAY_SECONDS)).ConfigureAwait(false);
+                            await Task.Delay(TimeSpan.FromSeconds(PLC_CONNECT_RETRY_DELAY_SECONDS)).ConfigureAwait(false);
                         }
                     }
                 }
@@ -782,57 +1384,6 @@ namespace WPF_WMS01.Services
             }
         }
 
-        /// <summary>
-        /// 로봇 미션이 최종적으로 완료(성공 또는 실패)되었을 때 데이터베이스 및 UI를 업데이트합니다.
-        /// 이 메서드는 RobotMissionService의 폴링 로직에서 호출되어야 합니다.
-        /// </summary>
-        /// <param name="missionInfo">완료된 미션 프로세스 정보.</param>
-        private async Task HandleRobotMissionCompletion(RobotMissionInfo missionInfo)
-        {
-            // === 중단점: 로봇 미션 프로세스 최종 완료/실패 시점 ===
-            Debug.WriteLine($"[RobotMissionService - BREAKPOINT] Handling completion for process {missionInfo.ProcessId}. Final Status: {missionInfo.HmiStatus.Status}. IsFailed: {missionInfo.IsFailed}");
-
-            try
-            {
-                if (missionInfo.IsFinished) // 프로세스 성공 시 (모든 개별 IsLinkable=false 단계가 이미 처리됨)
-                {
-                    OnShowAutoClosingMessage?.Invoke($"로봇 미션 프로세스 성공적으로 완료: {missionInfo.ProcessType} (ID: {missionInfo.ProcessId})");
-                    // 모든 랙 잠금 해제 (전체 프로세스 시작 시 잠긴 모든 랙)
-                    await UnlockAllRacksInProcess(missionInfo.RacksLockedByProcess);
-                }
-                else if (missionInfo.IsFailed) // 프로세스 실패 시
-                {
-                    OnShowAutoClosingMessage?.Invoke($"로봇 미션 프로세스 실패! 관련된 모든 랙 잠금 해제 중...");
-                    await UnlockAllRacksInProcess(missionInfo.RacksLockedByProcess);
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[RobotMissionService] Error in HandleRobotMissionCompletion: {ex.Message}");
-                OnShowAutoClosingMessage?.Invoke($"로봇 미션 최종 처리 중 오류 발생: {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}");
-            }
-            finally
-            {
-                // 미션이 시작된 콜 버튼의 경광등을 끕니다. (MainViewModel에게 이벤트로 요청)
-                if (missionInfo.InitiatingCoilAddress.HasValue)
-                {
-                    OnTurnOffAlarmLightRequest?.Invoke(missionInfo.InitiatingCoilAddress.Value);
-                    Debug.WriteLine($"[RobotMissionService] Requested MainViewModel to turn OFF Alarm Light Coil {missionInfo.InitiatingCoilAddress.Value}.");
-                }
-
-                // 프로세스가 최종적으로 완료되거나 실패하면, activeRobotProcesses에서 제거
-                lock (_activeRobotProcessesLock)
-                {
-                    if (_activeRobotProcesses.ContainsKey(missionInfo.ProcessId))
-                    {
-                        _activeRobotProcesses.Remove(missionInfo.ProcessId);
-                        Debug.WriteLine($"[RobotMissionService] Process {missionInfo.ProcessId} explicitly removed from active processes.");
-                    }
-                }
-                // 최종 상태 업데이트를 팝업에 알림 (팝업이 닫히지 않고 최종 상태를 표시하도록)
-                OnMissionProcessUpdated?.Invoke(missionInfo);
-            }
-        }
 
         /// <summary>
         /// IsLinkable이 false인 미션 단계가 성공적으로 완료되었을 때 DB 업데이트 및 랙 잠금 해제를 수행합니다.
@@ -998,101 +1549,6 @@ namespace WPF_WMS01.Services
                 Debug.WriteLine($"[RobotMissionService] Error performing DB update for completed step: {ex.Message}");
                 OnShowAutoClosingMessage?.Invoke($"미션 완료 후 DB 업데이트 중 오류 발생: {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}");
             }
-        }
-
-        /// <summary>
-        /// 주어진 랙 ID 목록에 대해 잠금을 해제합니다.
-        /// </summary>
-        /// <param name="rackIds">잠금을 해제할 랙 ID 목록.</param>
-        private async Task UnlockAllRacksInProcess(List<int> rackIds)
-        {
-            foreach (var rackId in rackIds.Distinct()) // 중복 ID 제거
-            {
-                try
-                {
-                    await _databaseService.UpdateIsLockedAsync(rackId, false);
-                    Application.Current.Dispatcher.Invoke(() =>
-                    {
-                        OnRackLockStateChanged?.Invoke(rackId, false); // MainViewModel에 잠금 해제 알림
-                    });
-                    Debug.WriteLine($"[RobotMissionService] Rack {rackId} unlocked.");
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[RobotMissionService] Failed to unlock rack {rackId}: {ex.Message}");
-                    OnShowAutoClosingMessage?.Invoke($"랙 {rackId} 잠금 해제 실패: {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}");
-                }
-            }
-        }
-
-        /// <summary>
-        /// 서비스 자원을 해제합니다.
-        /// </summary>
-        public void Dispose()
-        {
-            _robotMissionPollingTimer?.Stop();
-            _robotMissionPollingTimer.Tick -= RobotMissionPollingTimer_Tick;
-            _modbusErrorMessageSuppressionTimer?.Stop(); // 타이머 해제
-            _modbusErrorMessageSuppressionTimer.Tick -= (sender, e) => { /* empty */ }; // 이벤트 핸들러 해제
-
-            lock (_activeRobotProcessesLock)
-            {
-                foreach (var processInfo in _activeRobotProcesses.Values)
-                {
-                    processInfo.CancellationTokenSource?.Cancel();
-                    processInfo.CancellationTokenSource?.Dispose();
-                }
-                _activeRobotProcesses.Clear(); // 딕셔너리 비우기
-            }
-            _missionCheckModbusService?.Dispose(); // 미션 체크용 Modbus 서비스도 해제
-            Debug.WriteLine("[RobotMissionService] Disposed.");
-        }
-
-        // IRobotMissionService 인터페이스의 나머지 메서드 구현
-        public Task UpdateHmiStatus(string processId, string status, int progressPercentage)
-        {
-            lock (_activeRobotProcessesLock)
-            {
-                if (_activeRobotProcesses.TryGetValue(processId, out var processInfo))
-                {
-                    processInfo.HmiStatus.Status = status;
-                    processInfo.HmiStatus.ProgressPercentage = progressPercentage;
-                    // UI 업데이트를 위해 MainViewModel에 이벤트를 발생시킬 수 있음
-                    // 예: OnShowAutoClosingMessage?.Invoke($"HMI Status Update: {status} {progressPercentage}%");
-                }
-            }
-            return Task.CompletedTask;
-        }
-
-        public Task CompleteMissionStep(string processId, int stepIndex, MissionStatusEnum status, string message = null)
-        {
-            lock (_activeRobotProcessesLock)
-            {
-                if (_activeRobotProcesses.TryGetValue(processId, out var processInfo))
-                {
-                    // 이 메서드는 외부에서 강제로 단계를 완료/실패 처리할 때 사용될 수 있습니다.
-                    // 현재 폴링 로직에서 대부분의 상태 변경을 처리하므로, 필요에 따라 구현을 조정합니다.
-                    Debug.WriteLine($"[RobotMissionService] External CompleteMissionStep called for Process {processId}, Step {stepIndex} with status {status}. Message: {message}");
-                    processInfo.CurrentStepIndex = stepIndex; // 강제로 단계 인덱스 설정
-                    processInfo.HmiStatus.Status = status.ToString();
-                    processInfo.HmiStatus.CurrentStepDescription = message ?? $"단계 {stepIndex} 완료/실패";
-                    processInfo.HmiStatus.ProgressPercentage = (int)(((double)(stepIndex + 1) / processInfo.TotalSteps) * 100);
-                    processInfo.CurrentStatus = status; // RobotMissionInfo 내부 상태 업데이트
-
-                    if (status == MissionStatusEnum.COMPLETED && stepIndex >= processInfo.TotalSteps - 1) // 마지막 단계 완료
-                    {
-                        processInfo.IsFinished = true;
-                        // HandleRobotMissionCompletion(processInfo); // 여기서 호출하면 중복될 수 있으므로 주의
-                    }
-                    else if (status == MissionStatusEnum.FAILED || status == MissionStatusEnum.CANCELLED || status == MissionStatusEnum.REJECTED)
-                    {
-                        processInfo.IsFailed = true;
-                        // HandleRobotMissionCompletion(processInfo); // 여기서 호출하면 중복될 수 있으므로 주의
-                    }
-                    OnMissionProcessUpdated?.Invoke(processInfo); // 외부 호출에 의한 상태 변경도 팝업에 알림
-                }
-            }
-            return Task.CompletedTask;
         }
     }
 }

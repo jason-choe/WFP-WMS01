@@ -3,7 +3,7 @@ using System;
 using Newtonsoft.Json;
 using System.Collections.Generic; // List<T> 사용을 위해 추가
 using System.Threading; // CancellationTokenSource를 위해 추가
-using WPF_WMS01.ViewModels;
+using WPF_WMS01.ViewModels; // ViewModelBase 참조
 
 namespace WPF_WMS01.Models
 {
@@ -243,135 +243,8 @@ namespace WPF_WMS01.Models
         public int ReturnCode { get; set; }
     }
 
-    // ====== Common Models ======
-    /// <summary>
-    /// 생산 라인 또는 특정 위치를 나타내는 모델
-    /// </summary>
-    public class Location
-    {
-        public string Name { get; set; }
-        public string Node { get; set; }
-        public int LineNumber { get; set; }
-    }
-
-    // Rack 클래스는 이제 Models/Rack.cs에 정의되어야 합니다.
-    // 여기서는 제거됩니다.
-
-    /// <summary>
-    /// 로봇 미션 프로세스 전체의 상태를 추적하는 모델
-    /// MainViewModel의 _activeRobotProcesses 딕셔너리에 저장될 각 프로세스의 인스턴스
-    /// </summary>
-    public class RobotMissionInfo : ViewModelBase
-    {
-        public string ProcessId { get; } // 이 프로세스의 고유 ID
-        public string ProcessType { get; } // 예: "WaitToWrapTransfer", "RackTransfer"
-        public List<MissionStepDefinition> MissionSteps { get; } // 이 프로세스를 구성하는 미션 단계들
-        public int TotalSteps => MissionSteps.Count; // 총 미션 단계 수
-
-        private int _currentStepIndex;
-        public int CurrentStepIndex // 현재 진행 중인 미션 단계의 인덱스 (0-based)
-        {
-            get => _currentStepIndex;
-            set => SetProperty(ref _currentStepIndex, value);
-        }
-
-        private int? _lastSentMissionId; // 가장 최근에 ANT 서버에 전송된 미션의 ID
-        public int? LastSentMissionId
-        {
-            get => _lastSentMissionId;
-            set => SetProperty(ref _lastSentMissionId, value);
-        }
-
-        private int? _lastCompletedMissionId; // 가장 최근에 완료된 미션의 ID
-        public int? LastCompletedMissionId
-        {
-            get => _lastCompletedMissionId;
-            set => SetProperty(ref _lastCompletedMissionId, value);
-        }
-
-        private MissionDetail _currentMissionDetail; // 현재 ANT 서버에서 폴링된 미션의 상세 정보
-        public MissionDetail CurrentMissionDetail
-        {
-            get => _currentMissionDetail;
-            set => SetProperty(ref _currentMissionDetail, value);
-        }
-
-        private HmiStatusInfo _hmiStatus; // HMI에 표시될 상태 정보
-        public HmiStatusInfo HmiStatus
-        {
-            get => _hmiStatus;
-            set => SetProperty(ref _hmiStatus, value);
-        }
-
-        private MissionStatusEnum _currentStatus; // 현재 프로세스의 전체 상태 (RECEIVED, ACCEPTED, FAILED 등)
-        public MissionStatusEnum CurrentStatus
-        {
-            get => _currentStatus;
-            set => SetProperty(ref _currentStatus, value);
-        }
-
-        private bool _isFinished;
-        public bool IsFinished // 전체 프로세스 완료 여부 (성공적으로 모든 단계 완료)
-        {
-            get => _isFinished;
-            set => SetProperty(ref _isFinished, value);
-        }
-
-        private bool _isFailed;
-        public bool IsFailed // 전체 프로세스 실패 여부
-        {
-            get => _isFailed;
-            set => SetProperty(ref _isFailed, value);
-        }
-
-        // 특정 프로세스와 관련된 랙 또는 라인 정보 (선택 사항)
-        // RackViewModel은 Models가 아닌 ViewModels 네임스페이스에 있으므로 여기에 ViewModels.RackViewModel 타입으로 선언합니다.
-        // SourceRack과 DestinationRack은 이제 MissionStepDefinition 내에서 ID로 관리됩니다.
-        // public ViewModels.RackViewModel SourceRack { get; set; } // 제거
-        // public ViewModels.RackViewModel DestinationRack { get; set; } // 제거
-        public List<ViewModels.RackViewModel> RacksToProcess { get; set; } // 여러 랙을 처리할 경우 (예: 출고)
-
-        // 프로세스 시작 시 잠긴 모든 랙의 ID 목록. 미션 실패 시 이 목록의 랙들을 잠금 해제합니다.
-        public List<int> RacksLockedByProcess { get; set; }
-
-        // 미션 폴링을 취소하기 위한 CancellationTokenSource
-        public CancellationTokenSource CancellationTokenSource { get; } = new CancellationTokenSource();
-
-        // 폴링 재시도 관련 필드
-        public int PollingRetryCount { get; set; }
-        public DateTime LastPollingAttemptTime { get; set; }
-        public const int MaxPollingRetries = 3; // 최대 재시도 횟수
-        public const int PollingRetryDelaySeconds = 2; // 재시도 간 지연 시간 (초)
-
-        // 이 미션을 시작한 Modbus Coil의 주소 (경광등 제어용)
-        public ushort? InitiatingCoilAddress { get; set; } // 기존 정의 유지
-
-        // AMR 랙 버튼 기능 추가: 창고 미션 여부
-        public bool IsWarehouseMission { get; set; } // 창고 미션 여부
-
-        public RobotMissionInfo(string processId, string processType, List<MissionStepDefinition> missionSteps, List<int> racksLockedByProcess, ushort? initiatingCoilAddress = null, bool isWarehouseMission = false)
-        {
-            ProcessId = processId;
-            ProcessType = processType;
-            MissionSteps = missionSteps ?? new List<MissionStepDefinition>();
-            CurrentStepIndex = 0;
-            LastSentMissionId = null;
-            LastCompletedMissionId = null;
-            HmiStatus = new HmiStatusInfo { Status = MissionStatusEnum.PENDING.ToString(), ProgressPercentage = 0, CurrentStepDescription = "미션 대기 중" }; // 초기 상태를 PENDING으로
-            CurrentStatus = MissionStatusEnum.PENDING; // 초기 상태 설정
-            IsFinished = false;
-            IsFailed = false;
-            RacksLockedByProcess = racksLockedByProcess ?? new List<int>();
-            RacksToProcess = new List<ViewModels.RackViewModel>(); // 초기화
-
-            // Polling 관련 필드 초기화
-            PollingRetryCount = 0;
-            LastPollingAttemptTime = DateTime.MinValue;
-
-            InitiatingCoilAddress = initiatingCoilAddress; // 경광등 Coil 주소 저장
-            IsWarehouseMission = isWarehouseMission; // isWarehouseMission 초기화
-        }
-    }
+    // RobotMissionInfo 클래스는 이제 Models/RobotMissionInfo.cs에 정의됩니다.
+    // 여기서는 해당 클래스 정의를 제거합니다.
 
     /// <summary>
     /// 단일 미션 단계에 대한 정의
@@ -399,22 +272,153 @@ namespace WPF_WMS01.Models
         /// 검사할 Modbus Discrete Input의 주소입니다. CheckModbusDiscreteInput이 true일 때만 유효합니다.
         /// </summary>
         public ushort? ModbusDiscreteInputAddressToCheck { get; set; } = null;
+
+
+        // 새로운 사전/사후 동작 목록 추가 (Ordered list of operations)
+        public List<MissionSubOperation> PreMissionOperations { get; set; } = new List<MissionSubOperation>();
+        public List<MissionSubOperation> PostMissionOperations { get; set; } = new List<MissionSubOperation>();
+
+        // 기존 생성자 유지 (이전 코드와의 호환성을 위해)
+        public MissionStepDefinition(
+            string processStepDescription,
+            string missionType = null,
+            string fromNode = null,
+            string toNode = null,
+            string payload = null,
+            bool isLinkable = false,
+            int linkWaitTimeout = 3600,
+            int? sourceRackId = null,
+            int? destinationRackId = null,
+            bool checkModbusDiscreteInput = false,
+            ushort? modbusDiscreteInputAddressToCheck = null
+            )
+        {
+            ProcessStepDescription = processStepDescription;
+            MissionType = missionType;
+            FromNode = fromNode;
+            ToNode = toNode;
+            Payload = payload;
+            IsLinkable = isLinkable;
+            LinkWaitTimeout = linkWaitTimeout;
+            SourceRackId = sourceRackId;
+            DestinationRackId = destinationRackId;
+            CheckModbusDiscreteInput = checkModbusDiscreteInput;
+            ModbusDiscreteInputAddressToCheck = modbusDiscreteInputAddressToCheck;
+
+            // 기존 MC Operation 관련 필드들은 새로운 Pre/PostMissionOperations에서 사용하도록 유도
+            // 여기서는 직접 할당하지 않고, 필요하다면 MissionSubOperation으로 변환하여 추가하는 로직을 고려할 수 있습니다.
+        }
+
+        // 기본 생성자 (역직렬화 및 컬렉션 초기화용)
+        public MissionStepDefinition() { }
     }
 
     /// <summary>
-    /// 미션 상태를 나타내는 열거형
+    /// 미션 단계 내에서 실행될 세부 MC Protocol 또는 DB/UI 작업을 정의합니다.
     /// </summary>
-    public enum MissionStatusEnum
+    public class MissionSubOperation
     {
-        RECEIVED = 0,
-        ACCEPTED = 1,
-        REJECTED = 2,
-        STARTED = 3,
-        COMPLETED = 4, // 4로 명확히 정의
-        CANCELLED = 5,
-        FAILED = 7,
-        PENDING = 6, // 커스텀 상태: ANT 서버에 아직 전송되지 않았거나 초기 상태
-        UNKNOWN = 99 // 정의되지 않은 상태
+        public SubOperationType Type { get; set; } // 세부 동작 유형
+        public string Description { get; set; } // 이 동작에 대한 설명 (로깅용)
+
+        // MC Protocol 관련 파라미터
+        public string McProtocolIpAddress { get; set; } // 개별 MC 동작에 대한 IP (옵션)
+        public ushort? McCoilAddress { get; set; } // Coil (비트) 주소 (경광등 ON/OFF, 센서 명령)
+        public ushort? McDiscreteInputAddress { get; set; } // Discrete Input (비트) 주소 (센서 상태 확인, 공 파레트 배출 준비)
+        public ushort? McWordAddress { get; set; } // Word (16비트) 주소 (데이터 읽기/쓰기 시작 주소)
+        public ushort? McStringLengthWords { get; set; } // 문자열 읽기/쓰기 시 워드 길이 (예: LotNo. 앞부분 8 words)
+        public string McWriteValueString { get; set; } // MC WriteData 시 사용할 string 값
+        public int? McWriteValueInt { get; set; } // MC WriteData 시 사용할 int 값 (1비트 쓰기 시 1/0, 단일 워드 쓰기 시 값)
+        public int? WaitTimeoutSeconds { get; set; } // 센서 대기 타임아웃 (초)
+        public string BitDeviceCode { get; set; } = "Y"; // 비트 쓰기/읽기 시 디바이스 코드 (예: X, Y)
+        public string WordDeviceCode { get; set; } = "D"; // 워드 쓰기/읽기 시 디바이스 코드 (예: D, W, R)
+
+
+        // DB 관련 파라미터
+        public int? TargetRackId { get; set; } // DB에서 읽거나 업데이트할 단일 랙 ID
+        public int? SourceRackIdForDbUpdate { get; set; } // DbUpdateRackState 용 Source Rack ID
+        public int? DestRackIdForDbUpdate { get; set; } // DbUpdateRackState 용 Destination Rack ID
+
+        // 생성자
+        public MissionSubOperation(
+            SubOperationType type,
+            string description = "",
+            string mcProtocolIpAddress = null,
+            ushort? mcCoilAddress = null,
+            ushort? mcDiscreteInputAddress = null,
+            ushort? mcWordAddress = null,
+            ushort? mcStringLengthWords = null,
+            string mcWriteValueString = null,
+            int? mcWriteValueInt = null,
+            int? waitTimeoutSeconds = null,
+            string bitDeviceCode = "Y",
+            string wordDeviceCode = "D",
+            int? targetRackId = null,
+            int? sourceRackIdForDbUpdate = null,
+            int? destRackIdForDbUpdate = null)
+        {
+            Type = type;
+            Description = description;
+            McProtocolIpAddress = mcProtocolIpAddress;
+            McCoilAddress = mcCoilAddress;
+            McDiscreteInputAddress = mcDiscreteInputAddress;
+            McWordAddress = mcWordAddress;
+            McStringLengthWords = mcStringLengthWords;
+            McWriteValueString = mcWriteValueString;
+            McWriteValueInt = mcWriteValueInt;
+            WaitTimeoutSeconds = waitTimeoutSeconds;
+            BitDeviceCode = bitDeviceCode;
+            WordDeviceCode = wordDeviceCode;
+            TargetRackId = targetRackId;
+            SourceRackIdForDbUpdate = sourceRackIdForDbUpdate;
+            DestRackIdForDbUpdate = destRackIdForDbUpdate;
+        }
+
+        // 기본 생성자 (역직렬화용)
+        public MissionSubOperation() { }
+    }
+
+    /// <summary>
+    /// 미션 단계 내에서 실행될 세부 동작의 유형 정의.
+    /// 모든 MC Protocol 동작은 Word 단위로 처리됩니다.
+    /// </summary>
+    public enum SubOperationType
+    {
+        None,
+        // MC Protocol - Read
+        McReadLotNoBoxCount,        // 3-1, 5: PLC로부터 LotNo, Box Count 읽어 임시 저장소에 저장 (8+2+2 워드)
+        McReadSingleWord,           // 3-3: PLC로부터 단일 워드 읽기 (예: 공 파레트 배출 준비 확인)
+
+        // MC Protocol - Write
+        McWriteLotNoBoxCount,       // 4-3, 6: 임시 저장소의 LotNo, Box Count를 PLC에 쓰기
+        McWriteSingleWord,          // 3-4, 4-4: PLC에 단일 워드 쓰기 (경광등 ON/OFF 또는 센서 명령)
+
+        // MC Protocol - Wait (Word 상태 대기)
+        McWaitSensorOff,            // 3-2: PLC에 area sensor를 끄고 (Word 쓰기) 꺼질 때까지 대기 (Word 읽기)
+        McWaitSensorOn,             // 4-5: PLC에 area sensor를 켜고 (Word 쓰기) 켜질 때까지 대기 (Word 읽기)
+
+        // DB Operations
+        DbReadRackData,             // 4-2: Database로부터 특정 Rack의 LotNo, Box Count를 임시 저장소에 저장
+        DbUpdateRackState,          // 4-6: 기존 PerformDbUpdateForCompletedStep() 실행 (Source, Destination Rack ID 사용)
+
+        // UI Operations
+        UiDisplayLotNoBoxCount,     // 4-1: 임시 저장소의 LotNo, Box Count를 UI의 TextBox에 표시
+
+        // Other Operations (Modbus Discrete Input Check)
+        CheckModbusDiscreteInput    // 4-7: 기존 Modbus Discrete Input 체크 로직 (_missionCheckModbusService 사용)
+    }
+
+    // 기존 McOperationType 열거형 유지 (이전 코드 호환성을 위해)
+    // 새로운 SubOperationType과 충돌하지 않도록 사용 시 주의 필요
+    public enum McOperationType
+    {
+        None,
+        ReadData,
+        WriteData,
+        WriteToUI,
+        ReadFromDB,
+        SensorCommandOff,
+        SensorCommandOn
     }
 
     /// <summary>

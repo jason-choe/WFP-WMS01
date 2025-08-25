@@ -5,6 +5,7 @@ using System.Data.SqlClient;
 using System.Threading.Tasks;
 using WPF_WMS01.Models;
 using System.Configuration; // System.Configuration.dll 참조 추가
+using System.Diagnostics; // Debug.WriteLine을 위해 추가
 
 namespace WPF_WMS01.Services
 {
@@ -27,6 +28,11 @@ namespace WPF_WMS01.Services
             }
         }
 
+        /// <summary>
+        /// 데이터베이스에서 모든 랙의 상태를 비동기적으로 가져옵니다.
+        /// 캐시에 있는 랙은 업데이트하고, 없는 랙은 새로 추가합니다.
+        /// </summary>
+        /// <returns>현재 랙 상태 목록.</returns>
         public async Task<List<Rack>> GetRackStatesAsync()
         {
             List<Rack> currentRacks = new List<Rack>(); // 현재 DB에서 읽어올 랙 목록 (캐시된 객체들로 구성)
@@ -52,15 +58,12 @@ namespace WPF_WMS01.Services
                             DateTime? rackedAt = reader.IsDBNull(reader.GetOrdinal("RackedAt")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("RackedAt"));
                             int locationArea = reader.IsDBNull(reader.GetOrdinal("LocationArea")) ? 0 : Convert.ToInt32(reader["LocationArea"]);
 
-                            int imageIndex = rackType * 13 + bulletType;
-
                             Rack rack;
                             lock (_cacheLock) // 캐시 접근 시 락 걸기 (멀티스레드 환경 대비)
                             {
                                 if (_rackCache.TryGetValue(id, out rack))
                                 {
                                     // 캐시에 이미 존재하는 랙이면 속성 업데이트
-                                    // 이 경우 Rack의 생성자는 호출되지 않고, setter만 호출됩니다.
                                     rack.Title = title;
                                     rack.RackType = rackType; // 이 setter 호출 시 _rackType은 -1이 아님 (기존 값에서 변경)
                                     rack.BulletType = bulletType;
@@ -74,19 +77,7 @@ namespace WPF_WMS01.Services
                                 else
                                 {
                                     // 캐시에 없는 새로운 랙이면 생성 후 캐시에 추가
-                                    // 이 경우는 최초 로드 시 또는 DB에 정말 새로운 랙이 추가된 경우 (현재 시나리오에서는 최초 1회만)
-                                    rack = new Rack // 🚨 Rack() 생성자가 호출되는 유일한 시점 (최초 로드 시)
-                                    {
-                                        Id = id,
-                                        Title = title,
-                                        RackType = rackType,
-                                        BulletType = bulletType,
-                                        IsVisible = isVisible,
-                                        IsLocked = isLocked,
-                                        LotNumber = lotNumber,
-                                        RackedAt = rackedAt,
-                                        LocationArea = locationArea
-                                    };
+                                    rack = new Rack(id, title, rackType, bulletType, isVisible, isLocked, lotNumber, rackedAt, locationArea, boxCount);
                                     _rackCache.Add(id, rack);
                                 }
                             }
@@ -102,7 +93,65 @@ namespace WPF_WMS01.Services
             return currentRacks;
         }
 
-        // 랙 타입 (rack_type)을 업데이트하는 메서드 (새로 추가)
+        /// <summary>
+        /// 특정 ID를 가진 랙의 정보를 비동기적으로 가져옵니다.
+        /// 먼저 캐시에서 조회하고, 없으면 데이터베이스에서 조회 후 캐시에 추가합니다.
+        /// </summary>
+        /// <param name="rackId">조회할 랙의 ID.</param>
+        /// <returns>해당 Rack 객체 또는 null.</returns>
+        public async Task<Rack> GetRackByIdAsync(int rackId)
+        {
+            lock (_cacheLock)
+            {
+                if (_rackCache.TryGetValue(rackId, out Rack cachedRack))
+                {
+                    Debug.WriteLine($"[DatabaseService] GetRackByIdAsync: Rack {rackId} found in cache.");
+                    return cachedRack;
+                }
+            }
+
+            // 캐시에 없으면 DB에서 조회
+            string query = "SELECT id as 'Id', rack_name as 'Title', rack_type AS 'RackType', bullet_type as 'BulletType', visible AS 'IsVisible', locked AS 'IsLocked', lot_number AS 'LotNumber', box_count AS 'BoxCount', racked_at AS 'RackedAt', location_area AS 'LocationArea' FROM RackState WHERE id = @rackId";
+
+            using (SqlConnection connection = new SqlConnection(_connectionString))
+            {
+                await connection.OpenAsync();
+                using (SqlCommand command = new SqlCommand(query, connection))
+                {
+                    command.Parameters.AddWithValue("@rackId", rackId);
+                    using (SqlDataReader reader = await command.ExecuteReaderAsync())
+                    {
+                        if (await reader.ReadAsync())
+                        {
+                            int id = Convert.ToInt32(reader.GetInt64(reader.GetOrdinal("Id")));
+                            string title = reader.IsDBNull(reader.GetOrdinal("Title")) ? string.Empty : reader["Title"].ToString();
+                            int rackType = reader.IsDBNull(reader.GetOrdinal("RackType")) ? 0 : Convert.ToInt32(reader["RackType"]);
+                            int bulletType = reader.IsDBNull(reader.GetOrdinal("BulletType")) ? 0 : Convert.ToInt32(reader["BulletType"]);
+                            bool isVisible = reader.IsDBNull(reader.GetOrdinal("IsVisible")) ? false : Convert.ToBoolean(reader["IsVisible"]);
+                            bool isLocked = reader.IsDBNull(reader.GetOrdinal("IsLocked")) ? false : Convert.ToBoolean(reader["IsLocked"]);
+                            string lotNumber = reader.IsDBNull(reader.GetOrdinal("LotNumber")) ? string.Empty : reader["LotNumber"].ToString();
+                            int boxCount = reader.IsDBNull(reader.GetOrdinal("BoxCount")) ? 0 : Convert.ToInt32(reader["BoxCount"]);
+                            DateTime? rackedAt = reader.IsDBNull(reader.GetOrdinal("RackedAt")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("RackedAt"));
+                            int locationArea = reader.IsDBNull(reader.GetOrdinal("LocationArea")) ? 0 : Convert.ToInt32(reader["LocationArea"]);
+
+                            Rack newRack = new Rack(id, title, rackType, bulletType, isVisible, isLocked, lotNumber, rackedAt, locationArea, boxCount);
+
+                            lock (_cacheLock)
+                            {
+                                _rackCache[id] = newRack; // 새로 불러온 랙 캐시에 추가 또는 업데이트
+                            }
+                            Debug.WriteLine($"[DatabaseService] GetRackByIdAsync: Rack {rackId} found in DB and added to cache.");
+                            return newRack;
+                        }
+                    }
+                }
+            }
+            Debug.WriteLine($"[DatabaseService] GetRackByIdAsync: Rack {rackId} not found in DB.");
+            return null; // 해당 ID의 랙을 찾을 수 없음
+        }
+
+
+        // 랙 타입 (rack_type)을 업데이트하는 메서드
         public async Task UpdateRackTypeAsync(int rackId, int newRackType)
         {
             using (var connection = new SqlConnection(_connectionString))
@@ -124,8 +173,7 @@ namespace WPF_WMS01.Services
             }
         }
 
-        // 랙 상태 업데이트 메서드 (필요시)
-        // 필요에 따라 다른 업데이트 메서드 (예: RackType, BulletType, IsLocked 등을 한 번에 업데이트)
+        // 랙 상태 업데이트 메서드 (RackType, BulletType을 한 번에 업데이트)
         public async Task UpdateRackStateAsync(int rackId, int newRackType, int newBulletType)
         {
             using (var connection = new SqlConnection(_connectionString))
@@ -149,7 +197,7 @@ namespace WPF_WMS01.Services
             }
         }
 
-        // Lot Number 업데이트 메서드 (필요시)
+        // Lot Number 업데이트 메서드 (LotNumber, BoxCount, RackedAt을 한 번에 업데이트)
         public async Task UpdateLotNumberAsync(int rackId, string newLotNumber, int boxCount)
         {
             using (var connection = new SqlConnection(_connectionString))
@@ -157,10 +205,9 @@ namespace WPF_WMS01.Services
                 await connection.OpenAsync();
                 var command = new SqlCommand("UPDATE RackState SET lot_number = @lotNumber, box_count = @boxCount, racked_at = @rackedAt WHERE id = @rackId", connection);
                 command.Parameters.AddWithValue("@lotNumber", newLotNumber);
-                DateTime? tmpDateTime = String.IsNullOrEmpty(newLotNumber) ? (DateTime?)null : DateTime.Now;
                 //command.Parameters.AddWithValue("@rackedAt", String.IsNullOrEmpty(newLotNumber) ? (DateTime?)null : DateTime.Now);
-                command.Parameters.AddWithValue("@boxCount", boxCount);
                 command.Parameters.AddWithValue("@rackedAt", DateTime.Now);
+                command.Parameters.AddWithValue("@boxCount", boxCount);
                 command.Parameters.AddWithValue("@rackId", rackId);
                 await command.ExecuteNonQueryAsync();
             }
@@ -177,6 +224,7 @@ namespace WPF_WMS01.Services
             }
         }
 
+        // 랙 잠금 상태 업데이트 메서드
         public async Task UpdateIsLockedAsync(int rackId, bool newIsLocked)
         {
             using (var connection = new SqlConnection(_connectionString))
