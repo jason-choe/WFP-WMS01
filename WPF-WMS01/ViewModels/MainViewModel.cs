@@ -1991,15 +1991,20 @@ namespace WPF_WMS01.ViewModels
                             // 1. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
                             new MissionStepDefinition { ProcessStepDescription = $"대기장소로 이동", MissionType = "8", ToNode = "Turn_Rack_27_32", Payload = WarehousePayload, IsLinkable = true, LinkWaitTimeout = 3600 },
                             // 2. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
-                            new MissionStepDefinition { ProcessStepDescription = $"{waitRackVm.Title} 제품 픽업, {targetRackVm.Title}(을)로 이동 & 드롭", MissionType = "7", FromNode = "Palette_OUT_PickUP", ToNode = $"Rack_{shelf}_Drop", Payload = WarehousePayload, IsLinkable = true, LinkWaitTimeout = 60 },
+                            new MissionStepDefinition {
+                                ProcessStepDescription = $"{waitRackVm.Title} 제품 픽업, {targetRackVm.Title}(을)로 이동 & 드롭", MissionType = "7", FromNode = "Palette_OUT_PickUP", ToNode = $"Rack_{shelf}_Drop", Payload = WarehousePayload, IsLinkable = true, LinkWaitTimeout = 60,
+                                //PreMissionOperations = new List<MissionSubOperation> {
+                                //},
+                                PostMissionOperations = new List<MissionSubOperation> {
+                                    new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "Discrete Input 13 체크", McDiscreteInputAddress = 13 },
+                                    //new MissionSubOperation { Type = SubOperationType.DbUpdateRackState, Description = "랙 상태 업데이트", SourceRackIdForDbUpdate = waitRackVm.Id, DestRackIdForDbUpdate = targetRackVm.Id }
+                                }
+                            },
                             // 3. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
                             new MissionStepDefinition {
                                 ProcessStepDescription = $"충전소로 복귀", MissionType = "8", ToNode = "Charge1", Payload = WarehousePayload, IsLinkable = false, LinkWaitTimeout = 3600,
-                                CheckModbusDiscreteInput = true, ModbusDiscreteInputAddressToCheck = 13, SourceRackId = waitRackVm.Id, DestinationRackId = targetRackVm.Id,
+                                //CheckModbusDiscreteInput = true, ModbusDiscreteInputAddressToCheck = 13, SourceRackId = waitRackVm.Id, DestinationRackId = targetRackVm.Id,
                                 PreMissionOperations = new List<MissionSubOperation> {
-                                    new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "Discrete Input 13 체크", McDiscreteInputAddress = 13 }
-                                },
-                                PostMissionOperations = new List<MissionSubOperation> {
                                     new MissionSubOperation { Type = SubOperationType.DbUpdateRackState, Description = "랙 상태 업데이트", SourceRackIdForDbUpdate = waitRackVm.Id, DestRackIdForDbUpdate = targetRackVm.Id }
                                 }
                             }
@@ -2451,7 +2456,7 @@ namespace WPF_WMS01.ViewModels
                         IsLinkable = false,
                         LinkedMission = null,
                         LinkWaitTimeout = 3600,
-                        //reMissionOperations = new List<MissionSubOperation> {
+                        //PreMissionOperations = new List<MissionSubOperation> {
                         //    new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "Discrete Input 13 체크", McDiscreteInputAddress = 13 }
                         //},
                         SourceRackId = null,

@@ -600,10 +600,14 @@
             </TabControl>
         </Grid>
 
+        <Image Grid.Row="2" Margin="20,20,20,10" Source="images/mybackground.png"
+           HorizontalAlignment="Center" VerticalAlignment="Center"
+           Panel.ZIndex="0"/>
+        
         <ScrollViewer Grid.Row="2"  Margin="20,20,20,10" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
             <!-- ItemsControl 자체에는 고정된 Width/Height를 주지 않습니다.
                  부모 Grid.Row="2"와 UniformGrid가 크기를 조절하도록 둡니다. -->
-            <ItemsControl ItemsSource="{Binding RackList}" Background="#585858" Padding="20">
+            <ItemsControl ItemsSource="{Binding RackList}" Background="Transparent" Padding="20">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                         <UniformGrid Columns="22" Rows="6" VirtualizingPanel.IsVirtualizing="False"/>

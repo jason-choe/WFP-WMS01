@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <None Remove="images\arobotics.png" />
+    <None Remove="images\mybackground.png" />
     <None Remove="images\poongsan.png" />
     <None Remove="images\rack_state_0.png" />
     <None Remove="images\rack_state_1.png" />
@@ -80,6 +81,7 @@
 
   <ItemGroup>
     <Resource Include="images\arobotics.png" />
+    <Resource Include="images\mybackground.png" />
     <Resource Include="images\poongsan.png" />
     <Resource Include="images\rack_state_0.png" />
     <Resource Include="images\rack_state_1.png" />
