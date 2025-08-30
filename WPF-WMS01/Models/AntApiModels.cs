@@ -101,7 +101,7 @@ namespace WPF_WMS01.Models
         public string ToNode { get; set; }
 
         [JsonProperty("cardinality")]
-        public string Cardinality { get; set; }
+        public int Cardinality { get; set; }
 
         [JsonProperty("priority")]
         public int Priority { get; set; }

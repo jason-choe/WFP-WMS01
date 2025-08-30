@@ -28,6 +28,7 @@ namespace WPF_WMS01.Services
         private readonly IMcProtocolService _mcProtocolService; // MC Protocol 서비스 주입
         private DispatcherTimer _robotMissionPollingTimer;
         private readonly ModbusClientService _missionCheckModbusService; // 미션 실패 확인용 ModbusClientService
+        private readonly MainViewModel _mainViewModel; // MainViewModel 참조 추가
 
         // 현재 진행 중인 로봇 미션 프로세스들을 추적 (Key: ProcessId)
         private readonly ConcurrentDictionary<string, RobotMissionInfo> _activeRobotProcesses = new ConcurrentDictionary<string, RobotMissionInfo>(); // ConcurrentDictionary로 변경
@@ -37,6 +38,9 @@ namespace WPF_WMS01.Services
         private readonly char[] _militaryCharacter;
         private Func<string> _getInputStringForButtonFunc; // MainViewModel의 InputStringForButton 값을 가져오는 델리게이트
         private Func<string> _getInputStringForBoxesFunc;
+        // MainViewModel에게 값을 전달하기 위한 델리게이트
+        public Action<string> SetInputStringForButtonFunc { get; set; }
+        public Action<string> SetInputStringForBoxesFunc { get; set; }
         private Func<int, RackViewModel> _getRackViewModelByIdFunc; // MainViewModel에서 RackViewModel을 ID로 가져오는 델리게이트
 
         // RobotMissionService에서 발생하는 중요한 Modbus 오류 메시지가 이미 표시되었는지 추적하는 플래그
@@ -61,6 +65,15 @@ namespace WPF_WMS01.Services
         public event Action<ushort> OnTurnOffAlarmLightRequest;
         public event Action<RobotMissionInfo> OnMissionProcessUpdated; // 새로운 이벤트 추가
 
+        // 델리게이트를 호출하여 MainViewModel에 값을 설정하는 예시 메서드
+        public void SetLotNumberInViewModel(string lotNumber)
+        {
+            SetInputStringForButtonFunc?.Invoke(lotNumber);
+        }
+        public void SetBoxCountInViewModel(string lotNumber)
+        {
+            SetInputStringForBoxesFunc?.Invoke(lotNumber);
+        }
 
         /// <summary>
         /// RobotMissionService의 새 인스턴스를 초기화합니다.
@@ -278,6 +291,7 @@ namespace WPF_WMS01.Services
                                     // PostMissionOperations 실행
                                     foreach (var subOperation in completedStepDefinition.PostMissionOperations)
                                     {
+                                        if (processInfo.IsFailed) break; // ex: Modbus access 실패 시 Rack update는 안하는 경우
                                         await PerformSubOperation(subOperation, processInfo);
                                     }
 
@@ -626,8 +640,8 @@ namespace WPF_WMS01.Services
                     MissionType = currentStep.MissionType,
                     FromNode = currentStep.FromNode,
                     ToNode = currentStep.ToNode,
-                    Cardinality = "1", // 기본값
-                    Priority = 2,      // 기본값
+                    Cardinality = 1, // 기본값
+                    Priority = 1,      // 기본값
                     Deadline = DateTime.UtcNow.AddHours(1).ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
                     DispatchTime = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
                     Parameters = new MissionRequestParameters
@@ -807,6 +821,22 @@ namespace WPF_WMS01.Services
                     Debug.WriteLine($"[RobotMissionService] Failed to unlock rack {rackId}: {ex.Message}");
                     OnShowAutoClosingMessage?.Invoke($"랙 {rackId} 잠금 해제 실패: {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}");
                 }
+            }
+        }
+
+        private async Task SetVisibleRackInProcess(int rackId, bool newVisible)
+        {
+            try
+            {
+                await _databaseService.UpdateIsVisibleAsync(rackId, newVisible);
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    OnRackLockStateChanged?.Invoke(rackId, false); // MainViewModel에 잠금 해제 알림
+                });
+            }
+            catch (Exception ex)
+            {
+                OnShowAutoClosingMessage?.Invoke($"랙 {rackId} visible 설정 실패: {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}");
             }
         }
 
@@ -1001,6 +1031,8 @@ namespace WPF_WMS01.Services
                         break;
 
                     case SubOperationType.UiDisplayLotNoBoxCount:
+                        //processInfo.ReadStringValue = "입고 준비 완료";
+                        //processInfo.ReadIntValue = 55;
                         if (string.IsNullOrEmpty(processInfo.ReadStringValue) || !processInfo.ReadIntValue.HasValue)
                         {
                             Debug.WriteLine($"[RobotMissionService] UiDisplayLotNoBoxCount: 표시할 LotNo 또는 BoxCount 데이터가 없습니다.");
@@ -1008,10 +1040,12 @@ namespace WPF_WMS01.Services
                         }
                         else
                         {
-                            OnShowAutoClosingMessage?.Invoke($"UI 표시: LotNo: {processInfo.ReadStringValue}, BoxCount: {processInfo.ReadIntValue.Value}");
                             // MainViewModel에 직접 값을 전달하는 이벤트 또는 델리게이트가 필요합니다.
+                            //SetLotNumberInViewModel(processInfo.ReadStringValue);
+                            //SetBoxCountInViewModel(processInfo.ReadIntValue.ToString());
                             // 현재는 OnShowAutoClosingMessage로만 표시합니다.
-                        }
+                            OnShowAutoClosingMessage?.Invoke($"UI 표시: LotNo: {processInfo.ReadStringValue}, BoxCount: {processInfo.ReadIntValue.Value}");
+                       }
                         break;
 
                     case SubOperationType.CheckModbusDiscreteInput:
@@ -1247,9 +1281,11 @@ namespace WPF_WMS01.Services
                     if (processInfo.ProcessType == "FakeExecuteInboundProduct")
                     {
                         newDestinationRackType = 3; // 재공품 랙 타입으로 변경 (완제품 랙에서 재공품 랙으로)
+                        newSourceRackType = 1;
                     }
                     else if (processInfo.ProcessType == "HandleHalfPalletExport")
                     {
+                        newDestinationRackType = 3; // 재공품 랙 타입으로 변경 (완제품 랙에서 재공품 랙으로)
                         newSourceRackType = 1;
                     }
 
@@ -1263,6 +1299,12 @@ namespace WPF_WMS01.Services
                         sourceLotNumber,
                         sourceBoxCount
                     );
+
+                    if (destinationRackVm.Title.Equals("OUT"))
+                        await SetVisibleRackInProcess(destinationRackVm.Id, true);
+                    if(sourceRackVm.Title.Equals("OUT"))
+                        await SetVisibleRackInProcess(sourceRackVm.Id, false);
+
                     Debug.WriteLine($"[RobotMissionService] DB Update: Rack {destinationRackVm.Title} (ID: {destinationRackVm.Id}) updated with BulletType {sourceBulletType}, LotNumber '{sourceLotNumber}', RackType {newDestinationRackType}.");
 
                     // 2. Source Rack의 파레트 정보 초기화 (BulletType = 0, Lot No. = null)
@@ -1288,8 +1330,16 @@ namespace WPF_WMS01.Services
                     // 3. 랙 잠금 해제 (이동 완료된 랙만 해제)
                     await _databaseService.UpdateIsLockedAsync(sourceRackVm.Id, false);
                     Application.Current.Dispatcher.Invoke(() => OnRackLockStateChanged?.Invoke(sourceRackVm.Id, false));
-                    await _databaseService.UpdateIsLockedAsync(destinationRackVm.Id, false);
-                    Application.Current.Dispatcher.Invoke(() => OnRackLockStateChanged?.Invoke(destinationRackVm.Id, false));
+                    if (destinationRackVm.Title.Equals("OUT"))
+                    {
+                        await _databaseService.UpdateIsLockedAsync(destinationRackVm.Id, true); // 재공풐 반출 시 click 안되게...
+                        Application.Current.Dispatcher.Invoke(() => OnRackLockStateChanged?.Invoke(destinationRackVm.Id, false));
+                    }
+                    else
+                    {
+                        await _databaseService.UpdateIsLockedAsync(destinationRackVm.Id, false);
+                        Application.Current.Dispatcher.Invoke(() => OnRackLockStateChanged?.Invoke(destinationRackVm.Id, false));
+                    }
                     Debug.WriteLine($"[RobotMissionService] Racks {sourceRackVm.Title} and {destinationRackVm.Title} unlocked.");
 
                     OnShowAutoClosingMessage?.Invoke($"랙 {sourceRackVm.Title}에서 랙 {destinationRackVm.Title}으로 이동 및 업데이트 성공.");
@@ -1304,6 +1354,9 @@ namespace WPF_WMS01.Services
                         // 반출의 경우 RackType은 1 (완제품)으로 유지
                         newSourceRackType = 1;
                     }
+
+                    if (sourceRackVm.Title.Equals("OUT"))
+                        await SetVisibleRackInProcess(sourceRackVm.Id, false);
 
                     await _databaseService.UpdateRackStateAsync(
                         sourceRackVm.Id,

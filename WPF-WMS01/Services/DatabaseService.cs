@@ -245,5 +245,27 @@ namespace WPF_WMS01.Services
                 }
             }
         }
+
+        // 랙 Visible 상태 업데이트 메서드
+        public async Task UpdateIsVisibleAsync(int rackId, bool newIsVisible)
+        {
+            using (var connection = new SqlConnection(_connectionString))
+            {
+                await connection.OpenAsync();
+                var command = new SqlCommand("UPDATE RackState SET visible = @isVisible WHERE id = @rackId", connection);
+                command.Parameters.AddWithValue("@isVisible", newIsVisible);
+                command.Parameters.AddWithValue("@rackId", rackId);
+                await command.ExecuteNonQueryAsync();
+            }
+
+            // DB 업데이트 후 캐시도 업데이트
+            lock (_cacheLock)
+            {
+                if (_rackCache.TryGetValue(rackId, out Rack rackToUpdate))
+                {
+                    rackToUpdate.IsVisible = newIsVisible;
+                }
+            }
+        }
     }
 }
