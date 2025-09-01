@@ -438,7 +438,7 @@ namespace WPF_WMS01.ViewModels
                 if (sourceRackViewModel.Title.Equals(_mainViewModel._waitRackTitle))
                     shelf = sourceRackViewModel.Title;
                 else
-                    shelf = $"{int.Parse(sourceRackViewModel.Title.Split('-')[1]):D2}_{sourceRackViewModel.Title.Split('-')[0]}";
+                    shelf = $"{33 - int.Parse(sourceRackViewModel.Title.Split('-')[0]):D2}_{sourceRackViewModel.Title.Split('-')[1]}";
                 // 로봇 미션 단계 정의 (사용자 요청에 따라 4단계로 복원 및 IsLinkable, LinkedMission 조정)
                 if (sourceRackViewModel.LocationArea == 3)
                 {
@@ -690,13 +690,13 @@ namespace WPF_WMS01.ViewModels
                     var outRackViewModel = _mainViewModel.RackList?.FirstOrDefault(r => r.Title.Equals("OUT"));
 
                     List<MissionStepDefinition> missionSteps;
-                    string shelf = $"{int.Parse(sourceRackViewModel.Title.Split('-')[1]):D2}_{sourceRackViewModel.Title.Split('-')[0]}";
+                    string shelf = $"{33 - int.Parse(sourceRackViewModel.Title.Split('-')[0]):D2}_{sourceRackViewModel.Title.Split('-')[1]}";
                     // 로봇 미션 단계 정의 (사용자 요청에 따라 4단계로 복원 및 IsLinkable, LinkedMission 조정)
                     if (sourceRackViewModel.LocationArea == 3)
                     {
                         missionSteps = new List<MissionStepDefinition>
                         {
-                            // 1. 랩핑 드롭 (랩핑 스테이션으로 이동하여 드롭)
+                            // 1. Move, Pickup
                             new MissionStepDefinition {
                                 ProcessStepDescription = $"랙 {sourceRackViewModel.Title}(으)로 이동하여, 재공품 팔레트 픽업",
                                 MissionType = "8",
@@ -708,7 +708,7 @@ namespace WPF_WMS01.ViewModels
                                     new MissionSubOperation { Type = SubOperationType.DbUpdateRackState, Description = "랙 상태 업데이트", SourceRackIdForDbUpdate = sourceRackViewModel.Id, DestRackIdForDbUpdate = amrRackViewModel.Id }
                                 }
                             },
-                            // 1. 랩핑 드롭 (랩핑 스테이션으로 이동하여 드롭)
+                            // 2. Move, Turn
                             new MissionStepDefinition {
                                 ProcessStepDescription = "제공품 반출을 위해 회전 장소로 이동",
                                 MissionType = "8",
@@ -717,7 +717,7 @@ namespace WPF_WMS01.ViewModels
                                 IsLinkable = true,
                                 LinkWaitTimeout = 3600
                             },
-                            // 2. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
+                            // 3. Move, Drop
                             new MissionStepDefinition {
                                 ProcessStepDescription = "제공품 반출 장소로 이동하여, 제공품 팔레트 드롭",
                                 MissionType = "8",
@@ -736,7 +736,7 @@ namespace WPF_WMS01.ViewModels
                     {
                         missionSteps = new List<MissionStepDefinition>
                         {
-                            // 1. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
+                            // 1. Move, Turn
                             new MissionStepDefinition {
                                 ProcessStepDescription = "제공품 반출을 위한 대기 장소로 이동",
                                 MissionType = "8",
@@ -745,7 +745,7 @@ namespace WPF_WMS01.ViewModels
                                 IsLinkable = true,
                                 LinkWaitTimeout = 3600
                             },
-                            // 2. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
+                            // 2. Move, Pickup
                             new MissionStepDefinition {
                                 ProcessStepDescription = $"랙 {sourceRackViewModel.Title}(으)로 이동하여, 재공품 팔레트 픽업",
                                 MissionType = "８",
@@ -757,7 +757,7 @@ namespace WPF_WMS01.ViewModels
                                     new MissionSubOperation { Type = SubOperationType.DbUpdateRackState, Description = "랙 상태 업데이트", SourceRackIdForDbUpdate = sourceRackViewModel.Id, DestRackIdForDbUpdate = amrRackViewModel.Id }
                                 }
                             },
-                            // 2. 턴 랙 (27-32) - 로봇이 랙을 회전하는 지점
+                            // 2. Move, Drop
                             new MissionStepDefinition {
                                 ProcessStepDescription = "제공품 반출 장소로 이동하여, 제공품 팔레트 드롭",
                                 MissionType = "８",
@@ -776,7 +776,7 @@ namespace WPF_WMS01.ViewModels
                     {
                         missionSteps = new List<MissionStepDefinition>
                         {
-                            // 1. 랩핑 드롭 (랩핑 스테이션으로 이동하여 드롭)
+                            // 1. Move, Pickup
                             new MissionStepDefinition {
                                 ProcessStepDescription = $"랙 {sourceRackViewModel.Title}(으)로 이동하여, 재공품 팔레트 픽업",
                                 MissionType = "8",
@@ -788,7 +788,7 @@ namespace WPF_WMS01.ViewModels
                                     new MissionSubOperation { Type = SubOperationType.DbUpdateRackState, Description = "랙 상태 업데이트", SourceRackIdForDbUpdate = sourceRackViewModel.Id, DestRackIdForDbUpdate = amrRackViewModel.Id }
                                 }
                             },
-                            // 1. 랩핑 드롭 (랩핑 스테이션으로 이동하여 드롭)
+                            // 2. MOve, Turn
                             new MissionStepDefinition {
                                 ProcessStepDescription = "제공품 반출을 위해 회전 장소로 이동",
                                 MissionType = "8",
@@ -797,7 +797,7 @@ namespace WPF_WMS01.ViewModels
                                 IsLinkable = true,
                                 LinkWaitTimeout = 3600
                             },
-                            // 2. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
+                            // 3. Move, Drop
                             new MissionStepDefinition {
                                 ProcessStepDescription = "제공품 반출 장소로 이동하여, 제공품 팔레트 드롭",
                                 MissionType = "8",
@@ -813,7 +813,7 @@ namespace WPF_WMS01.ViewModels
                         };
                     }
                     
-                    // 3. 다시 턴 랙 (27-32) - 아마도 WRAP 랙의 방향 정렬 또는 다음 작업을 위한 준비
+                    // 4. Return to Charger
                     missionSteps.Add(new MissionStepDefinition {
                         ProcessStepDescription = $"충전소로 복귀",
                         MissionType = "8",
@@ -896,8 +896,6 @@ namespace WPF_WMS01.ViewModels
                         LinkedMission = null,
                         LinkWaitTimeout = 3600
                     });
-
-
                     missionSteps.Add(new MissionStepDefinition {
                         ProcessStepDescription = $"{selectedLine.Name}(으)로 이동하여, 제품 팔레트 픽업",
                         MissionType = "8",
@@ -998,9 +996,11 @@ namespace WPF_WMS01.ViewModels
             List<Rack> allRacks = await _databaseService.GetRackStatesAsync();
             // 🚨 수정할 부분: IsLocked가 false이면서 ImageIndex가 3인 랙만 필터링
             List<Rack> targetRacks = allRacks
-                .Where(r => r.Id != sourceRackViewModel.Id && // 자기 자신 제외
-                            !r.IsLocked &&                     // 잠겨있지 않은 랙만
-                            r.ImageIndex == 13)                 // ImageIndex가 13인 랙만 (RackType 1, BulletType 0)
+                .Where(r => r.Id != sourceRackViewModel.Id // 자기 자신 제외
+                            && r.IsVisible
+                            && !r.IsLocked                 // 잠겨있지 않은 랙만
+                            && r.ImageIndex == 13          // ImageIndex가 13인 랙만 (RackType 1, BulletType 0)
+                            && !r.Title.Equals("AMR") && !r.Title.Equals("OUT"))
                 .ToList();
             if (!targetRacks.Any())
             {
@@ -1059,7 +1059,7 @@ namespace WPF_WMS01.ViewModels
                 string originalSourceLotNumber = sourceRackViewModel.LotNumber; // LotNumber도 미리 저장
 
                 List<MissionStepDefinition> missionSteps;
-                string shelf = $"{int.Parse(destinationRack.Title.Split('-')[1]):D2}_{destinationRack.Title.Split('-')[0]}";
+                string shelf = $"{33 - int.Parse(destinationRack.Title.Split('-')[0]):D2}_{destinationRack.Title.Split('-')[1]}";
                 // 로봇 미션 단계 정의 (사용자 요청에 따라 4단계로 복원 및 IsLinkable, LinkedMission 조정)
                 if (destinationRack.LocationArea == 3)
                 {
@@ -1224,7 +1224,7 @@ namespace WPF_WMS01.ViewModels
 
                 ShowAutoClosingMessage($"로봇 미션: 랙({targetRackViewModel.Title})에서 출고 작업 시작. 명령 전송 중...");
                 List<MissionStepDefinition> missionSteps;
-                string shelf = $"{int.Parse(targetRackViewModel.Title.Split('-')[1]):D2}_{targetRackViewModel.Title.Split('-')[0]}";
+                string shelf = $"{33 - int.Parse(targetRackViewModel.Title.Split('-')[0]):D2}_{targetRackViewModel.Title.Split('-')[1]}";
                 // 로봇 미션 단계 정의 (사용자 요청에 따라 4단계로 복원 및 IsLinkable, LinkedMission 조정)
                 if (targetRackViewModel.LocationArea == 3)
                 {

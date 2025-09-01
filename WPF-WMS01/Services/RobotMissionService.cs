@@ -1278,15 +1278,21 @@ namespace WPF_WMS01.Services
                     }
 
                     // 특별한 경우 2): ProcessType이 "FakeExecuteInboundProduct"일 경우 RackType 변경
-                    if (processInfo.ProcessType == "FakeExecuteInboundProduct")
+                    if (processInfo.ProcessType == "FakeExecuteInboundProduct") // WAIT -> AMR -> Rack
                     {
                         newDestinationRackType = 3; // 재공품 랙 타입으로 변경 (완제품 랙에서 재공품 랙으로)
-                        newSourceRackType = 1;
+                        if (sourceRackVm.Title.Equals("AMR")) newSourceRackType = 2;
                     }
-                    else if (processInfo.ProcessType == "HandleHalfPalletExport")
+                    else if (processInfo.ProcessType == "HandleHalfPalletExport") // Rack -> AMR -> OUT -> (NULL)
                     {
-                        newDestinationRackType = 3; // 재공품 랙 타입으로 변경 (완제품 랙에서 재공품 랙으로)
-                        newSourceRackType = 1;
+                        newDestinationRackType = 3;
+                        if (sourceRackVm.Title.Equals("AMR")) newSourceRackType = 2; // AMR -> OUT
+                        else newSourceRackType = 1; // Rack -> AMR, OUT -> (NULL)
+
+                        if (destinationRackVm.Title.Equals("OUT"))
+                            await SetVisibleRackInProcess(destinationRackVm.Id, true);
+                        if (sourceRackVm.Title.Equals("OUT"))
+                            await SetVisibleRackInProcess(sourceRackVm.Id, false);
                     }
 
                     await _databaseService.UpdateRackStateAsync(
@@ -1299,11 +1305,6 @@ namespace WPF_WMS01.Services
                         sourceLotNumber,
                         sourceBoxCount
                     );
-
-                    if (destinationRackVm.Title.Equals("OUT"))
-                        await SetVisibleRackInProcess(destinationRackVm.Id, true);
-                    if(sourceRackVm.Title.Equals("OUT"))
-                        await SetVisibleRackInProcess(sourceRackVm.Id, false);
 
                     Debug.WriteLine($"[RobotMissionService] DB Update: Rack {destinationRackVm.Title} (ID: {destinationRackVm.Id}) updated with BulletType {sourceBulletType}, LotNumber '{sourceLotNumber}', RackType {newDestinationRackType}.");
 
@@ -1349,14 +1350,14 @@ namespace WPF_WMS01.Services
                     // HandleHalfPalletExport 또는 HandleRackShipout (단일 랙 출고)
                     // 랙 비우기 (BulletType = 0, LotNumber = String.Empty)
                     int newSourceRackType = sourceRackVm.RackType;
+
                     if (processInfo.ProcessType == "HandleHalfPalletExport")
                     {
                         // 반출의 경우 RackType은 1 (완제품)으로 유지
-                        newSourceRackType = 1;
+                        // newSourceRackType = 1;
+                        if (sourceRackVm.Title.Equals("OUT"))
+                            await SetVisibleRackInProcess(sourceRackVm.Id, false);
                     }
-
-                    if (sourceRackVm.Title.Equals("OUT"))
-                        await SetVisibleRackInProcess(sourceRackVm.Id, false);
 
                     await _databaseService.UpdateRackStateAsync(
                         sourceRackVm.Id,
@@ -1482,9 +1483,12 @@ namespace WPF_WMS01.Services
                     if (processInfo.ProcessType == "FakeExecuteInboundProduct")
                     {
                         newDestinationRackType = 3; // 재공품 랙 타입으로 변경 (완제품 랙에서 재공품 랙으로)
+                        if (sourceRackVm.Title.Equals("WAIT")) newSourceRackType = 2;
+                        else if(sourceRackVm.Title.Equals("AMR")) newSourceRackType = 1;
                     }
                     else if (processInfo.ProcessType == "HandleHalfPalletExport")
                     {
+                        newDestinationRackType = 3;
                         newSourceRackType = 1;
                     }
 

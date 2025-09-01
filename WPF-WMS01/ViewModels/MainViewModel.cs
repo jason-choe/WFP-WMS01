@@ -2113,7 +2113,7 @@ namespace WPF_WMS01.ViewModels
 
         private async void ExecuteInboundProduct(object parameter)
         {
-            var emptyRacks = RackList?.Where(r => r.ImageIndex == 0 && r.IsVisible && !r.Title.Equals("AMR")).ToList();
+            var emptyRacks = RackList?.Where(r => r.ImageIndex == 0 && r.IsVisible && !r.IsLocked && !r.Title.Equals("AMR") && !r.Title.Equals("OUT")).ToList();
 
             if (emptyRacks == null || !emptyRacks.Any())
             {
@@ -2172,7 +2172,7 @@ namespace WPF_WMS01.ViewModels
                     ShowAutoClosingMessage($"로봇 미션: 랙 {waitRackVm.Title} 에서 랙 {targetRackVm.Title}(으)로 이동 시작. 명령 전송 중...");
 
                     List<MissionStepDefinition> missionSteps;
-                    string shelf = $"{int.Parse(targetRackVm.Title.Split('-')[1]):D2}_{targetRackVm.Title.Split('-')[0]}";
+                    string shelf = $"{33 - int.Parse(targetRackVm.Title.Split('-')[0]):D2}_{targetRackVm.Title.Split('-')[1]}";
                     // 로봇 미션 단계 정의 (사용자 요청에 따라 4단계로 복원 및 IsLinkable, LinkedMission 조정)
                     if (targetRackVm.LocationArea == 3)
                     {
@@ -2372,7 +2372,7 @@ namespace WPF_WMS01.ViewModels
 
         private async void FakeExecuteInboundProduct(object parameter)
         {
-            var emptyRacks = RackList?.Where(r => r.ImageIndex == 13 && r.IsVisible).ToList();
+            var emptyRacks = RackList?.Where(r => r.ImageIndex == 13 && !r.IsLocked && r.IsVisible && !r.Title.Equals("AMR") && !r.Title.Equals("OUT")).ToList();
 
             if (emptyRacks == null || !emptyRacks.Any())
             {
@@ -2433,7 +2433,7 @@ namespace WPF_WMS01.ViewModels
                     ShowAutoClosingMessage($"로봇 미션: 랙 {waitRackVm.Title} 에서 랙 {targetRackVm.Title}(으)로 이동 시작. 명령 전송 중...");
 
                     List<MissionStepDefinition> missionSteps;
-                    string shelf = $"{int.Parse(targetRackVm.Title.Split('-')[1]):D2}_{targetRackVm.Title.Split('-')[0]}";
+                    string shelf = $"{33 - int.Parse(targetRackVm.Title.Split('-')[0]):D2}_{targetRackVm.Title.Split('-')[1]}";
                     // 로봇 미션 단계 정의 (사용자 요청에 따라 4단계로 복원 및 IsLinkable, LinkedMission 조정)
                     if (targetRackVm.LocationArea == 3)
                     {
@@ -2686,7 +2686,7 @@ namespace WPF_WMS01.ViewModels
                         var targetRackVm = RackList?.FirstOrDefault(r => r.Id == rackModelToCheckout.Id);
                         if (targetRackVm == null) continue;
 
-                        string shelf = $"{int.Parse(targetRackVm.Title.Split('-')[1]):D2}_{targetRackVm.Title.Split('-')[0]}";
+                        string shelf = $"{33 - int.Parse(targetRackVm.Title.Split('-')[0]):D2}_{targetRackVm.Title.Split('-')[1]}";
 
                         // 각 랙에 대한 픽업 및 드롭 미션 스텝 추가
                         // MissionStepDefinition에서는 더 이상 DB 업데이트 정보를 포함하지 않습니다.

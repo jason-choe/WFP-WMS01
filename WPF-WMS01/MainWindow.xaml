@@ -9,7 +9,7 @@
         xmlns:cnv="clr-namespace:WPF_WMS01.Converters"
         xmlns:popups="clr-namespace:WPF_WMS01.Views.Popups"
         mc:Ignorable="d"
-        Title="랙 관리 시스템" Height="1040" Width="1920" Left="0" Top="0" >
+        Title="랙 관리 시스템" Left="0" Top="0" WindowState="Maximized" >
     <!-- Height="768" Width="1024" WindowState="Maximized" -->
 
     <Window.Resources>
@@ -638,7 +638,7 @@
         </ScrollViewer>
 
         <!-- AutoClosingMessagePopupView를 표시할 컨테이너 (Grid.Row="2"의 중앙에 오버레이) -->
-        <Border Grid.Row="2" HorizontalAlignment="Center" VerticalAlignment="Center" Panel.ZIndex="999"
+        <Border Grid.Row="2" Margin="0,0,250,0" HorizontalAlignment="Right" VerticalAlignment="Center" Panel.ZIndex="999"
                 Visibility="{Binding IsMessagePopupVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
             <popups:AutoClosingMessagePopupView DataContext="{Binding CurrentMessagePopupViewModel}" />
         </Border>
