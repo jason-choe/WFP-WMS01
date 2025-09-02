@@ -53,7 +53,7 @@ namespace WPF_WMS01.ViewModels.Popups
 
         public SelectProductionLinePopupViewModel(string lotNo)
         {
-            // 샘플 생산 라인 장소 데이터 초기화 (6개)
+            // 샘플 생산 라인 장소 데이터 초기화 (8개)
             ProductionLineLocations = new ObservableCollection<ProductionLineLocation>
             {
                 new ProductionLineLocation { Id = 1, Name = "7.62mm 라인" },
@@ -63,7 +63,7 @@ namespace WPF_WMS01.ViewModels.Popups
                 new ProductionLineLocation { Id = 5, Name = "5.56mm 라인 4" },
                 new ProductionLineLocation { Id = 6, Name = "카타르 라인 1" },
                 new ProductionLineLocation { Id = 7, Name = "카타르 라인 2" },
-                new ProductionLineLocation { Id = 7, Name = "특수포장 라인" },
+                new ProductionLineLocation { Id = 8, Name = "특수포장 라인" },
             };
 
             ConfirmCommand = new RelayCommand(ExecuteConfirm, CanExecuteConfirm);
