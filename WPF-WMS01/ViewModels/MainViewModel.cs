@@ -1389,6 +1389,7 @@ namespace WPF_WMS01.ViewModels
                             MissionType = "8",
                             ToNode = "Turn_Charge2",
                             Payload = ProductionLinePayload,
+                            Priority = buttonVm.Content.Equals("7.62mm") ? 3 : 1,
                             IsLinkable = true,
                             LinkedMission = null,
                             LinkWaitTimeout = 3600
@@ -1538,13 +1539,13 @@ namespace WPF_WMS01.ViewModels
                         {
                             workPoint = "Manual_1";
                             swapPoint = "Manual";
-                            mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddress556mm1"] ?? "192.168.200.64";
+                            mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddressQatar"] ?? "192.168.200.66";
                         }
                         else if (buttonVm.Content.Equals("카타르[2]"))
                         {
                             workPoint = "Manual_2";
                             swapPoint = "Manual";
-                            mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddress556mm1"] ?? "192.168.200.64";
+                            mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddressQatar"] ?? "192.168.200.66";
                         }
                         else if (buttonVm.Content.Equals("5.56mm[3]"))
                         {

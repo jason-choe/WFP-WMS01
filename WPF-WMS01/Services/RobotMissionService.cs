@@ -262,6 +262,7 @@ namespace WPF_WMS01.Services
                                                 $"Status: {processInfo.HmiStatus.Status}, Progress: {processInfo.HmiStatus.ProgressPercentage}%. Desc: {processInfo.HmiStatus.CurrentStepDescription}");
                                 Debug.WriteLine($"[RobotMissionService DEBUG] Polled Mission Detail for {latestMissionDetail.MissionId}:");
                                 Debug.WriteLine($"  NavigationState: {latestMissionDetail.NavigationState}");
+                                Debug.WriteLine($"  Priority / SchedulerState: {latestMissionDetail.Priority} / {latestMissionDetail.SchedulerState}");
                                 Debug.WriteLine($"  State: {latestMissionDetail.State}");
                                 Debug.WriteLine($"  TransportState: {latestMissionDetail.TransportState}");
                                 Debug.WriteLine($"  PayloadStatus: {latestMissionDetail.PayloadStatus}");
@@ -497,140 +498,6 @@ namespace WPF_WMS01.Services
                 }
             }
 
-
-            // Modbus Discrete Input 체크 로직 추가 (_missionCheckModbusService 사용)
-/*            if (currentStep.CheckModbusDiscreteInput && currentStep.ModbusDiscreteInputAddressToCheck.HasValue)
-            {
-                int modbusConnectRetryCount = 0;
-                bool modbusOperationSuccessful = false;
-
-                while (modbusConnectRetryCount < MAX_PLC_CONNECT_RETRIES)
-                {
-                    try
-                    {
-                        Debug.WriteLine($"[RobotMissionService] Checking Modbus Discrete Input {currentStep.ModbusDiscreteInputAddressToCheck.Value} before sending mission step. Attempt {modbusConnectRetryCount + 1}/{MAX_PLC_CONNECT_RETRIES}.");
-
-                        // Modbus 연결이 끊겼다면 재연결 시도
-                        if (!_missionCheckModbusService.IsConnected)
-                        {
-                            Debug.WriteLine("[RobotMissionService] Modbus Check Service: Not Connected. Attempting to reconnect...");
-                            await _missionCheckModbusService.ConnectAsync().ConfigureAwait(false);
-                            if (!_missionCheckModbusService.IsConnected) // 연결 시도 후에도 연결되지 않았다면
-                            {
-                                throw new InvalidOperationException("Modbus 연결에 실패했습니다. Discrete Input을 읽을 수 없습니다.");
-                            }
-                            Debug.WriteLine("[RobotMissionService] Modbus Check Service: Reconnected successfully.");
-                        }
-
-                        // Modbus 연결이 여전히 안 되어 있다면 예외 발생 (위에서 이미 처리하지만, 방어적으로 한 번 더)
-                        if (!_missionCheckModbusService.IsConnected)
-                        {
-                            throw new InvalidOperationException("Modbus 연결이 활성화되지 않아 Discrete Input을 읽을 수 없습니다.");
-                        }
-
-                        bool[] discreteInputStates = await _missionCheckModbusService.ReadDiscreteInputStatesAsync(currentStep.ModbusDiscreteInputAddressToCheck.Value, 1).ConfigureAwait(false);
-
-                        if (discreteInputStates != null && discreteInputStates.Length > 0 && discreteInputStates[0])
-                        {
-                            // Discrete input이 1이므로 미션 단계 실패 처리
-                            await Application.Current.Dispatcher.Invoke(async () =>
-                            {
-                                MessageBox.Show(Application.Current.MainWindow, $"Modbus Discrete Input {currentStep.ModbusDiscreteInputAddressToCheck.Value}이(가) 1입니다. 미션 단계 '{currentStep.ProcessStepDescription}'을(를) 시작할 수 없습니다. 미션 프로세스를 취소합니다.", "미션 취소", MessageBoxButton.OK, MessageBoxImage.Warning);
-                            });
-                            Debug.WriteLine($"[RobotMissionService] Modbus Discrete Input {currentStep.ModbusDiscreteInputAddressToCheck.Value} is 1. Cancelling mission process {processInfo.ProcessId}.");
-                            processInfo.CurrentStatus = MissionStatusEnum.FAILED;
-                            processInfo.HmiStatus.Status = "FAILED";
-                            processInfo.HmiStatus.ProgressPercentage = 100;
-                            processInfo.IsFailed = true; // 프로세스 실패 플래그 설정
-                            processInfo.CancellationTokenSource.Cancel(); // 미션 취소 요청
-                            await HandleRobotMissionCompletion(processInfo);
-                            return; // 미션 단계 전송 중단
-                        }
-                        else
-                        {
-                            Debug.WriteLine($"[RobotMissionService] Modbus Discrete Input {currentStep.ModbusDiscreteInputAddressToCheck.Value} is 0. Proceeding with mission step.");
-                            modbusOperationSuccessful = true; // Modbus 작업 성공
-                            break; // 재시도 루프 종료
-                        }
-                    }
-                    catch (InvalidOperationException ex) // ModbusClientService에서 던지는 연결/작업 오류 예외
-                    {
-                        modbusConnectRetryCount++;
-                        Debug.WriteLine($"[RobotMissionService] Modbus check attempt {modbusConnectRetryCount}/{MAX_PLC_CONNECT_RETRIES} failed: {ex.Message}");
-                        _missionCheckModbusService.Dispose(); // 다음 재시도를 위해 자원 정리
-
-                        if (modbusConnectRetryCount >= MAX_PLC_CONNECT_RETRIES)
-                        {
-                            // 최대 재시도 횟수 도달, 미션 실패로 마크
-                            await Application.Current.Dispatcher.Invoke(async () =>
-                            {
-                                MessageBox.Show(Application.Current.MainWindow, $"Modbus 연결/통신 오류: InvalidOperationException: {ex.Message}. 미션 프로세스를 취소합니다.", "미션 취소", MessageBoxButton.OK, MessageBoxImage.Error);
-                            });
-                            Debug.WriteLine($"[RobotMissionService] Modbus Connection/Communication Error during check: {ex.Message}. Cancelling mission process {processInfo.ProcessId}.");
-                            processInfo.CurrentStatus = MissionStatusEnum.FAILED;
-                            processInfo.HmiStatus.Status = "FAILED";
-                            processInfo.HmiStatus.ProgressPercentage = 100;
-                            processInfo.IsFailed = true; // 프로세스 실패 플래그 설정
-                            processInfo.CancellationTokenSource.Cancel(); // 미션 취소 요청
-                            await HandleRobotMissionCompletion(processInfo);
-                            return; // 미션 단계 전송 중단
-                        }
-                        else
-                        {
-                            DisplayModbusErrorMessage($"AMR Modbus 연결/통신 오류: InvalidOperationException: {ex.Message}.");
-                            // 다음 재시도 전 지연
-                            await Task.Delay(TimeSpan.FromSeconds(PLC_CONNECT_RETRY_DELAY_SECONDS)).ConfigureAwait(false);
-                        }
-
-                    }
-                    catch (Exception ex)
-                    {
-                        modbusConnectRetryCount++;
-                        Debug.WriteLine($"[RobotMissionService] Modbus check attempt {modbusConnectRetryCount}/{MAX_PLC_CONNECT_RETRIES} failed: {ex.Message}");
-                        _missionCheckModbusService.Dispose(); // 다음 재시도를 위해 자원 정리
-
-                        if (modbusConnectRetryCount >= MAX_PLC_CONNECT_RETRIES)
-                        {
-                            // 최대 재시도 횟수 도달, 미션 실패로 마크
-                            await Application.Current.Dispatcher.Invoke(async () =>
-                            {
-                                MessageBox.Show(Application.Current.MainWindow, $"Modbus 연결/통신 오류: Exception: {ex.Message}. 미션 프로세스를 취소합니다.", "미션 취소", MessageBoxButton.OK, MessageBoxImage.Error);
-                            });
-                            Debug.WriteLine($"[RobotMissionService] Max Modbus check retries reached for process {processInfo.ProcessId}. Cancelling mission.");
-                            processInfo.CurrentStatus = MissionStatusEnum.FAILED;
-                            processInfo.HmiStatus.Status = "FAILED";
-                            processInfo.HmiStatus.ProgressPercentage = 100;
-                            processInfo.IsFailed = true;
-                            processInfo.CancellationTokenSource.Cancel();
-                            await HandleRobotMissionCompletion(processInfo);
-                            return; // 미션 취소, 함수 종료
-                        }
-                        else
-                        {
-                            DisplayModbusErrorMessage($"AMR Modbus 연결/통신 오류: Exception: {ex.Message}.");
-                            // 다음 재시도 전 지연
-                            await Task.Delay(TimeSpan.FromSeconds(PLC_CONNECT_RETRY_DELAY_SECONDS)).ConfigureAwait(false);
-                        }
-                    }
-                }
-
-                if (!modbusOperationSuccessful)
-                {
-                    // 이 블록은 위의 while 루프 내에서 모든 실패 경로가 처리되므로
-                    // 일반적으로 도달하지 않아야 합니다. 방어적인 코드입니다.
-                    Debug.WriteLine($"[RobotMissionService] Modbus check operation did not succeed after retries, but mission was not explicitly failed. This is an unexpected state for process {processInfo.ProcessId}.");
-                    // 만약 여기에 도달했다면, 미션을 실패로 처리하는 것을 고려할 수 있습니다.
-                    processInfo.CurrentStatus = MissionStatusEnum.FAILED;
-                    processInfo.HmiStatus.Status = "FAILED";
-                    processInfo.HmiStatus.ProgressPercentage = 100;
-                    processInfo.IsFailed = true;
-                    processInfo.CancellationTokenSource.Cancel();
-                    await HandleRobotMissionCompletion(processInfo);
-                    return;
-                }
-            }*/
-
-
             // AntApiModels.MissionRequest 및 AntApiModels.MissionRequestPayload 사용
             var missionRequest = new MissionRequest
             {
@@ -641,7 +508,7 @@ namespace WPF_WMS01.Services
                     FromNode = currentStep.FromNode,
                     ToNode = currentStep.ToNode,
                     Cardinality = 1, // 기본값
-                    Priority = 1,      // 기본값
+                    Priority = (currentStep.Priority == 3) ? 3 : 1,
                     Deadline = DateTime.UtcNow.AddHours(1).ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
                     DispatchTime = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
                     Parameters = new MissionRequestParameters

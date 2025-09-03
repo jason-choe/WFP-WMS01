@@ -164,6 +164,9 @@ namespace WPF_WMS01.Models
         [JsonProperty("navigationstate")]
         public int NavigationState { get; set; }
 
+        [JsonProperty("schedulerstate")]
+        public int SchedulerState { get; set; }
+
         [JsonProperty("totalmissiontime")]
         public double TotalMissionTime { get; set; }
 
@@ -255,6 +258,7 @@ namespace WPF_WMS01.Models
         public string MissionType { get; set; }
         public string FromNode { get; set; }
         public string ToNode { get; set; }
+        public int Priority { get; set; }
         public string Payload { get; set; }
         public bool IsLinkable { get; set; }
         public int? LinkedMission { get; set; }
@@ -284,6 +288,7 @@ namespace WPF_WMS01.Models
             string missionType = null,
             string fromNode = null,
             string toNode = null,
+            int priority = 1,
             string payload = null,
             bool isLinkable = false,
             int linkWaitTimeout = 3600,
@@ -297,6 +302,7 @@ namespace WPF_WMS01.Models
             MissionType = missionType;
             FromNode = fromNode;
             ToNode = toNode;
+            Priority = priority;
             Payload = payload;
             IsLinkable = isLinkable;
             LinkWaitTimeout = linkWaitTimeout;

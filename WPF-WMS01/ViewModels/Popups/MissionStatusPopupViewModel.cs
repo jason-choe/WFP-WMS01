@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Linq;
 using System.Windows.Input; // ICommand 사용
 using System.Windows.Media; // SolidColorBrush 사용
@@ -157,7 +158,10 @@ namespace WPF_WMS01.ViewModels.Popups
                 OverallStatusText = missionInfo.HmiStatus?.Status; // Null-conditional operator
                 OverallProgressPercentage = missionInfo.HmiStatus?.ProgressPercentage ?? 0;
                 CurrentStepDescription = missionInfo.HmiStatus?.CurrentStepDescription;
-                Payload = allMissionStepDefinitions[missionInfo.CurrentStepIndex].Payload;
+
+                Debug.WriteLine($"[RobotMissionService : UpdateStatus] Index = {missionInfo.CurrentStepIndex}/{allMissionStepDefinitions.Count}.");
+                if(missionInfo.CurrentStepIndex < allMissionStepDefinitions.Count) // Index was out of range exception 방지
+                    Payload = allMissionStepDefinitions[missionInfo.CurrentStepIndex].Payload.Equals("AMR_2")?"Poongsan_2":"Poongsan_1";
 
                 switch (missionInfo.CurrentStatus)
                 {
