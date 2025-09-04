@@ -39,8 +39,8 @@ namespace WPF_WMS01.Services
         private Func<string> _getInputStringForButtonFunc; // MainViewModel의 InputStringForButton 값을 가져오는 델리게이트
         private Func<string> _getInputStringForBoxesFunc;
         // MainViewModel에게 값을 전달하기 위한 델리게이트
-        public Action<string> SetInputStringForButtonFunc { get; set; }
-        public Action<string> SetInputStringForBoxesFunc { get; set; }
+        public Action<string> _setInputStringForButtonFunc { get; set; }
+        public Action<string> _setInputStringForBoxesFunc { get; set; }
         private Func<int, RackViewModel> _getRackViewModelByIdFunc; // MainViewModel에서 RackViewModel을 ID로 가져오는 델리게이트
 
         // RobotMissionService에서 발생하는 중요한 Modbus 오류 메시지가 이미 표시되었는지 추적하는 플래그
@@ -65,16 +65,6 @@ namespace WPF_WMS01.Services
         public event Action<ushort> OnTurnOffAlarmLightRequest;
         public event Action<RobotMissionInfo> OnMissionProcessUpdated; // 새로운 이벤트 추가
 
-        // 델리게이트를 호출하여 MainViewModel에 값을 설정하는 예시 메서드
-        public void SetLotNumberInViewModel(string lotNumber)
-        {
-            SetInputStringForButtonFunc?.Invoke(lotNumber);
-        }
-        public void SetBoxCountInViewModel(string lotNumber)
-        {
-            SetInputStringForBoxesFunc?.Invoke(lotNumber);
-        }
-
         /// <summary>
         /// RobotMissionService의 새 인스턴스를 초기화합니다.
         /// 이 생성자는 미션 실패 확인을 위해 ModbusClientService 인스턴스와 MC Protocol 서비스 인스턴스를 주입받습니다.
@@ -97,7 +87,10 @@ namespace WPF_WMS01.Services
             Func<int, RackViewModel> getRackViewModelByIdFunc,
             ModbusClientService missionCheckModbusService, // ModbusClientService 인스턴스를 직접 주입받도록 변경
             Func<string> getInputStringForButtonFunc, // 델리게이트 재추가
-            Func<string> getInputStringForBoxesFunc) // 델리게이트 재추가
+            Func<string> getInputStringForBoxesFunc, // 델리게이트 재추가
+            Action<string> setInputStringForButtonFunc,
+            Action<string> setInputStringForBoxesFunc)
+
         {
             _httpService = httpService ?? throw new ArgumentNullException(nameof(httpService));
             _databaseService = databaseService ?? throw new ArgumentNullException(nameof(databaseService));
@@ -107,6 +100,8 @@ namespace WPF_WMS01.Services
             _getRackViewModelByIdFunc = getRackViewModelByIdFunc ?? throw new ArgumentNullException(nameof(getRackViewModelByIdFunc));
             _getInputStringForButtonFunc = getInputStringForButtonFunc ?? throw new ArgumentNullException(nameof(getInputStringForButtonFunc)); // 델리게이트 초기화
             _getInputStringForBoxesFunc = getInputStringForBoxesFunc ?? throw new ArgumentNullException(nameof(getInputStringForBoxesFunc)); // 델리게이트 초기화
+            _setInputStringForButtonFunc = setInputStringForButtonFunc ?? throw new ArgumentNullException(nameof(setInputStringForButtonFunc));
+            _setInputStringForBoxesFunc = setInputStringForBoxesFunc ?? throw new ArgumentNullException(nameof(setInputStringForBoxesFunc));
 
             // 미션 실패 확인용 ModbusClientService 인스턴스 주입
             _missionCheckModbusService = missionCheckModbusService ?? throw new ArgumentNullException(nameof(missionCheckModbusService));
@@ -233,9 +228,15 @@ namespace WPF_WMS01.Services
                                 processInfo.CurrentStatus = currentStatus; // RobotMissionInfo 내부 상태 업데이트
                                 processInfo.HmiStatus.Status = currentStatus.ToString();
 
+                                var subPercentage = currentStatus == MissionStatusEnum.COMPLETED ? 1.0
+                                    : currentStatus == MissionStatusEnum.FAILED ? 1.0
+                                    : currentStatus == MissionStatusEnum.STARTED ? 0.5
+                                    : currentStatus == MissionStatusEnum.ACCEPTED ? 0.1
+                                    : 0.0;
+                                double progressNumerator = processInfo.CurrentStepIndex + subPercentage;
                                 // 진행률 업데이트 (전체 미션 단계 중 현재 완료된 단계의 비율)
-                                double progressNumerator = (currentStatus == MissionStatusEnum.COMPLETED && processInfo.CurrentStepIndex <= processInfo.TotalSteps) ?
-                                                           processInfo.CurrentStepIndex : Math.Max(0, processInfo.CurrentStepIndex - 1);
+                                //double progressNumerator = (currentStatus == MissionStatusEnum.COMPLETED && processInfo.CurrentStepIndex <= processInfo.TotalSteps) ?
+                                //                           processInfo.CurrentStepIndex : Math.Max(0, processInfo.CurrentStepIndex - 1);
                                 processInfo.HmiStatus.ProgressPercentage = (int)((progressNumerator / processInfo.TotalSteps) * 100);
 
                                 // 현재 진행 중인 미션 단계의 설명
@@ -415,14 +416,16 @@ namespace WPF_WMS01.Services
             List<int> racksLockedAtStart, // 새로 추가된 파라미터
             List<RackViewModel> racksToProcess = null, // 새로 추가된 파라미터
             ushort? initiatingCoilAddress = null, // 새로운 파라미터 추가
-            bool isWarehouseMission = false) // isWarehouseMission 파라미터 추가
+            bool isWarehouseMission = false, // isWarehouseMission 파라미터 추가
+            string readStringValue = null,
+            int? readIntValue = null
+        ) 
         {
             // 새로운 미션이 시작될 때 Modbus 오류 플래그를 리셋합니다.
             _hasMissionCriticalModbusErrorBeenDisplayed = false;
             _modbusErrorMessageSuppressionTimer.Stop(); // 타이머도 중지하여 다음 오류 메시지 표시를 허용
-
             string processId = Guid.NewGuid().ToString(); // 고유한 프로세스 ID 생성
-            var newMissionProcess = new RobotMissionInfo(processId, processType, missionSteps, racksLockedAtStart, initiatingCoilAddress, isWarehouseMission)
+            var newMissionProcess = new RobotMissionInfo(processId, processType, missionSteps, racksLockedAtStart, initiatingCoilAddress, isWarehouseMission, readStringValue, readIntValue)
             {
                 RacksToProcess = racksToProcess ?? new List<RackViewModel>(), // racksToProcess 설정
             };
@@ -549,7 +552,7 @@ namespace WPF_WMS01.Services
                     processInfo.CurrentStatus = MissionStatusEnum.ACCEPTED; // RobotMissionInfo 내부 상태 업데이트
                     processInfo.HmiStatus.CurrentStepDescription = currentStep.ProcessStepDescription;
                     // 현재 전송된 단계까지의 진행률 (CurrentStepIndex는 다음 보낼 인덱스이므로 +1)
-                    processInfo.HmiStatus.ProgressPercentage = (int)(((double)(processInfo.CurrentStepIndex + 1) / processInfo.TotalSteps) * 100);
+                    //processInfo.HmiStatus.ProgressPercentage = (int)(((double)(processInfo.CurrentStepIndex + 1) / processInfo.TotalSteps) * 100);
                     OnShowAutoClosingMessage?.Invoke($"로봇 미션 단계 전송 성공: {currentStep.ProcessStepDescription} (미션 ID: {acceptedMissionId})");
 
                     // 미션 프로세스 업데이트 이벤트 발생
@@ -573,7 +576,7 @@ namespace WPF_WMS01.Services
                 Debug.WriteLine($"[RobotMissionService] Process {processInfo.ProcessId} cancelled during mission step send.");
                 processInfo.CurrentStatus = MissionStatusEnum.CANCELLED;
                 processInfo.HmiStatus.Status = MissionStatusEnum.CANCELLED.ToString();
-                processInfo.HmiStatus.ProgressPercentage = (int)(((double)(processInfo.CurrentStepIndex + 1) / processInfo.TotalSteps) * 100);
+                //processInfo.HmiStatus.ProgressPercentage = (int)(((double)(processInfo.CurrentStepIndex + 1) / processInfo.TotalSteps) * 100);
                 OnShowAutoClosingMessage?.Invoke($"로봇 미션 프로세스 취소됨: {currentStep.ProcessStepDescription}");
                 processInfo.IsFailed = true; // 취소도 실패로 간주하여 처리
                 await HandleRobotMissionCompletion(processInfo);
@@ -636,7 +639,7 @@ namespace WPF_WMS01.Services
                 processInfo.CurrentStepIndex = stepIndex; // 강제로 단계 인덱스 설정
                 processInfo.HmiStatus.Status = status.ToString();
                 processInfo.HmiStatus.CurrentStepDescription = message ?? $"단계 {stepIndex} 완료/실패";
-                processInfo.HmiStatus.ProgressPercentage = (int)(((double)(stepIndex + 1) / processInfo.TotalSteps) * 100);
+                //processInfo.HmiStatus.ProgressPercentage = (int)(((double)(stepIndex + 1) / processInfo.TotalSteps) * 100);
                 processInfo.CurrentStatus = status; // RobotMissionInfo 내부 상태 업데이트
 
                 if (status == MissionStatusEnum.COMPLETED && stepIndex >= processInfo.TotalSteps - 1) // 마지막 단계 완료
@@ -884,8 +887,8 @@ namespace WPF_WMS01.Services
                         else
                         {
                             Debug.WriteLine($"[RobotMissionService] DbReadRackData: Rack ID {subOp.TargetRackId.Value} not found in DB.");
-                            processInfo.ReadStringValue = null;
-                            processInfo.ReadIntValue = null;
+                            processInfo.ReadStringValue = "";
+                            processInfo.ReadIntValue = 0;
                         }
                         break;
 
@@ -898,8 +901,6 @@ namespace WPF_WMS01.Services
                         break;
 
                     case SubOperationType.UiDisplayLotNoBoxCount:
-                        //processInfo.ReadStringValue = "입고 준비 완료";
-                        //processInfo.ReadIntValue = 55;
                         if (string.IsNullOrEmpty(processInfo.ReadStringValue) || !processInfo.ReadIntValue.HasValue)
                         {
                             Debug.WriteLine($"[RobotMissionService] UiDisplayLotNoBoxCount: 표시할 LotNo 또는 BoxCount 데이터가 없습니다.");
@@ -908,9 +909,8 @@ namespace WPF_WMS01.Services
                         else
                         {
                             // MainViewModel에 직접 값을 전달하는 이벤트 또는 델리게이트가 필요합니다.
-                            //SetLotNumberInViewModel(processInfo.ReadStringValue);
-                            //SetBoxCountInViewModel(processInfo.ReadIntValue.ToString());
-                            // 현재는 OnShowAutoClosingMessage로만 표시합니다.
+                            _setInputStringForButtonFunc(processInfo.ReadStringValue);
+                            _setInputStringForBoxesFunc(processInfo.ReadIntValue.ToString());
                             OnShowAutoClosingMessage?.Invoke($"UI 표시: LotNo: {processInfo.ReadStringValue}, BoxCount: {processInfo.ReadIntValue.Value}");
                        }
                         break;
@@ -1004,7 +1004,7 @@ namespace WPF_WMS01.Services
                         // 이 시점에서 미션 프로세스를 실패 상태로 마크하고 완료 처리
                         processInfo.CurrentStatus = MissionStatusEnum.FAILED;
                         processInfo.HmiStatus.Status = "FAILED";
-                        processInfo.HmiStatus.ProgressPercentage = 100;
+                        //processInfo.HmiStatus.ProgressPercentage = 100;
                         processInfo.IsFailed = true; // 프로세스 실패 플래그 설정
                         processInfo.CancellationTokenSource.Cancel(); // 미션 취소 요청
                         await HandleRobotMissionCompletion(processInfo);
@@ -1037,7 +1037,7 @@ namespace WPF_WMS01.Services
                         Debug.WriteLine($"[RobotMissionService] Modbus Connection/Communication Error during check: {ex.Message}. Cancelling mission process {processInfo.ProcessId}.");
                         processInfo.CurrentStatus = MissionStatusEnum.FAILED;
                         processInfo.HmiStatus.Status = "FAILED";
-                        processInfo.HmiStatus.ProgressPercentage = 100;
+                        //processInfo.HmiStatus.ProgressPercentage = 100;
                         processInfo.IsFailed = true; // 프로세스 실패 플래그 설정
                         processInfo.CancellationTokenSource.Cancel(); // 미션 취소 요청
                         await HandleRobotMissionCompletion(processInfo);
@@ -1067,7 +1067,7 @@ namespace WPF_WMS01.Services
                         Debug.WriteLine($"[RobotMissionService] Max Modbus check retries reached for process {processInfo.ProcessId}. Cancelling mission.");
                         processInfo.CurrentStatus = MissionStatusEnum.FAILED;
                         processInfo.HmiStatus.Status = "FAILED";
-                        processInfo.HmiStatus.ProgressPercentage = 100;
+                        //processInfo.HmiStatus.ProgressPercentage = 100;
                         processInfo.IsFailed = true;
                         processInfo.CancellationTokenSource.Cancel();
                         await HandleRobotMissionCompletion(processInfo);

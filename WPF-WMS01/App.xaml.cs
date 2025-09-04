@@ -127,7 +127,9 @@ namespace WPF_WMS01
                     mainViewModelInstance.GetRackViewModelById, // MainViewModel의 델리게이트 전달
                     missionCheckModbusService, // Mission Check ModbusClientService 인스턴스 직접 전달
                     () => mainViewModelInstance.InputStringForButton, // InputStringForButton 델리게이트 전달
-                    () => mainViewModelInstance.InputStringForBoxes // InputStringForBoxes 델리게이트 전달
+                    () => mainViewModelInstance.InputStringForBoxes, // InputStringForBoxes 델리게이트 전달
+                    mainViewModelInstance.SetInputStringForButton,
+                    mainViewModelInstance.SetInputStringForBoxes
                 );
             });
 

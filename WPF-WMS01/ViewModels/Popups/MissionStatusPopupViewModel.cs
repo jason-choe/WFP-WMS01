@@ -21,6 +21,8 @@ namespace WPF_WMS01.ViewModels.Popups
         private string _overallStatusText;
         private SolidColorBrush _overallStatusColor;
         private int _overallProgressPercentage;
+        private int _overallCurrentStep;
+        private int _overallTotalStep;
         private string _currentStepDescription;
         private ObservableCollection<MissionStepStatusViewModel> _missionStepsStatus;
 
@@ -70,6 +72,18 @@ namespace WPF_WMS01.ViewModels.Popups
             set => SetProperty(ref _overallProgressPercentage, value);
         }
 
+        public int OverallCurrentStep
+        {
+            get => _overallCurrentStep;
+            set => SetProperty(ref _overallCurrentStep, value);
+        }
+
+        public int OverallTotalStep
+        {
+            get => _overallTotalStep;
+            set => SetProperty(ref _overallTotalStep, value);
+        }
+
         public string CurrentStepDescription
         {
             get => _currentStepDescription;
@@ -98,6 +112,8 @@ namespace WPF_WMS01.ViewModels.Popups
             OverallStatusColor = new SolidColorBrush(Colors.LightGray);
             CurrentStepDescription = "디자인 타임 미리보기";
             OverallProgressPercentage = 0;
+            OverallTotalStep = 0;
+            OverallCurrentStep = 0;
             Payload = "디자인 타임 미리보기";
             MissionStepsStatus.Add(new MissionStepStatusViewModel("단계 1 (디자인)", MissionStatusEnum.PENDING));
             MissionStepsStatus.Add(new MissionStepStatusViewModel("단계 2 (디자인)", MissionStatusEnum.PENDING));
@@ -157,9 +173,11 @@ namespace WPF_WMS01.ViewModels.Popups
 
                 OverallStatusText = missionInfo.HmiStatus?.Status; // Null-conditional operator
                 OverallProgressPercentage = missionInfo.HmiStatus?.ProgressPercentage ?? 0;
+                OverallCurrentStep = missionInfo.CurrentStepIndex + 1;
+                Debug.WriteLine($"[CheckPoint] missionInfo.CurrentStepIndex = {missionInfo.CurrentStepIndex}, OverallCurrentStep = {OverallCurrentStep}");
+                OverallTotalStep = missionInfo.TotalSteps;
                 CurrentStepDescription = missionInfo.HmiStatus?.CurrentStepDescription;
 
-                Debug.WriteLine($"[RobotMissionService : UpdateStatus] Index = {missionInfo.CurrentStepIndex}/{allMissionStepDefinitions.Count}.");
                 if(missionInfo.CurrentStepIndex < allMissionStepDefinitions.Count) // Index was out of range exception 방지
                     Payload = allMissionStepDefinitions[missionInfo.CurrentStepIndex].Payload.Equals("AMR_2")?"Poongsan_2":"Poongsan_1";
 

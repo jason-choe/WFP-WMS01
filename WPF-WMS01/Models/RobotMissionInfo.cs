@@ -102,7 +102,7 @@ namespace WPF_WMS01.Models
         // public ViewModels.RackViewModel DestinationRack { get; set; } // 제거
         public List<ViewModels.RackViewModel> RacksToProcess { get; set; } // 여러 랙을 처리할 경우 (예: 출고)
 
-        public RobotMissionInfo(string processId, string processType, List<MissionStepDefinition> missionSteps, List<int> racksLockedByProcess, ushort? initiatingCoilAddress = null, bool isWarehouseMission = false)
+        public RobotMissionInfo(string processId, string processType, List<MissionStepDefinition> missionSteps, List<int> racksLockedByProcess, ushort? initiatingCoilAddress = null, bool isWarehouseMission = false, string readStringValue = null, int? readIntValue = null)
         {
             ProcessId = processId;
             ProcessType = processType;
@@ -131,6 +131,8 @@ namespace WPF_WMS01.Models
             //LastCompletedMissionId = null;
             //IsFinished = false;
             //IsFailed = false;
+            ReadStringValue = readStringValue;
+            ReadIntValue = readIntValue;
         }
 
     }

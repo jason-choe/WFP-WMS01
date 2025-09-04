@@ -742,6 +742,8 @@ namespace WPF_WMS01.ViewModels
         /// <param name="racksToProcess">여러 랙을 처리할 경우 (예: 출고) 해당 랙들의 ViewModel 목록.</param>
         /// <param name="initiatingCoilAddress">이 미션을 시작한 Modbus Coil의 주소 (경광등 제어용).</param>
         /// <param name="isWarehouseMission">이 미션이 창고 관련 미션인지 여부 (true: 창고, false: 포장실).</param>
+        /// <param name="readStringValue">이 미션이 창고 관련 미션인지 여부 (true: 창고, false: 포장실).</param>
+        /// <param name="readIntValue">이 미션이 창고 관련 미션인지 여부 (true: 창고, false: 포장실).</param>
         /// <returns>시작된 미션 프로세스의 고유 ID.</returns>
         public async Task<string> InitiateRobotMissionProcess(
             string processType,
@@ -749,7 +751,10 @@ namespace WPF_WMS01.ViewModels
             List<int> racksLockedAtStart = null,
             List<RackViewModel> racksToProcess = null,
             ushort? initiatingCoilAddress = null,
-            bool isWarehouseMission = true)
+            bool isWarehouseMission = true,
+            string readStringValue = null,
+            int? readIntValue = null
+        )
         {
             if (_robotMissionServiceInternal == null)
             {
@@ -785,7 +790,9 @@ namespace WPF_WMS01.ViewModels
                 racksLockedAtStart,
                 racksToProcess,
                 initiatingCoilAddress,
-                isWarehouseMission
+                isWarehouseMission,
+                readStringValue,
+                readIntValue
             );
         }
 
@@ -1191,6 +1198,8 @@ namespace WPF_WMS01.ViewModels
                 string swapPoint = null;
                 // Determine MC Protocol IP address based on button content
                 string? mcProtocolIpAddress = null;
+                string? readStringValue = null;
+                int? readIntvalue = null;
 
                 switch (buttonVm.Content)
                 {
@@ -1230,6 +1239,8 @@ namespace WPF_WMS01.ViewModels
                             LinkedMission = null,
                             LinkWaitTimeout = 3600
                         });
+                        readStringValue = "팔레트 공급 완료";
+                        readIntvalue = 0;
                         // Move, Charge
                         missionSteps.Add(new MissionStepDefinition
                         {
@@ -1239,7 +1250,11 @@ namespace WPF_WMS01.ViewModels
                             Payload = ProductionLinePayload,
                             IsLinkable = false,
                             LinkedMission = null,
-                            LinkWaitTimeout = 3600
+                            LinkWaitTimeout = 3600,
+                            PreMissionOperations = new List<MissionSubOperation>
+                            {
+                                new MissionSubOperation { Type = SubOperationType.UiDisplayLotNoBoxCount, Description = "작업완료 표시" }
+                            }
                         });
                         break;
 
@@ -1278,6 +1293,8 @@ namespace WPF_WMS01.ViewModels
                             LinkedMission = null,
                             LinkWaitTimeout = 3600
                         });
+                        readStringValue = "단프라 공급 완료";
+                        readIntvalue = 0;
                         // Move, Charge
                         missionSteps.Add(new MissionStepDefinition
                         {
@@ -1287,7 +1304,11 @@ namespace WPF_WMS01.ViewModels
                             Payload = ProductionLinePayload,
                             IsLinkable = false,
                             LinkedMission = null,
-                            LinkWaitTimeout = 3600
+                            LinkWaitTimeout = 3600,
+                            PreMissionOperations = new List<MissionSubOperation>
+                            {
+                                new MissionSubOperation { Type = SubOperationType.UiDisplayLotNoBoxCount, Description = "작업완료 표시" }
+                            }
                         });
                         break;
 
@@ -1329,7 +1350,8 @@ namespace WPF_WMS01.ViewModels
                             LinkWaitTimeout = 3600,
                             PostMissionOperations = new List<MissionSubOperation> // Drop이 정상적으로 이루어 졌나?
                             {
-                                new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "Discrete Input 13 체크", McDiscreteInputAddress = 13 }
+                                new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "Discrete Input 13 체크", McDiscreteInputAddress = 13 },
+                                new MissionSubOperation { Type = SubOperationType.UiDisplayLotNoBoxCount, Description = "작업완료 표시" }
                             }
                         });
                         // Move, Charge
@@ -1353,30 +1375,40 @@ namespace WPF_WMS01.ViewModels
                         {
                             workPoint = "223_2_2";
                             swapPoint = "223_2";
+                            readStringValue = "223A-1178";
+                            readIntvalue = 60;
                             mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddress556mm2"] ?? "192.168.200.62";
                         }
                         else if (buttonVm.Content.Equals("5.56mm[4]"))
                         {
                             workPoint = "223_2_1";
                             swapPoint = "223_2";
+                            readStringValue = "223A-1179";
+                            readIntvalue = 60;
                             mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddress556mm2"] ?? "192.168.200.62";
                         }
                         else if (buttonVm.Content.Equals("5.56mm[2]"))
                         {
                             workPoint = "223_1_2";
                             swapPoint = "223_1";
+                            readStringValue = "223A-1180";
+                            readIntvalue = 60;
                             mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddress556mm1"] ?? "192.168.200.61";
                         }
                         else if (buttonVm.Content.Equals("5.56mm[1]"))
                         {
                             workPoint = "223_1_1";
                             swapPoint = "223_1";
+                            readStringValue = "223A-1181";
+                            readIntvalue = 60;
                             mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddress556mm1"] ?? "192.168.200.61";
                         }
                         else // if (buttonVm.Content.Equals("7.62mm"))
                         {
                             workPoint = "308";
                             swapPoint = "308";
+                            readStringValue = "308B-1178";
+                            readIntvalue = 50;
                             mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddress762mm"] ?? "127.168.200.63"; ;
                         }
 
@@ -1539,24 +1571,33 @@ namespace WPF_WMS01.ViewModels
                         {
                             workPoint = "Manual_1";
                             swapPoint = "Manual";
+                            readStringValue = "카타르[1]";
+                            readIntvalue = 0;
                             mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddressQatar"] ?? "192.168.200.66";
                         }
                         else if (buttonVm.Content.Equals("카타르[2]"))
                         {
                             workPoint = "Manual_2";
                             swapPoint = "Manual";
+                            readStringValue = "카타르[1]";
+                            readIntvalue = 0;
                             mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddressQatar"] ?? "192.168.200.66";
                         }
                         else if (buttonVm.Content.Equals("5.56mm[3]"))
                         {
                             workPoint = "223_1_Bypass";
                             swapPoint = "223_1";
+                            readStringValue = "223-1_Bypass 완료";
+                            readIntvalue = 0;
                             mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddress556mm1"] ?? "192.168.200.61";
                         }
                         else //if (buttonVm.Content.Equals("5.56mm[6]"))
                         {
                             workPoint = "223_2_Bypass";
                             swapPoint = "223_2";
+                            readStringValue = "223-2_Bypass 완료";
+                            readIntvalue = 0;
+
                             mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddress556mm2"] ?? "192.168.200.62";
                         }
                         processType = $"{buttonVm.Content} 제품 입고 작업";
@@ -1680,6 +1721,7 @@ namespace WPF_WMS01.ViewModels
                                 {
                                     // Drop이 정상적으로 이루어 졌나?
                                     new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "Discrete Input 13 체크", McDiscreteInputAddress = 13 },
+                                    new MissionSubOperation { Type = SubOperationType.UiDisplayLotNoBoxCount, Description = "작업완료 표시" }
                                 }
                             });
                         }
@@ -1699,6 +1741,7 @@ namespace WPF_WMS01.ViewModels
                                 {
                                     // Drop이 정상적으로 이루어 졌나?
                                     new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "Discrete Input 13 체크", McDiscreteInputAddress = 13 },
+                                    new MissionSubOperation { Type = SubOperationType.UiDisplayLotNoBoxCount, Description = "작업완료 표시" }
                                 }
                             });
                         }
@@ -1712,6 +1755,11 @@ namespace WPF_WMS01.ViewModels
                             IsLinkable = false,
                             LinkedMission = null,
                             LinkWaitTimeout = 3600,
+                            PreMissionOperations = new List<MissionSubOperation> // Test UI update
+                            {
+                                // Drop이 정상적으로 이루어 졌나?
+                                new MissionSubOperation { Type = SubOperationType.UiDisplayLotNoBoxCount, Description = "UI update" },
+                            }
                         });
                         break;
 
@@ -1732,7 +1780,11 @@ namespace WPF_WMS01.ViewModels
                 );
                 Debug.WriteLine($"[MainViewModel] Initialized MissionStatusPopupVm for {buttonVm.Content} (Coil: {buttonVm.CoilOutputAddress}).");
 
-
+                if(readStringValue == null)
+                {
+                    readStringValue = "Lot번호를 입력하세요";
+                    readIntvalue = 0;
+                }
                 // Initiate the robot mission
                 string processId = await InitiateRobotMissionProcess(
                     processType,
@@ -1740,7 +1792,9 @@ namespace WPF_WMS01.ViewModels
                     racksToLock, // Empty list for now, as no racks are directly locked for these supply missions
                     null, // racksToProcess
                     buttonVm.CoilOutputAddress, // 새로 추가된 파라미터: 경광등 Coil 주소 전달
-                    false // isWarehouseMission = false로 전달 (포장실 미션)
+                    false, // isWarehouseMission = false로 전달 (포장실 미션)
+                    readStringValue,
+                    readIntvalue
                 );
 
                 if (!string.IsNullOrEmpty(processId))
@@ -2123,6 +2177,17 @@ namespace WPF_WMS01.ViewModels
                 _inputStringForShipOut = value;
                 OnPropertyChanged();
             }
+        }
+
+        // RobotMissionService가 호출하여 InputStringForButton 값을 설정할 메서드
+        public void SetInputStringForButton(string lotNumber)
+        {
+            InputStringForButton = lotNumber;
+        }
+        // RobotMissionService가 호출하여 InputStringForButton 값을 설정할 메서드
+        public void SetInputStringForBoxes(string boxCount)
+        {
+            InputStringForBoxes = boxCount;
         }
 
         public ICommand InboundProductCommand { get; private set; }

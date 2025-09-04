@@ -41,10 +41,10 @@
                     <Run Text="{Binding Payload}" Foreground="{Binding OverallStatusColor}"/>
                     <Run Text="(이)가 미션 수행 중임"/>
                 </TextBlock>
-                <TextBlock FontWeight="Bold" FontSize="16" Margin="0,0,0,5">
+                <!--TextBlock FontWeight="Bold" FontSize="16" Margin="0,0,0,5">
                     <Run Text="프로세스 ID:"/>
                     <Run Text="{Binding ProcessId}"/>
-                </TextBlock>
+                </TextBlock-->
                 <TextBlock FontWeight="Bold" FontSize="16" Margin="0,0,0,5">
                     <Run Text="현재 상태:"/>
                     <Run Text="{Binding OverallStatusText}" Foreground="{Binding OverallStatusColor}"/>
@@ -52,7 +52,10 @@
                 <TextBlock FontWeight="Bold" FontSize="16" Margin="0,0,0,5">
                     <Run Text="진행률:"/>
                     <Run Text="{Binding OverallProgressPercentage}"/>
-                    <Run Text="%"/>
+                    <Run Text="% , "/>
+                    <Run Text="{Binding OverallCurrentStep}"/>
+                    <Run Text="/"/>
+                    <Run Text="{Binding OverallTotalStep}"/>
                 </TextBlock>
                 <TextBlock FontWeight="Bold" FontSize="16">
                     <Run Text="현재 단계:"/>

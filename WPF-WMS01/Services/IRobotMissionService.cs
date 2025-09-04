@@ -52,6 +52,8 @@ namespace WPF_WMS01.Services
         /// <param name="racksToProcess">여러 랙을 처리할 경우 (예: 출고) 해당 랙들의 ViewModel 목록.</param>
         /// <param name="initiatingCoilAddress">이 미션을 시작한 Modbus Coil의 주소 (경광등 제어용).</param>
         /// <param name="isWarehouseMission">이 미션이 창고 관련 미션인지 여부 (true: 창고, false: 포장실).</param>
+        /// <param name="readStringValue">이 미션이 창고 관련 미션인지 여부 (true: 창고, false: 포장실).</param>
+        /// <param name="readIntValue">이 미션이 창고 관련 미션인지 여부 (true: 창고, false: 포장실).</param>
         /// <returns>시작된 미션 프로세스의 고유 ID.</returns>
         Task<string> InitiateRobotMissionProcess(
             string processType,
@@ -59,7 +61,9 @@ namespace WPF_WMS01.Services
             List<int> racksLockedAtStart,
             List<RackViewModel> racksToProcess = null,
             ushort? initiatingCoilAddress = null,
-            bool isWarehouseMission = false
+            bool isWarehouseMission = false,
+            string readStringValue = null,
+            int? readIntValue = null
         );
 
         /// <summary>
