@@ -687,6 +687,9 @@ namespace WPF_WMS01.ViewModels
                                 Payload = _mainViewModel.WarehousePayload,
                                 IsLinkable = true,
                                 LinkWaitTimeout = 3600,
+                                PreMissionOperations = new List<MissionSubOperation> {
+                                    new MissionSubOperation { Type = SubOperationType.DbReadRackData, Description = "LotNo., Box count 임시 저장", TargetRackId = sourceRackViewModel.Id }
+                                },
                                 PostMissionOperations = new List<MissionSubOperation> {
                                     new MissionSubOperation { Type = SubOperationType.DbUpdateRackState, Description = "랙 상태 업데이트", SourceRackIdForDbUpdate = sourceRackViewModel.Id, DestRackIdForDbUpdate = amrRackViewModel.Id }
                                 }

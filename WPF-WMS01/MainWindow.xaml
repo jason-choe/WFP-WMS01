@@ -9,7 +9,7 @@
         xmlns:cnv="clr-namespace:WPF_WMS01.Converters"
         xmlns:popups="clr-namespace:WPF_WMS01.Views.Popups"
         mc:Ignorable="d"
-        Title="랙 관리 시스템" Height="1040" Width="1922" Left="0" Top="0">
+        Title="랙 관리 시스템" Height="1040" Width="1922" Left="0" Top="0" WindowState="Maximized">
     <!-- Height="768" Width="1024" WindowState="Maximized" -->
 
     <Window.Resources>

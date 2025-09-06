@@ -6,6 +6,7 @@
     <RootNamespace>WPF_WMS01</RootNamespace>
     <Nullable>enable</Nullable>
     <UseWPF>true</UseWPF>
+    <ApplicationIcon>images\icon.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -65,6 +66,10 @@
     <None Remove="images\rack_state_7.png" />
     <None Remove="images\rack_state_8.png" />
     <None Remove="images\rack_state_9.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="images\icon.ico" />
   </ItemGroup>
 
   <ItemGroup>
