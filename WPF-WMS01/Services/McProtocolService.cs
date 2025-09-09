@@ -212,12 +212,12 @@ namespace WPF_WMS01.Services
         /// <param name="startAddress">시작 디바이스 주소.</param>
         /// <param name="numberOfWords">읽을 워드 개수.</param>
         /// <returns>읽은 워드 값 배열.</returns>
-        public async Task<ushort[]> ReadWordsAsync(string deviceCode, int startAddress, ushort numberOfWords)
+        public async Task<ushort[]> ReadWordsAsync(string ipAddress, string deviceCode, int startAddress, ushort numberOfWords)
         {
             if (!IsConnected)
             {
                 Debug.WriteLine("[McProtocolService] Not connected. Attempting to reconnect for ReadWordsAsync.");
-                if (!await ConnectAsync().ConfigureAwait(false))
+                if (!await ConnectAsync(ipAddress).ConfigureAwait(false))
                 {
                     throw new InvalidOperationException("MC Protocol PLC에 연결되어 있지 않습니다.");
                 }
@@ -292,12 +292,12 @@ namespace WPF_WMS01.Services
         /// <param name="startAddress">시작 디바이스 주소.</param>
         /// <param name="values">쓸 워드 값 배열.</param>
         /// <returns>쓰기 성공 여부.</returns>
-        public async Task<bool> WriteWordsAsync(string deviceCode, int startAddress, ushort[] values)
+        public async Task<bool> WriteWordsAsync(string ipAddress, string deviceCode, int startAddress, ushort[] values)
         {
             if (!IsConnected)
             {
                 Debug.WriteLine("[McProtocolService] Not connected. Attempting to reconnect for WriteWordsAsync.");
-                if (!await ConnectAsync().ConfigureAwait(false))
+                if (!await ConnectAsync(ipAddress).ConfigureAwait(false))
                 {
                     throw new InvalidOperationException("MC Protocol PLC에 연결되어 있지 않습니다.");
                 }
@@ -365,10 +365,10 @@ namespace WPF_WMS01.Services
         /// <param name="deviceCode">디바이스 코드 (예: "D", "R").</param>
         /// <param name="address">디바이스 주소.</param>
         /// <returns>읽은 워드 값.</returns>
-        public async Task<ushort> ReadWordAsync(string deviceCode, int address)
+        public async Task<ushort> ReadWordAsync(string ipAddress, string deviceCode, int address)
         {
             // ReadWordsAsync를 사용하여 단일 워드를 읽습니다.
-            ushort[] result = await ReadWordsAsync(deviceCode, address, 1).ConfigureAwait(false);
+            ushort[] result = await ReadWordsAsync(ipAddress, deviceCode, address, 1).ConfigureAwait(false);
             if (result != null && result.Length > 0)
             {
                 return result[0];
@@ -383,10 +383,10 @@ namespace WPF_WMS01.Services
         /// <param name="address">디바이스 주소.</param>
         /// <param name="value">쓸 워드 값.</param>
         /// <returns>쓰기 성공 여부.</returns>
-        public async Task<bool> WriteWordAsync(string deviceCode, int address, ushort value)
+        public async Task<bool> WriteWordAsync(string ipAddress, string deviceCode, int address, ushort value)
         {
             // WriteWordsAsync를 사용하여 단일 워드를 씁니다.
-            return await WriteWordsAsync(deviceCode, address, new ushort[] { value }).ConfigureAwait(false);
+            return await WriteWordsAsync(ipAddress, deviceCode, address, new ushort[] { value }).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -396,13 +396,13 @@ namespace WPF_WMS01.Services
         /// <param name="deviceCode">디바이스 코드 (예: "D", "R").</param>
         /// <param name="address">시작 디바이스 주소.</param>
         /// <returns>읽은 문자열.</returns>
-        public async Task<string> ReadStringDataAsync(string deviceCode, int address)
+        public async Task<string> ReadStringDataAsync(string ipAddress, string deviceCode, int address)
         {
             try
             {
                 await ConnectAsync().ConfigureAwait(false); // 매 호출마다 연결
                 const ushort STRING_WORD_LENGTH = 10; // 20 bytes = 10 words
-                ushort[] words = await ReadWordsAsync(deviceCode, address, STRING_WORD_LENGTH).ConfigureAwait(false);
+                ushort[] words = await ReadWordsAsync(ipAddress, deviceCode, address, STRING_WORD_LENGTH).ConfigureAwait(false);
 
                 byte[] bytes = new byte[STRING_WORD_LENGTH * 2];
                 for (int i = 0; i < STRING_WORD_LENGTH; i++)
@@ -432,7 +432,7 @@ namespace WPF_WMS01.Services
         /// <param name="address">시작 디바이스 주소.</param>
         /// <param name="value">쓸 문자열 (20바이트로 패딩/잘림).</param>
         /// <returns>쓰기 성공 여부.</returns>
-        public async Task<bool> WriteStringDataAsync(string deviceCode, int address, string value)
+        public async Task<bool> WriteStringDataAsync(string ipAddress, string deviceCode, int address, string value)
         {
             try
             {
@@ -449,7 +449,7 @@ namespace WPF_WMS01.Services
                 {
                     words[i] = (ushort)(paddedBytes[i * 2] | (paddedBytes[i * 2 + 1] << 8));
                 }
-                return await WriteWordsAsync(deviceCode, address, words).ConfigureAwait(false);
+                return await WriteWordsAsync(ipAddress, deviceCode, address, words).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -469,13 +469,13 @@ namespace WPF_WMS01.Services
         /// <param name="deviceCode">디바이스 코드 (예: "D", "R").</param>
         /// <param name="address">시작 디바이스 주소.</param>
         /// <returns>읽은 정수 값.</returns>
-        public async Task<int> ReadIntDataAsync(string deviceCode, int address)
+        public async Task<int> ReadIntDataAsync(string ipAddress, string deviceCode, int address)
         {
             try
             {
                 await ConnectAsync().ConfigureAwait(false); // 매 호출마다 연결
                 const ushort INT_WORD_LENGTH = 2; // 32-bit int = 2 words
-                ushort[] words = await ReadWordsAsync(deviceCode, address, INT_WORD_LENGTH).ConfigureAwait(false);
+                ushort[] words = await ReadWordsAsync(ipAddress, deviceCode, address, INT_WORD_LENGTH).ConfigureAwait(false);
 
                 // Little Endian으로 ushort 2개를 int로 결합
                 int result = (words[0] | (words[1] << 16));
@@ -500,7 +500,7 @@ namespace WPF_WMS01.Services
         /// <param name="address">시작 디바이스 주소.</param>
         /// <param name="value">쓸 정수 값.</param>
         /// <returns>쓰기 성공 여부.</returns>
-        public async Task<bool> WriteIntDataAsync(string deviceCode, int address, int value)
+        public async Task<bool> WriteIntDataAsync(string ipAddress, string deviceCode, int address, int value)
         {
             try
             {
@@ -508,7 +508,7 @@ namespace WPF_WMS01.Services
                 ushort[] words = new ushort[2];
                 words[0] = (ushort)(value & 0xFFFF); // 하위 16비트
                 words[1] = (ushort)((value >> 16) & 0xFFFF); // 상위 16비트
-                return await WriteWordsAsync(deviceCode, address, words).ConfigureAwait(false);
+                return await WriteWordsAsync(ipAddress, deviceCode, address, words).ConfigureAwait(false);
             }
             catch (Exception ex)
             {

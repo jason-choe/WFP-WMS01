@@ -271,9 +271,11 @@ namespace WPF_WMS01.ViewModels
         public ICommand OpenMenuCommand { get; }
         public ICommand CloseMenuCommand { get; }
         public ICommand MenuItem1Command { get; private set; } // 잠금 해제 기능에 사용될 명령 (private set 추가)
-        public ICommand MenuItem2Command { get; }
-        public ICommand MenuItem3Command { get; }
+        public ICommand MenuItem2Command { get; private set; }
+        public ICommand MenuItem3Command { get; private set; }
         public ICommand UnlockRackCommand { get; private set; } // UnlockRackCommand 선언 추가 (private set 추가)
+        public ICommand MoveAndUnloadCommand { get; private set; } // MoveAndUnloadCommand 선언 추가 (private set 추가)
+        public ICommand MoveAmr2ToBufferNode { get; private set; } // MoveAmr2ToBufferNode 선언 추가 (private set 추가)
 
         private string _popupDebugMessage;
         public string PopupDebugMessage
@@ -338,11 +340,15 @@ namespace WPF_WMS01.ViewModels
             OpenMenuCommand = new RelayCommand(p => ExecuteOpenMenuCommand());
             CloseMenuCommand = new RelayCommand(p => ExecuteCloseMenuCommand());
             // MenuItem1Command는 이제 UnlockRackCommand에 바인딩됩니다.
-            MenuItem2Command = new RelayCommand(p => OnMenuItem2Executed(p));
-            MenuItem3Command = new RelayCommand(p => OnMenuItem3Executed(p));
+            // MenuItem2Command = new RelayCommand(p => OnMenuItem2Executed(p)); MenuItem2Command는 이제 MoveAndUnloadCommand에 바인딩됩니다.
+            // MenuItem3Command = new RelayCommand(p => OnMenuItem3Executed(p));
 
             // 잠금 해제 명령 초기화
             UnlockRackCommand = new RelayCommand(async p => await ExecuteUnlockRack());
+            // 랙 적치 실패 후 이동 적치 명령 초기화
+            MoveAndUnloadCommand = new RelayCommand(async p => await ExecuteUnloadAmrPayload());
+            // AMR_2 완충지역으로 이동 명령 초기화
+            MoveAmr2ToBufferNode = new RelayCommand(async p => await ExecuteAmr2ToBufferNode());
 
             // AMR 미션 상태 팝업 명령 초기화
             ShowAmrMissionStatusCommand = new RelayCommand(async p => await ExecuteShowAmrMissionStatus());
@@ -449,11 +455,11 @@ namespace WPF_WMS01.ViewModels
         //     IsMenuOpen = false;
         // }
 
-        private void OnMenuItem2Executed(object parameter)
-        {
-            Debug.WriteLine($"Option 2 clicked. Parameter: {parameter}");
-            IsMenuOpen = false;
-        }
+        //private void OnMenuItem2Executed(object parameter)
+        //{
+        //    Debug.WriteLine($"Option 2 clicked. Parameter: {parameter}");
+        //    IsMenuOpen = false;
+        //}
 
         private void OnMenuItem3Executed(object parameter)
         {
@@ -505,7 +511,9 @@ namespace WPF_WMS01.ViewModels
             LoginCommand = new AsyncRelayCommand(ExecuteLogin, CanExecuteLogin);
 
             // MenuItem1Command를 UnlockRackCommand에 바인딩
-            MenuItem1Command = UnlockRackCommand;
+            //MenuItem1Command = MoveAmr2ToBufferNode;
+            //MenuItem2Command = UnlockRackCommand;
+            //MenuItem3Command = MoveAndUnloadCommand;
         }
 
         public ObservableCollection<RackViewModel> RackList
@@ -1239,8 +1247,8 @@ namespace WPF_WMS01.ViewModels
                             LinkedMission = null,
                             LinkWaitTimeout = 3600
                         });
-                        readStringValue = "팔레트 공급 완료";
-                        readIntvalue = 0;
+                        //readStringValue = "팔레트 공급 완료";
+                        //readIntvalue = 0;
                         // Move, Charge
                         missionSteps.Add(new MissionStepDefinition
                         {
@@ -1293,8 +1301,8 @@ namespace WPF_WMS01.ViewModels
                             LinkedMission = null,
                             LinkWaitTimeout = 3600
                         });
-                        readStringValue = "단프라 공급 완료";
-                        readIntvalue = 0;
+                        //readStringValue = "단프라 공급 완료";
+                        //readIntvalue = 0;
                         // Move, Charge
                         missionSteps.Add(new MissionStepDefinition
                         {
@@ -1444,7 +1452,7 @@ namespace WPF_WMS01.ViewModels
                         // Step 3 : Move, Drop
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = $"교체 장소로 이동하여, 공 파레트 드롭",
+                            ProcessStepDescription = $"공 파레트 버퍼로 이동하여, 공 파레트 드롭",
                             MissionType = "8",
                             ToNode = $"Empty_{swapPoint}_Drop",
                             Payload = ProductionLinePayload,
@@ -1470,7 +1478,7 @@ namespace WPF_WMS01.ViewModels
                         // Step 5 : Move, Drop, Read Info
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = $"교체 장소로 이동하여, {buttonVm.Content} 제품 팔레트 드롭",
+                            ProcessStepDescription = $"제품 팔레트 버퍼로 이동하여, {buttonVm.Content} 제품 팔레트 드롭",
                             MissionType = "8",
                             ToNode = $"Full_{swapPoint}_Drop",
                             Payload = ProductionLinePayload,
@@ -1485,7 +1493,7 @@ namespace WPF_WMS01.ViewModels
                         // Step 6 : Move, Pickup
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = $"교체 장소로 이동하여, 공 파레트 픽업",
+                            ProcessStepDescription = $"공 파레트 버퍼로 이동하여, 공 파레트 픽업",
                             MissionType = "8",
                             ToNode = $"Empty_{swapPoint}_PickUP",
                             Payload = ProductionLinePayload,
@@ -1507,7 +1515,7 @@ namespace WPF_WMS01.ViewModels
                         // Step 8 : Move, Pickup. Sensor OFF
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = $"교체 장소로 이동하여, {buttonVm.Content} 제품 팔레트 픽업",
+                            ProcessStepDescription = $"제품 팔레트 버퍼로 이동하여, {buttonVm.Content} 제품 팔레트 픽업",
                             MissionType = "8",
                             ToNode = $"Full_{swapPoint}_PickUP",
                             Payload = ProductionLinePayload,
@@ -1536,7 +1544,7 @@ namespace WPF_WMS01.ViewModels
                         // Step 10 : Move, Drop, Check, Update UI
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = $"입고장으로 이동하여, {buttonVm.Content} 제품 팔레트 입고",
+                            ProcessStepDescription = $"입고 대기 장소으로 이동하여, {buttonVm.Content} 제품 팔레트 드롭",
                             MissionType = "8",
                             ToNode = "Palette_IN_Drop",
                             Payload = ProductionLinePayload,
@@ -1631,7 +1639,7 @@ namespace WPF_WMS01.ViewModels
                         // Step 3 : Move, Drop
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = $"교체 장소로 이동하여, 공 파레트 드롭",
+                            ProcessStepDescription = "공 파레트 버퍼로 이동하여, 공 파레트 드롭",
                             MissionType = "8",
                             ToNode = $"Empty_{swapPoint}_Drop",
                             Payload = ProductionLinePayload,
@@ -1653,7 +1661,7 @@ namespace WPF_WMS01.ViewModels
                         // Step 5 : Move, Drop
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = $"교체 장소로 이동하여, {buttonVm.Content} 제품 팔레트 드롭",
+                            ProcessStepDescription = $"제품 팔레트 버퍼로 이동하여, {buttonVm.Content} 제품 팔레트 드롭",
                             MissionType = "8",
                             ToNode = $"Full_{swapPoint}_Drop",
                             Payload = ProductionLinePayload,
@@ -1664,7 +1672,7 @@ namespace WPF_WMS01.ViewModels
                         // Step 6 : Move, Pickup
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = $"교체 장소로 이동하여, 공 파레트 픽업",
+                            ProcessStepDescription = $"공 파레트 버퍼로 이동하여, 공 파레트 픽업",
                             MissionType = "8",
                             ToNode = $"Empty_{swapPoint}_PickUP",
                             Payload = ProductionLinePayload,
@@ -1686,7 +1694,7 @@ namespace WPF_WMS01.ViewModels
                         // Step 8 : Move, Pickup
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = $"교체 장소로 이동하여, {buttonVm.Content} 제품 팔레트 픽업",
+                            ProcessStepDescription = $"제품 팔레트 버퍼로 이동하여, {buttonVm.Content} 제품 팔레트 픽업",
                             MissionType = "8",
                             ToNode = $"Full_{swapPoint}_PickUP",
                             Payload = ProductionLinePayload,
@@ -1699,7 +1707,7 @@ namespace WPF_WMS01.ViewModels
                             // Step 9 : Move, Turn
                             missionSteps.Add(new MissionStepDefinition
                             {
-                                ProcessStepDescription = $"입고장으로 이동",
+                                ProcessStepDescription = $"평치 장소로 이동",
                                 MissionType = "8",
                                 ToNode = $"Return_{swapPoint}",
                                 Payload = ProductionLinePayload,
@@ -1710,7 +1718,7 @@ namespace WPF_WMS01.ViewModels
                             // Step 10 : Move, Drop, Check
                             missionSteps.Add(new MissionStepDefinition
                             {
-                                ProcessStepDescription = $"평치 위치 이동하여, {buttonVm.Content} 제품 팔레트 드롭",
+                                ProcessStepDescription = $"평치 위치로 이동하여, {buttonVm.Content} 제품 팔레트 드롭",
                                 MissionType = "8",
                                 ToNode = $"Full_{workPoint}_Drop", // Full_223_1_Bypass_Drop, Full_223_2_Bypass_Drop
                                 Payload = ProductionLinePayload,
@@ -1730,7 +1738,7 @@ namespace WPF_WMS01.ViewModels
                             // Step 9,10 : Move, Drop, Check
                             missionSteps.Add(new MissionStepDefinition
                             {
-                                ProcessStepDescription = $"입고장으로 이동하여, {buttonVm.Content} 제품 팔레트 입고",
+                                ProcessStepDescription = $"입고 대기장으로 이동하여, {buttonVm.Content} 제품 팔레트 드롭",
                                 MissionType = "8",
                                 ToNode = "Palette_IN_Drop",
                                 Payload = ProductionLinePayload,
@@ -1926,6 +1934,237 @@ namespace WPF_WMS01.ViewModels
             }
         }
 
+        private async Task ExecuteUnloadAmrPayload()
+        {
+            Debug.WriteLine("[MainViewModel] ExecuteUnloadAmrPayload command executed.");
+            IsMenuOpen = false; // 메뉴 닫기
+
+            var amrRackVm = RackList?.FirstOrDefault(r => r.Title.Equals("AMR"));
+            if (amrRackVm == null || amrRackVm.BulletType == 0 )
+            {
+                ShowAutoClosingMessage("현재 AMR에는 팔레트가 적재되어 있지 않습니다.");
+                Debug.WriteLine("[MainViewModel] No payloads on AMR lift.");
+                return;
+            }
+
+            var freeRacks = RackList?.Where(r => r.IsVisible && !r.IsLocked && r.BulletType == 0 && !r.Title.Equals("AMR") && !r.Title.Equals("OUT")).Select(r => r.RackModel).ToList();
+
+            if (freeRacks == null || !freeRacks.Any())
+            {
+                ShowAutoClosingMessage("현재 팔레트를 적치할 장소가 없습니다.");
+                Debug.WriteLine("[MainViewModel] No free racks found to unload.");
+                return;
+            }
+
+            // SelectCheckoutRackPopupViewModel을 재활용하여 잠긴 랙을 선택하도록 합니다.
+            // 이 팝업은 Rack 모델 목록을 받고, 선택된 Rack 모델 목록을 반환합니다.
+            var selectUnloadRackViewModel = new SelectEmptyRackPopupViewModel(freeRacks, amrRackVm.LotNumber, "AMR에 있는 제품 이동 적재", "AMR에 있는 제품");
+            var selectUnloadRackView = new SelectEmptyRackPopupView { DataContext = selectUnloadRackViewModel };
+            selectUnloadRackView.Title = "팔레트를 적치할 랙을 선택"; // 팝업 제목 변경
+
+            ShowAutoClosingMessage("잠금 해제할 랙을 선택하세요.");
+
+            // ShowDialog()는 모달로 작동하므로, 사용자가 팝업을 닫을 때까지 이 메서드는 대기합니다.
+            if (selectUnloadRackView.ShowDialog() == true && selectUnloadRackViewModel.DialogResult == true)
+            {
+                var selectedRacksToUnload = selectUnloadRackViewModel.SelectedRack;
+
+                if (selectedRacksToUnload == null)
+                {
+                    ShowAutoClosingMessage("선택된 랙이 없습니다. 제품 이동 적재 취소.");
+                    Debug.WriteLine("[MainViewModel] No racks selected for unload. Operation cancelled.");
+                    return;
+                }
+
+                ShowAutoClosingMessage($"랙 {selectedRacksToUnload.Title}에 팔레트를 적치합니다. 잠금 중...");
+                List<int> lockedRackIds = new List<int>();
+                try
+                {
+                    await _databaseService.UpdateIsLockedAsync(selectedRacksToUnload.Id, true);
+                    Application.Current.Dispatcher.Invoke(() => selectedRacksToUnload.IsLocked = true);
+                    lockedRackIds.Add(selectedRacksToUnload.Id);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"랙 잠금 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                    // 오류 발생 시 작업 취소 및 잠금 해제 시도
+                    foreach (var id in lockedRackIds)
+                    {
+                        await _databaseService.UpdateIsLockedAsync(id, false);
+                        Application.Current.Dispatcher.Invoke(() => (RackList?.FirstOrDefault(r => r.Id == id)).IsLocked = false);
+                    }
+                    return; // 더 이상 진행하지 않음
+                }
+
+                ShowAutoClosingMessage($"로봇 미션: 랙 {amrRackVm.Title} 에서 랙 {selectedRacksToUnload.Title}(으)로 이동 시작. 명령 전송 중...");
+                var targetRackVm = RackList?.FirstOrDefault(r => r.Id == selectedRacksToUnload.Id);
+
+                List<MissionStepDefinition> missionSteps;
+                string shelf = $"{33 - int.Parse(targetRackVm.Title.Split('-')[0]):D2}_{targetRackVm.Title.Split('-')[1]}";
+                // 로봇 미션 단계 정의 (사용자 요청에 따라 4단계로 복원 및 IsLinkable, LinkedMission 조정)
+                if (targetRackVm.LocationArea == 2)
+                {
+                    missionSteps = new List<MissionStepDefinition>
+                        {
+                            // 1. Move, Turn
+                            new MissionStepDefinition {
+                                ProcessStepDescription = $"팔레트 이동 적치를 위한 회전장소로 이동",
+                                MissionType = "8",
+                                ToNode = "Turn_Rack",
+                                Payload = WarehousePayload,
+                                IsLinkable = true,
+                                LinkWaitTimeout = 3600
+                            },
+                            // 3.Move, Drop, Check, Update DB
+                            new MissionStepDefinition {
+                                ProcessStepDescription = $"랙 {targetRackVm.Title}(으)로 이동하여, 팔레트 드롭",
+                                MissionType = "8",
+                                ToNode = $"Rack_{shelf}_Drop",
+                                Payload = WarehousePayload,
+                                IsLinkable = true,
+                                LinkWaitTimeout = 3600,
+                                PostMissionOperations = new List<MissionSubOperation> {
+                                    new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "Discrete Input 13 체크", McDiscreteInputAddress = 13 },
+                                    new MissionSubOperation { Type = SubOperationType.DbUpdateRackState, Description = "랙 상태 업데이트", SourceRackIdForDbUpdate = amrRackVm.Id, DestRackIdForDbUpdate = targetRackVm.Id }
+                                },
+                            },
+                            // 4. Move, Turn
+                            new MissionStepDefinition {
+                                ProcessStepDescription = $"지게차 회전을 위한 이동",
+                                MissionType = "8",
+                                ToNode = "Turn_Rack",
+                                Payload = WarehousePayload,
+                                IsLinkable = true,
+                                LinkWaitTimeout = 3600
+                            },
+                            // 5. Move, Charge
+                            new MissionStepDefinition {
+                                ProcessStepDescription = $"충전소로 복귀",
+                                MissionType = "8",
+                                ToNode = "Charge1",
+                                Payload = WarehousePayload,
+                                IsLinkable = false,
+                                LinkWaitTimeout = 3600
+                            }
+                        };
+                }
+                else //if (sourceRackViewModel.LocationArea == 1)
+                {
+                    missionSteps = new List<MissionStepDefinition>
+                        {
+                            // 1. Move, Turn
+                            new MissionStepDefinition {
+                                ProcessStepDescription = $"팔레트 이동 적치를 위한 회전장소로 이동",
+                                MissionType = "8",
+                                ToNode = "Turn_Rack",
+                                Payload = WarehousePayload,
+                                IsLinkable = true,
+                                LinkWaitTimeout = 3600
+                            },
+                            // 3. Move, Drop, Check, Update DB
+                            new MissionStepDefinition {
+                                ProcessStepDescription = $"랙 {targetRackVm.Title}(으)로 이동하여, 팔레트 드롭",
+                                MissionType = "8",
+                                ToNode = $"Rack_{shelf}_Drop",
+                                Payload = WarehousePayload,
+                                IsLinkable = true,
+                                LinkWaitTimeout = 3600,
+                                PostMissionOperations = new List<MissionSubOperation> {
+                                    new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "Discrete Input 13 체크", McDiscreteInputAddress = 13 },
+                                    new MissionSubOperation { Type = SubOperationType.DbUpdateRackState, Description = "랙 상태 업데이트", SourceRackIdForDbUpdate = amrRackVm.Id, DestRackIdForDbUpdate = targetRackVm.Id }
+                                }
+                            },
+                            // 4. Move, Charge
+                            new MissionStepDefinition {
+                                ProcessStepDescription = $"충전소로 복귀",
+                                MissionType = "8",
+                                ToNode = "Charge1",
+                                Payload = WarehousePayload,
+                                IsLinkable = false,
+                                LinkWaitTimeout = 3600
+                            }
+                        };
+                }
+
+                try
+                {
+                    // 로봇 미션 프로세스 시작
+                    string processId = await InitiateRobotMissionProcess(
+                        "ExecuteInboundProduct", // 미션 프로세스 유형
+                        missionSteps,
+                        lockedRackIds, // 잠긴 랙 ID 목록 전달
+                        null, // racksToProcess
+                        null, // initiatingCoilAddress
+                        true // isWarehouseMission = true로 전달
+                    );
+                    ShowAutoClosingMessage($"로봇 미션 프로세스 시작됨: {processId}");
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"팔레트 이동 적치 로봇 미션 시작 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                    foreach (var id in lockedRackIds)
+                    {
+                        await _databaseService.UpdateIsLockedAsync(id, false);
+                        Application.Current.Dispatcher.Invoke(() => (RackList?.FirstOrDefault(r => r.Id == id)).IsLocked = false);
+                    }
+                }
+            }
+            else
+            {
+                ShowAutoClosingMessage("팔레트 이동 적치 작업이 취소되었습니다.");
+                Debug.WriteLine("[MainViewModel] Rack unlock operation cancelled by user.");
+            }
+        }
+
+        private async Task ExecuteAmr2ToBufferNode()
+        {
+            Debug.WriteLine("[MainViewModel] ExecuteAmr2ToBufferNode command executed..");
+            IsMenuOpen = false; // 메뉴 닫기
+
+            var popupViewModel = new RackTypeChangePopupViewModel();
+            var popupView = new RackTypeChangePopupView { DataContext = popupViewModel };
+            popupView.Title = "Poongsan_2 AMR 이동";
+            bool? result = popupView.ShowDialog();
+
+            if (result == true) // 사용자가 '확인'을 눌렀을 경우
+            {
+                List<MissionStepDefinition> missionSteps;
+                // 로봇 미션 단계 정의 (사용자 요청에 따라 4단계로 복원 및 IsLinkable, LinkedMission 조정)
+                missionSteps = new List<MissionStepDefinition>
+                {
+                    // 1. Move, Turn
+                    new MissionStepDefinition {
+                        ProcessStepDescription = $"Poongsan_2 AMR이 traffic free zone으로 이동합니다.",
+                        MissionType = "8",
+                        ToNode = "694",
+                        Payload = ProductionLinePayload,
+                        IsLinkable = false,
+                        LinkWaitTimeout = 3600
+                    }
+                };
+                try
+                {
+                    // 로봇 미션 프로세스 시작
+                    string processId = await InitiateRobotMissionProcess(
+                        "ExecuteAmr2ToBufferNode", // 미션 프로세스 유형
+                        missionSteps,
+                        null, // 잠긴 랙 ID 목록 전달
+                        null, // racksToProcess
+                        null, // initiatingCoilAddress
+                        true // isWarehouseMission = true로 전달
+                    );
+                    ShowAutoClosingMessage($"Poongsan_2 AMR이 traffoic free zone으로 이동: {processId}");
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Poongsan_2 AMR 이동 미션 시작 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+            else
+            {
+                ShowAutoClosingMessage("Poongsan_2 AMR 이동이 취소되었습니다.");
+            }
+        }
 
         public void Dispose()
         {

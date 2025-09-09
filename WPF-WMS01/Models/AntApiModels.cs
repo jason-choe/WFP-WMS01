@@ -335,6 +335,7 @@ namespace WPF_WMS01.Models
         public ushort? McStringLengthWords { get; set; } // 문자열 읽기/쓰기 시 워드 길이 (예: LotNo. 앞부분 8 words)
         public string McWriteValueString { get; set; } // MC WriteData 시 사용할 string 값
         public int? McWriteValueInt { get; set; } // MC WriteData 시 사용할 int 값 (1비트 쓰기 시 1/0, 단일 워드 쓰기 시 값)
+        public int? McWateValueInt { get; set; } // MC WriteData 시 사용할 int 값 (1비트 쓰기 시 1/0, 단일 워드 쓰기 시 값)
         public int? WaitTimeoutSeconds { get; set; } // 센서 대기 타임아웃 (초)
         public string BitDeviceCode { get; set; } = "Y"; // 비트 쓰기/읽기 시 디바이스 코드 (예: X, Y)
         public string WordDeviceCode { get; set; } = "D"; // 워드 쓰기/읽기 시 디바이스 코드 (예: D, W, R)
@@ -402,6 +403,7 @@ namespace WPF_WMS01.Models
         // MC Protocol - Wait (Word 상태 대기)
         McWaitSensorOff,            // 3-2: PLC에 area sensor를 끄고 (Word 쓰기) 꺼질 때까지 대기 (Word 읽기)
         McWaitSensorOn,             // 4-5: PLC에 area sensor를 켜고 (Word 쓰기) 켜질 때까지 대기 (Word 읽기)
+        McWaitAvailable,            // 특정 word의 값이 원하는 값일 때까지 대기 (Word 읽기)
 
         // DB Operations
         DbReadRackData,             // 4-2: Database로부터 특정 Rack의 LotNo, Box Count를 임시 저장소에 저장
