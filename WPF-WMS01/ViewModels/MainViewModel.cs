@@ -2121,7 +2121,7 @@ namespace WPF_WMS01.ViewModels
             Debug.WriteLine("[MainViewModel] ExecuteAmr2ToBufferNode command executed..");
             IsMenuOpen = false; // 메뉴 닫기
 
-            var popupViewModel = new RackTypeChangePopupViewModel();
+            var popupViewModel = new RackTypeChangePopupViewModel(1);
             var popupView = new RackTypeChangePopupView { DataContext = popupViewModel };
             popupView.Title = "Poongsan_2 AMR 이동";
             bool? result = popupView.ShowDialog();

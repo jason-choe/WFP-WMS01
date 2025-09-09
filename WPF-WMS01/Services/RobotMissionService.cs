@@ -1166,7 +1166,7 @@ namespace WPF_WMS01.Services
                         newDestinationRackType = 3; // 재공품 랙 타입으로 변경 (완제품 랙에서 재공품 랙으로)
                         if (sourceRackVm.Title.Equals("AMR")) newSourceRackType = 2;
                     }
-                    else if (processInfo.ProcessType == "HandleHalfPalletExport") // Rack -> AMR -> OUT -> (NULL)
+                    else if (processInfo.ProcessType == "HandleHalfPalletMove" || processInfo.ProcessType == "HandleHalfPalletExport") // Rack -> AMR -> OUT -> (NULL)
                     {
                         newDestinationRackType = 3;
                         if (sourceRackVm.Title.Equals("AMR")) newSourceRackType = 2; // AMR -> OUT
@@ -1214,12 +1214,12 @@ namespace WPF_WMS01.Services
                     // 3. 랙 잠금 해제 (이동 완료된 랙만 해제)
                     await _databaseService.UpdateIsLockedAsync(sourceRackVm.Id, false);
                     Application.Current.Dispatcher.Invoke(() => OnRackLockStateChanged?.Invoke(sourceRackVm.Id, false));
-                    if (destinationRackVm.Title.Equals("OUT"))
-                    {
-                        await _databaseService.UpdateIsLockedAsync(destinationRackVm.Id, true); // 재공풐 반출 시 click 안되게...
-                        Application.Current.Dispatcher.Invoke(() => OnRackLockStateChanged?.Invoke(destinationRackVm.Id, false));
-                    }
-                    else
+                    //if (destinationRackVm.Title.Equals("OUT"))
+                    //{
+                    //    await _databaseService.UpdateIsLockedAsync(destinationRackVm.Id, true); // 재공풐 반출 시 click 안되게...
+                    //    Application.Current.Dispatcher.Invoke(() => OnRackLockStateChanged?.Invoke(destinationRackVm.Id, false));
+                    //}
+                    //else
                     {
                         await _databaseService.UpdateIsLockedAsync(destinationRackVm.Id, false);
                         Application.Current.Dispatcher.Invoke(() => OnRackLockStateChanged?.Invoke(destinationRackVm.Id, false));

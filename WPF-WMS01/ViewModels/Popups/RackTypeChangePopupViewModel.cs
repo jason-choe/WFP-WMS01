@@ -16,6 +16,20 @@ namespace WPF_WMS01.ViewModels.Popups
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
 
+        private string _messageTitle;
+        public string MessageTitle
+        {
+            get { return _messageTitle; }
+            set
+            {
+                if (_messageTitle != value)
+                {
+                    _messageTitle = value;
+                    OnPropertyChanged(nameof(MessageTitle));
+                }
+            }
+        }
+
         private string _message;
         public string Message
         {
@@ -47,17 +61,28 @@ namespace WPF_WMS01.ViewModels.Popups
         public ICommand ConfirmCommand { get; private set; }
         public ICommand CancelCommand { get; private set; }
 
-        public RackTypeChangePopupViewModel(int? currentRackType = null, int? newRackType = null)
+        public RackTypeChangePopupViewModel(int type, int? currentRackType = null, int? newRackType = null)
         {
-            if (currentRackType != null && newRackType != null)
+            if(type == 0)
             {
+                MessageTitle = "랙 용도 변경 확인";
                 string currentTypeDesc = currentRackType == 0 ? "포장 전 팔레트" : "포장 후 팔레트";
                 string newTypeDesc = newRackType == 0 ? "포장 전 팔레트" : "포장 후 팔레트";
                 Message = $"'{newTypeDesc}' 보관용 랙으로 변경하시겠습니까?";
             }
+            else if(type == 1)
+            {
+                MessageTitle = "안전 지역으로 AMR_2 이동";
+                Message = "Poongsan_2 AMR을 traffic free 영역으로 이동시키겠습니까?";
+            }
+            else if(type == 2)
+            {
+                MessageTitle = "재공품 반출";
+                Message = "재공품을 반출 대기 장소로 이동시키겠습니까?";
+            }
             else
             {
-                Message = "Poongsan_2 AMR을 traffic free 영역으로 이동시키겠습니까?";
+                return; // unknown type
             }
 
             ConfirmCommand = new RelayCommand(ExecuteConfirm); // <Window> 제거

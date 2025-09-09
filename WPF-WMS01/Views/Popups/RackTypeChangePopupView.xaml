@@ -22,7 +22,7 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0" Text="랙 용도 변경 확인" FontWeight="Bold" FontSize="24" Margin="0,0,0,20"
+        <TextBlock Grid.Row="0" Text="{Binding MessageTitle}" FontWeight="Bold" FontSize="24" Margin="0,0,0,20"
                    HorizontalAlignment="Center"/>
 
         <TextBlock Grid.Row="1" Text="{Binding Message}" TextWrapping="Wrap" FontSize="18"
