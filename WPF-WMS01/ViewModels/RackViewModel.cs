@@ -614,6 +614,20 @@ namespace WPF_WMS01.ViewModels
                 return;
             }
 
+            // Call button에 의한 mission이 싱행되고 있으면 재공품 반출 못함 
+            if(_mainViewModel.ModbusButtons != null)
+            {
+                foreach(var buttonVm in _mainViewModel.ModbusButtons)
+                {
+                    if(buttonVm.IsProcessing == true)
+                    {
+                        MessageBox.Show("콜 버튼 작업이 진행 중에는 재공품 반출이 불가능합니다", "알림", MessageBoxButton.OK, MessageBoxImage.Information);
+                        return;
+                    }
+                }
+                _mainViewModel.PlcStatusIsPaused = true; // 우선 콜 버튼 액션을 금지
+            }
+
             var popupViewModel = new RackTypeChangePopupViewModel(2, sourceRackViewModel.Id);
             var popupView = new RackTypeChangePopupView
             {
@@ -732,7 +746,8 @@ namespace WPF_WMS01.ViewModels
                             LinkWaitTimeout = 3600,
                             PostMissionOperations = new List<MissionSubOperation> {
                                 new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "Discrete Input 13 체크", McDiscreteInputAddress = 13 },
-                                new MissionSubOperation { Type = SubOperationType.DbUpdateRackState, Description = "랙 상태 업데이트", SourceRackIdForDbUpdate = amrRackViewModel.Id, DestRackIdForDbUpdate = outRackViewModel.Id }
+                                new MissionSubOperation { Type = SubOperationType.DbUpdateRackState, Description = "랙 상태 업데이트", SourceRackIdForDbUpdate = amrRackViewModel.Id, DestRackIdForDbUpdate = outRackViewModel.Id },
+                                //new MissionSubOperation { Type = SubOperationType.SetPlcStatusIsPaused, Description = "버튼 콜 입력 허용", PauseButtonCallPlcStatus = false}
                             }
                         }
                     };
@@ -774,6 +789,7 @@ namespace WPF_WMS01.ViewModels
             }
             else
             {
+                _mainViewModel.PlcStatusIsPaused = false; // 콜버튼 액션 허용
                 ShowAutoClosingMessage("재공품 반출작업이 취소되었습니다.");
             }
         }
@@ -902,7 +918,8 @@ namespace WPF_WMS01.ViewModels
                             IsLinkable = true,
                             LinkWaitTimeout = 3600,
                             PostMissionOperations = new List<MissionSubOperation> {
-                                new MissionSubOperation { Type = SubOperationType.DbUpdateRackState, Description = "랙 상태 업데이트", SourceRackIdForDbUpdate = outRackViewModel.Id, DestRackIdForDbUpdate = null }
+                                new MissionSubOperation { Type = SubOperationType.DbUpdateRackState, Description = "랙 상태 업데이트", SourceRackIdForDbUpdate = outRackViewModel.Id, DestRackIdForDbUpdate = null },
+                                new MissionSubOperation { Type = SubOperationType.SetPlcStatusIsPaused, Description = "콜버튼 액션 허용", PauseButtonCallPlcStatus = false }
                             }
                         },
                         // Move, Drop

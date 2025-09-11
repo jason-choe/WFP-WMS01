@@ -182,6 +182,14 @@ namespace WPF_WMS01.ViewModels
             }
         }
 
+        private bool _plcStatusIsPaused = false; // PLC 구동 상태 : 재공품 반출 시 off (= true)
+        public bool PlcStatusIsPaused
+        {
+            get => _plcStatusIsPaused;
+            set => SetProperty(ref _plcStatusIsPaused, value);
+        }
+        
+
         private string _loginStatusMessage;
         public string LoginStatusMessage
         {
@@ -977,7 +985,7 @@ namespace WPF_WMS01.ViewModels
                 // UI 스레드에서 PlcStatusIsRun 업데이트
                 Application.Current.Dispatcher.Invoke(() =>
                 {
-                    PlcStatusIsRun = (plcStatus != null && plcStatus.Length > 0 && plcStatus[0]);
+                    PlcStatusIsRun = (plcStatus != null && plcStatus.Length > 0 && plcStatus[0] && !PlcStatusIsPaused);
                 });
 
                 if (!PlcStatusIsRun)
@@ -1206,6 +1214,7 @@ namespace WPF_WMS01.ViewModels
                 string swapPoint = null;
                 // Determine MC Protocol IP address based on button content
                 string? mcProtocolIpAddress = null;
+                ushort? mcWordAddress = null;
                 string? readStringValue = null;
                 int? readIntvalue = null;
 
@@ -1386,6 +1395,7 @@ namespace WPF_WMS01.ViewModels
                             readStringValue = "223A-1178";
                             readIntvalue = 60;
                             mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddress556mm2"] ?? "192.168.200.62";
+                            mcWordAddress = 5408;
                         }
                         else if (buttonVm.Content.Equals("5.56mm[4]"))
                         {
@@ -1394,6 +1404,7 @@ namespace WPF_WMS01.ViewModels
                             readStringValue = "223A-1179";
                             readIntvalue = 60;
                             mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddress556mm2"] ?? "192.168.200.62";
+                            mcWordAddress = 5392;
                         }
                         else if (buttonVm.Content.Equals("5.56mm[2]"))
                         {
@@ -1401,7 +1412,8 @@ namespace WPF_WMS01.ViewModels
                             swapPoint = "223_1";
                             readStringValue = "223A-1180";
                             readIntvalue = 60;
-                            mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddress556mm1"] ?? "192.168.200.61";
+                            mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddress556mm1"] ?? "127.0.0.1";
+                            mcWordAddress = 5408;
                         }
                         else if (buttonVm.Content.Equals("5.56mm[1]"))
                         {
@@ -1409,7 +1421,8 @@ namespace WPF_WMS01.ViewModels
                             swapPoint = "223_1";
                             readStringValue = "223A-1181";
                             readIntvalue = 60;
-                            mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddress556mm1"] ?? "192.168.200.61";
+                            mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddress556mm1"] ?? "127.0.0.1"; // 192.168.200.101
+                            mcWordAddress = 5392;
                         }
                         else // if (buttonVm.Content.Equals("7.62mm"))
                         {
@@ -1418,6 +1431,7 @@ namespace WPF_WMS01.ViewModels
                             readStringValue = "308B-1178";
                             readIntvalue = 50;
                             mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddress762mm"] ?? "127.168.200.63"; ;
+                            mcWordAddress = 5392;
                         }
 
                         processType = $"{buttonVm.Content} 제품 입고 작업";
@@ -1432,7 +1446,17 @@ namespace WPF_WMS01.ViewModels
                             Priority = buttonVm.Content.Equals("7.62mm") ? 3 : 1,
                             IsLinkable = true,
                             LinkedMission = null,
-                            LinkWaitTimeout = 3600
+                            LinkWaitTimeout = 3600,
+                            //PreMissionOperations = new List<MissionSubOperation> // 매거진에서 공 파레트 픽업 가능한가?
+                            //{
+                                //new MissionSubOperation { Type = SubOperationType.McWaitAvailable, Description = "공 파렛트 배출 준비 완료 체크", WordDeviceCode = "W", McWordAddress = 5406, McWateValueInt = 1, McProtocolIpAddress = "192.68.200.111" }
+                                //new MissionSubOperation { Type = SubOperationType.McReadLotNoBoxCount, Description = "LotNo., BoxCount 읽기", WordDeviceCode = "W", McWordAddress = mcWordAddress, McStringLengthWords = 8, McProtocolIpAddress = mcProtocolIpAddress }
+
+                            //}
+                            //PreMissionOperations = new List<MissionSubOperation> // Read LotNo. BoxCount 
+                            //{
+                            //    new MissionSubOperation { Type = SubOperationType.McReadLotNoBoxCount, Description = "LotNo., BoxCount 읽기", WordDeviceCode = "W", McWordAddress = mcWordAddress, McStringLengthWords = 8, McProtocolIpAddress = mcProtocolIpAddress }
+                            //}
                         });
                         // Step 2 : Check, Move, Pickup
                         missionSteps.Add(new MissionStepDefinition
@@ -1444,10 +1468,10 @@ namespace WPF_WMS01.ViewModels
                             IsLinkable = true,
                             LinkedMission = null,
                             LinkWaitTimeout = 3600,
-                            //PreMissionOperations = new List<MissionSubOperation> // 매거진에서 공 파레트 픽업 가능한가?
-                            //{
-                            //    new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "MC Protocol 10번 워드에 2쓰기", WordDeviceCode = "D", McWordAddress = 10, McWriteValueInt = 2, McProtocolIpAddress = mcProtocolIpAddress }
-                            //}
+                            PreMissionOperations = new List<MissionSubOperation> // 매거진에서 공 파레트 픽업 가능한가?
+                            {
+                                new MissionSubOperation { Type = SubOperationType.McWaitAvailable, Description = "공 파렛트 배출 준비 완료 체크", WordDeviceCode = "W", McWordAddress = 5406, McWateValueInt = 1, McProtocolIpAddress = "192.68.200.111" }
+                            }
                         });
                         // Step 3 : Move, Drop
                         missionSteps.Add(new MissionStepDefinition
@@ -1485,10 +1509,10 @@ namespace WPF_WMS01.ViewModels
                             IsLinkable = true,
                             LinkedMission = null,
                             LinkWaitTimeout = 3600,
-                            //PreMissionOperations = new List<MissionSubOperation> // Read LotNo. BoxCount 
-                            //{
-                            //    new MissionSubOperation { Type = SubOperationType.McReadLotNoBoxCount, Description = "LotNo., BoxCount 읽기", WordDeviceCode = "W", McWordAddress = 10, McWriteValueInt = 3, McProtocolIpAddress = mcProtocolIpAddress }
-                            //}
+                            PreMissionOperations = new List<MissionSubOperation> // Read LotNo. BoxCount 
+                            {
+                                new MissionSubOperation { Type = SubOperationType.McReadLotNoBoxCount, Description = "LotNo., BoxCount 읽기", WordDeviceCode = "W", McWordAddress = mcWordAddress, McStringLengthWords = 8, McProtocolIpAddress = mcProtocolIpAddress }
+                            }
                         });
                         // Step 6 : Move, Pickup
                         missionSteps.Add(new MissionStepDefinition

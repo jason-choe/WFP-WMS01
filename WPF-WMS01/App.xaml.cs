@@ -47,7 +47,7 @@ namespace WPF_WMS01
 
             // App.config에서 미션 체크용 Modbus 설정 읽기
             string missionModbusMode = ConfigurationManager.AppSettings["MissionModbusMode"] ?? "TCP";
-            string missionModbusIp = ConfigurationManager.AppSettings["MissionModbusIpAddress"] ?? "127.0.0.1";
+            string missionModbusIp = ConfigurationManager.AppSettings["MissionModbusIpAddress"] ?? "192.168.200.202";
             int missionModbusPort = int.Parse(ConfigurationManager.AppSettings["MissionModbusPort"] ?? "503");
             byte missionModbusSlaveId = ParseByteConfig(ConfigurationManager.AppSettings["MissionModbusSlaveId"], 1, false); // Modbus Slave ID는 보통 10진수
             string missionModbusComPort = ConfigurationManager.AppSettings["MissionModbusComPort"] ?? "COM4";
@@ -57,8 +57,8 @@ namespace WPF_WMS01
             StopBits missionModbusStopBits = (StopBits)Enum.Parse(typeof(StopBits), ConfigurationManager.AppSettings["ModbusStopBits"] ?? "One");
 
             // App.config에서 MC Protocol 설정 읽기
-            string mcProtocolIp = ConfigurationManager.AppSettings["McProtocolIpAddress"] ?? "192.168.0.100";
-            int mcProtocolPort = int.Parse(ConfigurationManager.AppSettings["McProtocolPort"] ?? "5000");
+            string mcProtocolIp = ConfigurationManager.AppSettings["McProtocolIpAddress"] ?? "192.168.200.61";
+            int mcProtocolPort = int.Parse(ConfigurationManager.AppSettings["McProtocolPort"] ?? "6000");
 
             // FIX: McProtocolCpuType은 App.config에 10진수 값으로 있으므로 기본적으로 10진수 파싱 (parseAsHexByDefault: false)
             byte mcProtocolCpuType = ParseByteConfig(ConfigurationManager.AppSettings["McProtocolCpuType"], 0x90, false);
@@ -129,7 +129,8 @@ namespace WPF_WMS01
                     () => mainViewModelInstance.InputStringForButton, // InputStringForButton 델리게이트 전달
                     () => mainViewModelInstance.InputStringForBoxes, // InputStringForBoxes 델리게이트 전달
                     mainViewModelInstance.SetInputStringForButton,
-                    mainViewModelInstance.SetInputStringForBoxes
+                    mainViewModelInstance.SetInputStringForBoxes,
+                    mainViewModelInstance
                 );
             });
 

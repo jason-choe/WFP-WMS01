@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using System.Diagnostics;
 using System.Linq; // For byte array manipulation
 using System.Text; // For string encoding
+using System.Windows;
 
 namespace WPF_WMS01.Services
 {
@@ -34,7 +35,7 @@ namespace WPF_WMS01.Services
         /// <param name="ipAddress">PLC의 IP 주소.</param>
         /// <param name="port">PLC의 포트 번호 (일반적으로 5000).</param>
         /// <param name="cpuType">PLC CPU 타입 (예: 0x90 for QCPU). Hex 값으로 전달.</param>
-        /// <param name="networkNo">네트워크 번호 (기본 0x00).</param>
+        /// <param name="networkNo">네트워크 번호 (기본 0x00).</param> // 1
         /// <param name="pcNo">PC 번호 (기본 0xFF).</param>
         public McProtocolService(string ipAddress, int port, byte cpuType, byte networkNo, byte pcNo)
         {
@@ -102,6 +103,7 @@ namespace WPF_WMS01.Services
             catch (Exception ex)
             {
                 _isConnected = false;
+                MessageBox.Show($"Connection failed: Network error or no server response: {ex.Message} ({_ipAddress}:{_port})", "PLC/MCP Connection Error");
                 Debug.WriteLine($"[McProtocolService] Connection failed: {ex.Message}");
                 Dispose(); // 연결 실패 시 자원 정리
                 return false;
@@ -219,7 +221,7 @@ namespace WPF_WMS01.Services
                 Debug.WriteLine("[McProtocolService] Not connected. Attempting to reconnect for ReadWordsAsync.");
                 if (!await ConnectAsync(ipAddress).ConfigureAwait(false))
                 {
-                    throw new InvalidOperationException("MC Protocol PLC에 연결되어 있지 않습니다.");
+                    throw new InvalidOperationException("ReadWordsAsync: MC Protocol PLC에 연결되어 있지 않습니다.");
                 }
             }
 
@@ -299,7 +301,7 @@ namespace WPF_WMS01.Services
                 Debug.WriteLine("[McProtocolService] Not connected. Attempting to reconnect for WriteWordsAsync.");
                 if (!await ConnectAsync(ipAddress).ConfigureAwait(false))
                 {
-                    throw new InvalidOperationException("MC Protocol PLC에 연결되어 있지 않습니다.");
+                    throw new InvalidOperationException("WriteWordsAsync: MC Protocol PLC에 연결되어 있지 않습니다.");
                 }
             }
 
@@ -390,7 +392,7 @@ namespace WPF_WMS01.Services
         }
 
         /// <summary>
-        /// PLC의 워드 디바이스에서 20바이트(10워드) 문자열을 읽습니다.
+        /// PLC의 워드 디바이스에서 16바이트(8워드) 문자열을 읽습니다.
         /// 연결 및 해제를 포함한 단일 시퀀스로 처리됩니다.
         /// </summary>
         /// <param name="deviceCode">디바이스 코드 (예: "D", "R").</param>
@@ -400,8 +402,8 @@ namespace WPF_WMS01.Services
         {
             try
             {
-                await ConnectAsync().ConfigureAwait(false); // 매 호출마다 연결
-                const ushort STRING_WORD_LENGTH = 10; // 20 bytes = 10 words
+                //await ConnectAsync().ConfigureAwait(false); // 매 호출마다 연결
+                const ushort STRING_WORD_LENGTH = 8; // 16 bytes = 8 words
                 ushort[] words = await ReadWordsAsync(ipAddress, deviceCode, address, STRING_WORD_LENGTH).ConfigureAwait(false);
 
                 byte[] bytes = new byte[STRING_WORD_LENGTH * 2];
@@ -425,7 +427,7 @@ namespace WPF_WMS01.Services
         }
 
         /// <summary>
-        /// PLC의 워드 디바이스에 20바이트(10워드) 문자열을 씁니다.
+        /// PLC의 워드 디바이스에 16바이트(8워드) 문자열을 씁니다.
         /// 연결 및 해제를 포함한 단일 시퀀스로 처리됩니다.
         /// </summary>
         /// <param name="deviceCode">디바이스 코드 (예: "D", "R").</param>
@@ -436,9 +438,9 @@ namespace WPF_WMS01.Services
         {
             try
             {
-                await ConnectAsync().ConfigureAwait(false); // 매 호출마다 연결
-                const ushort STRING_BYTE_LENGTH = 20;
-                const ushort STRING_WORD_LENGTH = 10; // 20 bytes = 10 words
+                //await ConnectAsync().ConfigureAwait(false); // 매 호출마다 연결
+                const ushort STRING_BYTE_LENGTH = 16;
+                const ushort STRING_WORD_LENGTH = 8; // 16 bytes = 8 words
 
                 byte[] stringBytes = Encoding.ASCII.GetBytes(value);
                 byte[] paddedBytes = new byte[STRING_BYTE_LENGTH];
@@ -473,7 +475,7 @@ namespace WPF_WMS01.Services
         {
             try
             {
-                await ConnectAsync().ConfigureAwait(false); // 매 호출마다 연결
+                //await ConnectAsync().ConfigureAwait(false); // 매 호출마다 연결
                 const ushort INT_WORD_LENGTH = 2; // 32-bit int = 2 words
                 ushort[] words = await ReadWordsAsync(ipAddress, deviceCode, address, INT_WORD_LENGTH).ConfigureAwait(false);
 
@@ -504,7 +506,7 @@ namespace WPF_WMS01.Services
         {
             try
             {
-                await ConnectAsync().ConfigureAwait(false); // 매 호출마다 연결
+                //await ConnectAsync().ConfigureAwait(false); // 매 호출마다 연결
                 ushort[] words = new ushort[2];
                 words[0] = (ushort)(value & 0xFFFF); // 하위 16비트
                 words[1] = (ushort)((value >> 16) & 0xFFFF); // 상위 16비트

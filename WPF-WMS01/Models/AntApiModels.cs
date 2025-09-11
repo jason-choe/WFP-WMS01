@@ -339,6 +339,7 @@ namespace WPF_WMS01.Models
         public int? WaitTimeoutSeconds { get; set; } // 센서 대기 타임아웃 (초)
         public string BitDeviceCode { get; set; } = "Y"; // 비트 쓰기/읽기 시 디바이스 코드 (예: X, Y)
         public string WordDeviceCode { get; set; } = "D"; // 워드 쓰기/읽기 시 디바이스 코드 (예: D, W, R)
+        public bool? PauseButtonCallPlcStatus { get; set; } 
 
 
         // DB 관련 파라미터
@@ -413,7 +414,10 @@ namespace WPF_WMS01.Models
         UiDisplayLotNoBoxCount,     // 4-1: 임시 저장소의 LotNo, Box Count를 UI의 TextBox에 표시
 
         // Other Operations (Modbus Discrete Input Check)
-        CheckModbusDiscreteInput    // 4-7: 기존 Modbus Discrete Input 체크 로직 (_missionCheckModbusService 사용)
+        CheckModbusDiscreteInput,    // 4-7: 기존 Modbus Discrete Input 체크 로직 (_missionCheckModbusService 사용)
+
+        // Modbus PLC option
+        SetPlcStatusIsPaused        // Buttpn call modebus enabled/disabled
     }
 
     // 기존 McOperationType 열거형 유지 (이전 코드 호환성을 위해)

@@ -78,6 +78,8 @@ namespace WPF_WMS01.Services
         /// <param name="missionCheckModbusService">미션 실패 확인용으로 미리 설정된 ModbusClientService 인스턴스.</param>
         /// <param name="getInputStringForButtonFunc">InputStringForButton 값을 가져오는 델리게이트 (사용자 입력값).</param>
         /// <param name="getInputStringForBoxesFunc">InputStringForBoxes 값을 가져오는 델리게이트 (사용자 입력값).</param>
+        /// <param name="setInputStringForButtonFunc">InputStringForButton 값을 가져오는 델리게이트 (사용자 입력값).</param>
+        /// <param name="setInputStringForBoxesFunc">InputStringForBoxes 값을 가져오는 델리게이트 (사용자 입력값).</param>
         public RobotMissionService(
             HttpService httpService,
             DatabaseService databaseService,
@@ -89,8 +91,8 @@ namespace WPF_WMS01.Services
             Func<string> getInputStringForButtonFunc, // 델리게이트 재추가
             Func<string> getInputStringForBoxesFunc, // 델리게이트 재추가
             Action<string> setInputStringForButtonFunc,
-            Action<string> setInputStringForBoxesFunc)
-
+            Action<string> setInputStringForBoxesFunc,
+            MainViewModel mainViewModel)
         {
             _httpService = httpService ?? throw new ArgumentNullException(nameof(httpService));
             _databaseService = databaseService ?? throw new ArgumentNullException(nameof(databaseService));
@@ -102,7 +104,7 @@ namespace WPF_WMS01.Services
             _getInputStringForBoxesFunc = getInputStringForBoxesFunc ?? throw new ArgumentNullException(nameof(getInputStringForBoxesFunc)); // 델리게이트 초기화
             _setInputStringForButtonFunc = setInputStringForButtonFunc ?? throw new ArgumentNullException(nameof(setInputStringForButtonFunc));
             _setInputStringForBoxesFunc = setInputStringForBoxesFunc ?? throw new ArgumentNullException(nameof(setInputStringForBoxesFunc));
-
+            _mainViewModel = mainViewModel;
             // 미션 실패 확인용 ModbusClientService 인스턴스 주입
             _missionCheckModbusService = missionCheckModbusService ?? throw new ArgumentNullException(nameof(missionCheckModbusService));
             Debug.WriteLine($"[RobotMissionService] Mission Check Modbus Service Injected. Current connection status: {_missionCheckModbusService.IsConnected}");
@@ -785,7 +787,7 @@ namespace WPF_WMS01.Services
                         // ConnectAsync는 내부적으로 재연결 로직을 포함하고 있으므로 여기서 직접 Connect/Disconnect를 관리하지 않아도 됩니다.
                         string lotNoPart1 = await _mcProtocolService.ReadStringDataAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value).ConfigureAwait(false);
                         int lotNoPart2 = await _mcProtocolService.ReadIntDataAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + subOp.McStringLengthWords.Value).ConfigureAwait(false);
-                        int boxCount = await _mcProtocolService.ReadIntDataAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + subOp.McStringLengthWords.Value + 2).ConfigureAwait(false);
+                        int boxCount = await _mcProtocolService.ReadIntDataAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + + subOp.McStringLengthWords.Value + 2).ConfigureAwait(false);
 
                         processInfo.ReadStringValue = $"{lotNoPart1.Trim()}-{lotNoPart2:D4}"; // "5-3"에 따라 LotNo 조합
                         processInfo.ReadIntValue = boxCount; // Box Count 저장
@@ -818,8 +820,8 @@ namespace WPF_WMS01.Services
                         int writeLotNoPart2 = int.Parse(lotNoParts[1]);
 
                         await _mcProtocolService.WriteStringDataAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value, writeLotNoPart1).ConfigureAwait(false);
-                        await _mcProtocolService.WriteIntDataAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + subOp.McStringLengthWords.Value, writeLotNoPart2).ConfigureAwait(false);
-                        await _mcProtocolService.WriteIntDataAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + subOp.McStringLengthWords.Value + 2, processInfo.ReadIntValue.Value).ConfigureAwait(false);
+                        await _mcProtocolService.WriteIntDataAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + 8 /*subOp.McStringLengthWords.Value*/, writeLotNoPart2).ConfigureAwait(false);
+                        await _mcProtocolService.WriteIntDataAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + 10 /*subOp.McStringLengthWords.Value + 2*/, processInfo.ReadIntValue.Value).ConfigureAwait(false);
 
                         Debug.WriteLine($"[RobotMissionService] McWriteLotNoBoxCount: LotNo '{processInfo.ReadStringValue}', BoxCount {processInfo.ReadIntValue.Value} Written.");
                         break;
@@ -933,6 +935,14 @@ namespace WPF_WMS01.Services
 
                     case SubOperationType.CheckModbusDiscreteInput:
                         await PerformModbusDiscreteInputCheck(processInfo, subOp.McDiscreteInputAddress).ConfigureAwait(false);
+                        break;
+
+                    case SubOperationType.SetPlcStatusIsPaused:
+                        if (!subOp.PauseButtonCallPlcStatus.HasValue)
+                        {
+                            throw new ArgumentException("SetPlcStatusIsPaused: PauseButtonCallPlcStatus 지정되지 않았습니다.");
+                        }
+                        _mainViewModel.PlcStatusIsPaused = subOp.PauseButtonCallPlcStatus.Value;
                         break;
 
                     case SubOperationType.None:
