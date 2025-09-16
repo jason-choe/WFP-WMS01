@@ -135,6 +135,20 @@ namespace WPF_WMS01.Models
             }
         }
 
+        private int? _insertedIn;
+        public int? InsertedIn
+        {
+            get { return _insertedIn; }
+            set
+            {
+                if (_insertedIn != value)
+                {
+                    _insertedIn = value;
+                    //OnPropertyChanged(nameof(BoxCount)); // BoxCount 변경 시 알림 추가
+                }
+            }
+        }
+
         private DateTime? _rackedAt;
         public DateTime? RackedAt
         {
@@ -164,7 +178,7 @@ namespace WPF_WMS01.Models
         }
 
         // 모든 속성을 받는 생성자 추가
-        public Rack(int id, string title, int rackType, int bulletType, bool isVisible, bool isLocked, string lotNumber, DateTime? rackedAt, int locationArea, int boxCount)
+        public Rack(int id, string title, int rackType, int bulletType, bool isVisible, bool isLocked, string lotNumber, DateTime? rackedAt, int locationArea, int boxCount, int? insertedIn)
         {
             _id = id; // Id는 private set이므로 직접 할당
             _title = title;
@@ -176,6 +190,7 @@ namespace WPF_WMS01.Models
             _rackedAt = rackedAt;
             _locationArea = locationArea; // LocationArea 초기화
             _boxCount = boxCount;
+            _insertedIn = insertedIn;
         }
 
         public Rack()

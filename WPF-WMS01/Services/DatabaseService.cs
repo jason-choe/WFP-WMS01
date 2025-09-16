@@ -36,7 +36,7 @@ namespace WPF_WMS01.Services
         public async Task<List<Rack>> GetRackStatesAsync()
         {
             List<Rack> currentRacks = new List<Rack>(); // 현재 DB에서 읽어올 랙 목록 (캐시된 객체들로 구성)
-            string query = "SELECT id as 'Id', rack_name as 'Title', rack_type AS 'RackType', bullet_type as 'BulletType', visible AS 'IsVisible', locked AS 'IsLocked', lot_number AS 'LotNumber', box_count AS 'BoxCount', racked_at AS 'RackedAt', location_area AS 'LocationArea' FROM RackState";
+            string query = "SELECT id as 'Id', rack_name as 'Title', rack_type AS 'RackType', bullet_type as 'BulletType', visible AS 'IsVisible', locked AS 'IsLocked', lot_number AS 'LotNumber', box_count AS 'BoxCount', racked_at AS 'RackedAt', location_area AS 'LocationArea', inserted_in AS 'InsertedIn' FROM RackState";
 
             using (SqlConnection connection = new SqlConnection(_connectionString))
             {
@@ -57,6 +57,7 @@ namespace WPF_WMS01.Services
                             int boxCount = reader.IsDBNull(reader.GetOrdinal("BoxCount")) ? 0 : Convert.ToInt32(reader["BoxCount"]);
                             DateTime? rackedAt = reader.IsDBNull(reader.GetOrdinal("RackedAt")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("RackedAt"));
                             int locationArea = reader.IsDBNull(reader.GetOrdinal("LocationArea")) ? 0 : Convert.ToInt32(reader["LocationArea"]);
+                            int? insertedIn = reader.IsDBNull(reader.GetOrdinal("InsertedIn")) ? 0 : Convert.ToInt32(reader["InsertedIn"]);
 
                             Rack rack;
                             lock (_cacheLock) // 캐시 접근 시 락 걸기 (멀티스레드 환경 대비)
@@ -73,11 +74,12 @@ namespace WPF_WMS01.Services
                                     rack.BoxCount = boxCount;
                                     rack.RackedAt = rackedAt;
                                     rack.LocationArea = locationArea;
+                                    rack.InsertedIn = insertedIn;
                                 }
                                 else
                                 {
                                     // 캐시에 없는 새로운 랙이면 생성 후 캐시에 추가
-                                    rack = new Rack(id, title, rackType, bulletType, isVisible, isLocked, lotNumber, rackedAt, locationArea, boxCount);
+                                    rack = new Rack(id, title, rackType, bulletType, isVisible, isLocked, lotNumber, rackedAt, locationArea, boxCount, insertedIn);
                                     _rackCache.Add(id, rack);
                                 }
                             }
@@ -111,7 +113,7 @@ namespace WPF_WMS01.Services
             }
 
             // 캐시에 없으면 DB에서 조회
-            string query = "SELECT id as 'Id', rack_name as 'Title', rack_type AS 'RackType', bullet_type as 'BulletType', visible AS 'IsVisible', locked AS 'IsLocked', lot_number AS 'LotNumber', box_count AS 'BoxCount', racked_at AS 'RackedAt', location_area AS 'LocationArea' FROM RackState WHERE id = @rackId";
+            string query = "SELECT id as 'Id', rack_name as 'Title', rack_type AS 'RackType', bullet_type as 'BulletType', visible AS 'IsVisible', locked AS 'IsLocked', lot_number AS 'LotNumber', box_count AS 'BoxCount', racked_at AS 'RackedAt', location_area AS 'LocationArea' FROM RackState , inserted_in AS 'InsertedIn' FROM RackStateWHERE id = @rackId";
 
             using (SqlConnection connection = new SqlConnection(_connectionString))
             {
@@ -133,8 +135,9 @@ namespace WPF_WMS01.Services
                             int boxCount = reader.IsDBNull(reader.GetOrdinal("BoxCount")) ? 0 : Convert.ToInt32(reader["BoxCount"]);
                             DateTime? rackedAt = reader.IsDBNull(reader.GetOrdinal("RackedAt")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("RackedAt"));
                             int locationArea = reader.IsDBNull(reader.GetOrdinal("LocationArea")) ? 0 : Convert.ToInt32(reader["LocationArea"]);
+                            int? insertedIn = reader.IsDBNull(reader.GetOrdinal("InsertedIn")) ? 0 : Convert.ToInt32(reader["InsertedIn"]);
 
-                            Rack newRack = new Rack(id, title, rackType, bulletType, isVisible, isLocked, lotNumber, rackedAt, locationArea, boxCount);
+                            Rack newRack = new Rack(id, title, rackType, bulletType, isVisible, isLocked, lotNumber, rackedAt, locationArea, boxCount, insertedIn);
 
                             lock (_cacheLock)
                             {
@@ -224,6 +227,27 @@ namespace WPF_WMS01.Services
             }
         }
 
+        // Lot Number 업데이트 메서드 (LotNumber, BoxCount, RackedAt을 한 번에 업데이트)
+        public async Task UpdateInsertedInAsync(int rackId, int id)
+        {
+            using (var connection = new SqlConnection(_connectionString))
+            {
+                await connection.OpenAsync();
+                var command = new SqlCommand("UPDATE RackState SET inserted_in = @id WHERE id = @rackId", connection);
+                command.Parameters.AddWithValue("@id", id);
+                await command.ExecuteNonQueryAsync();
+            }
+
+            // DB 업데이트 후 캐시도 업데이트
+            lock (_cacheLock)
+            {
+                if (_rackCache.TryGetValue(rackId, out Rack rackToUpdate))
+                {
+                    rackToUpdate.InsertedIn = id;
+                }
+            }
+        }
+
         // 랙 잠금 상태 업데이트 메서드
         public async Task UpdateIsLockedAsync(int rackId, bool newIsLocked)
         {
@@ -265,6 +289,69 @@ namespace WPF_WMS01.Services
                 {
                     rackToUpdate.IsVisible = newIsVisible;
                 }
+            }
+        }
+
+        // 입고 장부 insert 위치 업데이트 메서드
+        public async Task UpdateIsInsertedInAsync(int rackId, int newInsertedIn)
+        {
+            using (var connection = new SqlConnection(_connectionString))
+            {
+                await connection.OpenAsync();
+                var command = new SqlCommand("UPDATE RackState SET inserted_in = @insertedIn WHERE id = @rackId", connection);
+                command.Parameters.AddWithValue("@insertedIn", newInsertedIn);
+                command.Parameters.AddWithValue("@rackId", rackId);
+                await command.ExecuteNonQueryAsync();
+            }
+
+            // DB 업데이트 후 캐시도 업데이트
+            lock (_cacheLock)
+            {
+                if (_rackCache.TryGetValue(rackId, out Rack rackToUpdate))
+                {
+                    rackToUpdate.InsertedIn = newInsertedIn;
+                }
+            }
+        }
+
+        // 입고 데이터 insert
+        public async Task<int> InsertInbountDBAsync(string rackName, int bulletType, string lotNumber, int boxCount, DateTime? inboundAt)
+        {
+            using (var connection = new SqlConnection(_connectionString))
+            {
+                await connection.OpenAsync();
+                var command = new SqlCommand(
+                    "INSERT INTO InOutLedger (rack_name, bullet_type, lot_number, box_count, inbound_at) " +
+                    "VALUES (@rackName, @bulletType, @lotNumber, @boxCount, @inboundAt);" +
+                    " SELECT CAST(scope_identity() AS int);",
+                    connection
+                );
+                command.Parameters.AddWithValue("@rackName", rackName);
+                command.Parameters.AddWithValue("@bulletType", bulletType);
+                command.Parameters.AddWithValue("@lotNumber", lotNumber);
+                command.Parameters.AddWithValue("@boxCount", boxCount);
+                command.Parameters.AddWithValue("@inboundAt", inboundAt);
+
+                var newId = await command.ExecuteScalarAsync();
+                // The ID is returned as a decimal, so we need to convert it to an int
+                int insertedId = Convert.ToInt32(newId);
+
+                return insertedId;
+            }
+        }
+
+        // 출고 데이터 update
+        public async Task UpdateOutboundDBAsync(int insertedId)
+        {
+            using (var connection = new SqlConnection(_connectionString))
+            {
+                await connection.OpenAsync();
+                var command = new SqlCommand(
+                    "UPDATE InOutLedger SET outbound_at = GetDate() WHERE id = @insertedId",
+                    connection
+                );
+                command.Parameters.AddWithValue("@insertedId", insertedId);
+                await command.ExecuteNonQueryAsync();
             }
         }
     }

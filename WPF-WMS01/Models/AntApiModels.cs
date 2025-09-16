@@ -417,7 +417,13 @@ namespace WPF_WMS01.Models
         CheckModbusDiscreteInput,    // 4-7: 기존 Modbus Discrete Input 체크 로직 (_missionCheckModbusService 사용)
 
         // Modbus PLC option
-        SetPlcStatusIsPaused        // Buttpn call modebus enabled/disabled
+        SetPlcStatusIsPaused,       // Buttpn call modebus enabled/disabled
+
+        // insert 입고 to DB
+        DbInsertInboundData,
+
+        // update 출고 to DB
+        DbUpdateOutboundData
     }
 
     // 기존 McOperationType 열거형 유지 (이전 코드 호환성을 위해)

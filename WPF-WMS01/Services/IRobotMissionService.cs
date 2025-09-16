@@ -63,7 +63,7 @@ namespace WPF_WMS01.Services
             ushort? initiatingCoilAddress = null,
             bool isWarehouseMission = false,
             string readStringValue = null,
-            int? readIntValue = null
+            ushort? readIntValue = null
         );
 
         /// <summary>

@@ -93,7 +93,7 @@ namespace WPF_WMS01.Models
 
         // 임시 저장소: MC Protocol Read/Write 및 DB Read/Write 간 데이터 전달용
         public string ReadStringValue { get; set; }
-        public int? ReadIntValue { get; set; }
+        public ushort? ReadIntValue { get; set; }
 
         // 특정 프로세스와 관련된 랙 또는 라인 정보 (선택 사항)
         // RackViewModel은 Models가 아닌 ViewModels 네임스페이스에 있으므로 여기에 ViewModels.RackViewModel 타입으로 선언합니다.
@@ -102,7 +102,7 @@ namespace WPF_WMS01.Models
         // public ViewModels.RackViewModel DestinationRack { get; set; } // 제거
         public List<ViewModels.RackViewModel> RacksToProcess { get; set; } // 여러 랙을 처리할 경우 (예: 출고)
 
-        public RobotMissionInfo(string processId, string processType, List<MissionStepDefinition> missionSteps, List<int> racksLockedByProcess, ushort? initiatingCoilAddress = null, bool isWarehouseMission = false, string readStringValue = null, int? readIntValue = null)
+        public RobotMissionInfo(string processId, string processType, List<MissionStepDefinition> missionSteps, List<int> racksLockedByProcess, ushort? initiatingCoilAddress = null, bool isWarehouseMission = false, string readStringValue = null, ushort? readIntValue = null)
         {
             ProcessId = processId;
             ProcessType = processType;

@@ -53,7 +53,7 @@ namespace WPF_WMS01.Services
         /// <returns>연결 성공 여부.</returns>
         public async Task<bool> ConnectAsync()
         {
-            return await ConnectAsync(_ipAddress, _port).ConfigureAwait(false);
+            return await ConnectAsync(_ipAddress, _port);//.ConfigureAwait(false);
         }
 
         /// <summary>
@@ -94,7 +94,7 @@ namespace WPF_WMS01.Services
             try
             {
                 Debug.WriteLine($"[McProtocolService] Attempting to connect to {_ipAddress}:{_port}...");
-                await _tcpClient.ConnectAsync(_ipAddress, _port).ConfigureAwait(false);
+                await _tcpClient.ConnectAsync(_ipAddress, _port);//.ConfigureAwait(false);
                 _networkStream = _tcpClient.GetStream();
                 _isConnected = true;
                 Debug.WriteLine($"[McProtocolService] Successfully connected to {_ipAddress}:{_port}.");
@@ -159,7 +159,7 @@ namespace WPF_WMS01.Services
             header[0] = 0x50; // Subheader Low
             header[1] = 0x00; // Subheader High
             header[2] = _networkNo; // Network No
-            header[3] = _pcNo; // PC No
+            header[3] = _pcNo; // PC No = PLC 번호
             header[4] = 0xFF; // Request Destination Module I/O No Low
             header[5] = 0x03; // Request Destination Module I/O No High
             header[6] = 0x00; // Request Destination Module Station No
@@ -219,7 +219,7 @@ namespace WPF_WMS01.Services
             if (!IsConnected)
             {
                 Debug.WriteLine("[McProtocolService] Not connected. Attempting to reconnect for ReadWordsAsync.");
-                if (!await ConnectAsync(ipAddress).ConfigureAwait(false))
+                if (!await ConnectAsync(ipAddress))//.ConfigureAwait(false))
                 {
                     throw new InvalidOperationException("ReadWordsAsync: MC Protocol PLC에 연결되어 있지 않습니다.");
                 }
@@ -248,23 +248,23 @@ namespace WPF_WMS01.Services
             command[8] = (byte)(numberOfWords & 0xFF);
             command[9] = (byte)((numberOfWords >> 8) & 0xFF);
 
-            ushort dataLength = (ushort)command.Length;
+            ushort dataLength = (ushort)(command.Length + 2); // +2 for monitoring timer value
             byte[] header = CreateMcProtocolHeader(dataLength);
             byte[] request = header.Concat(command).ToArray();
 
             try
             {
-                await _networkStream.WriteAsync(request, 0, request.Length).ConfigureAwait(false);
+                await _networkStream.WriteAsync(request, 0, request.Length);//.ConfigureAwait(false);
 
                 byte[] responseHeader = new byte[11];
-                int bytesRead = await _networkStream.ReadAsync(responseHeader, 0, responseHeader.Length).ConfigureAwait(false);
+                int bytesRead = await _networkStream.ReadAsync(responseHeader, 0, responseHeader.Length);//.ConfigureAwait(false);
                 if (bytesRead != responseHeader.Length) throw new Exception("MC Protocol 응답 헤더 읽기 실패.");
 
                 ushort responseDataLength = ParseMcProtocolResponseHeader(responseHeader);
 
                 // 응답 데이터 길이 = 요청한 워드 수 * 2 바이트 (워드당 2바이트)
                 byte[] responseData = new byte[responseDataLength - 2]; // -2 for completion code
-                bytesRead = await _networkStream.ReadAsync(responseData, 0, responseData.Length).ConfigureAwait(false);
+                bytesRead = await _networkStream.ReadAsync(responseData, 0, responseData.Length);//.ConfigureAwait(false);
                 if (bytesRead != responseData.Length) throw new Exception("MC Protocol 응답 데이터 읽기 실패.");
 
                 if (responseData.Length != numberOfWords * 2)
@@ -299,7 +299,7 @@ namespace WPF_WMS01.Services
             if (!IsConnected)
             {
                 Debug.WriteLine("[McProtocolService] Not connected. Attempting to reconnect for WriteWordsAsync.");
-                if (!await ConnectAsync(ipAddress).ConfigureAwait(false))
+                if (!await ConnectAsync(ipAddress))//.ConfigureAwait(false))
                 {
                     throw new InvalidOperationException("WriteWordsAsync: MC Protocol PLC에 연결되어 있지 않습니다.");
                 }
@@ -337,16 +337,16 @@ namespace WPF_WMS01.Services
                 command[11 + i * 2] = (byte)((values[i] >> 8) & 0xFF);
             }
 
-            ushort dataLength = (ushort)command.Length;
+            ushort dataLength = (ushort)(command.Length + 2); // +2 for completion code
             byte[] header = CreateMcProtocolHeader(dataLength);
             byte[] request = header.Concat(command).ToArray();
 
             try
             {
-                await _networkStream.WriteAsync(request, 0, request.Length).ConfigureAwait(false);
+                await _networkStream.WriteAsync(request, 0, request.Length);//.ConfigureAwait(false);
 
                 byte[] responseHeader = new byte[11];
-                int bytesRead = await _networkStream.ReadAsync(responseHeader, 0, responseHeader.Length).ConfigureAwait(false);
+                int bytesRead = await _networkStream.ReadAsync(responseHeader, 0, responseHeader.Length);//.ConfigureAwait(false);
                 if (bytesRead != responseHeader.Length) throw new Exception("MC Protocol 응답 헤더 읽기 실패.");
 
                 ParseMcProtocolResponseHeader(responseHeader); // 오류 확인
@@ -370,7 +370,7 @@ namespace WPF_WMS01.Services
         public async Task<ushort> ReadWordAsync(string ipAddress, string deviceCode, int address)
         {
             // ReadWordsAsync를 사용하여 단일 워드를 읽습니다.
-            ushort[] result = await ReadWordsAsync(ipAddress, deviceCode, address, 1).ConfigureAwait(false);
+            ushort[] result = await ReadWordsAsync(ipAddress, deviceCode, address, 1);//.ConfigureAwait(false);
             if (result != null && result.Length > 0)
             {
                 return result[0];
@@ -388,7 +388,7 @@ namespace WPF_WMS01.Services
         public async Task<bool> WriteWordAsync(string ipAddress, string deviceCode, int address, ushort value)
         {
             // WriteWordsAsync를 사용하여 단일 워드를 씁니다.
-            return await WriteWordsAsync(ipAddress, deviceCode, address, new ushort[] { value }).ConfigureAwait(false);
+            return await WriteWordsAsync(ipAddress, deviceCode, address, new ushort[] { value });//.ConfigureAwait(false);
         }
 
         /// <summary>
@@ -404,7 +404,7 @@ namespace WPF_WMS01.Services
             {
                 //await ConnectAsync().ConfigureAwait(false); // 매 호출마다 연결
                 const ushort STRING_WORD_LENGTH = 8; // 16 bytes = 8 words
-                ushort[] words = await ReadWordsAsync(ipAddress, deviceCode, address, STRING_WORD_LENGTH).ConfigureAwait(false);
+                ushort[] words = await ReadWordsAsync(ipAddress, deviceCode, address, STRING_WORD_LENGTH);//.ConfigureAwait(false);
 
                 byte[] bytes = new byte[STRING_WORD_LENGTH * 2];
                 for (int i = 0; i < STRING_WORD_LENGTH; i++)
@@ -451,7 +451,7 @@ namespace WPF_WMS01.Services
                 {
                     words[i] = (ushort)(paddedBytes[i * 2] | (paddedBytes[i * 2 + 1] << 8));
                 }
-                return await WriteWordsAsync(ipAddress, deviceCode, address, words).ConfigureAwait(false);
+                return await WriteWordsAsync(ipAddress, deviceCode, address, words);//.ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -477,7 +477,7 @@ namespace WPF_WMS01.Services
             {
                 //await ConnectAsync().ConfigureAwait(false); // 매 호출마다 연결
                 const ushort INT_WORD_LENGTH = 2; // 32-bit int = 2 words
-                ushort[] words = await ReadWordsAsync(ipAddress, deviceCode, address, INT_WORD_LENGTH).ConfigureAwait(false);
+                ushort[] words = await ReadWordsAsync(ipAddress, deviceCode, address, INT_WORD_LENGTH);//.ConfigureAwait(false);
 
                 // Little Endian으로 ushort 2개를 int로 결합
                 int result = (words[0] | (words[1] << 16));
@@ -510,7 +510,7 @@ namespace WPF_WMS01.Services
                 ushort[] words = new ushort[2];
                 words[0] = (ushort)(value & 0xFFFF); // 하위 16비트
                 words[1] = (ushort)((value >> 16) & 0xFFFF); // 상위 16비트
-                return await WriteWordsAsync(ipAddress, deviceCode, address, words).ConfigureAwait(false);
+                return await WriteWordsAsync(ipAddress, deviceCode, address, words);//.ConfigureAwait(false);
             }
             catch (Exception ex)
             {

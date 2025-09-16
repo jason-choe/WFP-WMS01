@@ -420,7 +420,7 @@ namespace WPF_WMS01.Services
             ushort? initiatingCoilAddress = null, // 새로운 파라미터 추가
             bool isWarehouseMission = false, // isWarehouseMission 파라미터 추가
             string readStringValue = null,
-            int? readIntValue = null
+            ushort? readIntValue = null
         ) 
         {
             // 새로운 미션이 시작될 때 Modbus 오류 플래그를 리셋합니다.
@@ -786,8 +786,8 @@ namespace WPF_WMS01.Services
 
                         // ConnectAsync는 내부적으로 재연결 로직을 포함하고 있으므로 여기서 직접 Connect/Disconnect를 관리하지 않아도 됩니다.
                         string lotNoPart1 = await _mcProtocolService.ReadStringDataAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value).ConfigureAwait(false);
-                        int lotNoPart2 = await _mcProtocolService.ReadIntDataAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + subOp.McStringLengthWords.Value).ConfigureAwait(false);
-                        int boxCount = await _mcProtocolService.ReadIntDataAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + + subOp.McStringLengthWords.Value + 2).ConfigureAwait(false);
+                        ushort lotNoPart2 = await _mcProtocolService.ReadWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + subOp.McStringLengthWords.Value).ConfigureAwait(false);
+                        ushort boxCount = await _mcProtocolService.ReadWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + subOp.McStringLengthWords.Value + 2).ConfigureAwait(false);
 
                         processInfo.ReadStringValue = $"{lotNoPart1.Trim()}-{lotNoPart2:D4}"; // "5-3"에 따라 LotNo 조합
                         processInfo.ReadIntValue = boxCount; // Box Count 저장
@@ -817,11 +817,11 @@ namespace WPF_WMS01.Services
                             throw new FormatException($"LotNo 형식 오류: {processInfo.ReadStringValue}. '부분1-부분2' 형식이어야 합니다.");
                         }
                         string writeLotNoPart1 = lotNoParts[0];
-                        int writeLotNoPart2 = int.Parse(lotNoParts[1]);
+                        ushort writeLotNoPart2 = ushort.Parse(lotNoParts[1]);
 
                         await _mcProtocolService.WriteStringDataAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value, writeLotNoPart1).ConfigureAwait(false);
-                        await _mcProtocolService.WriteIntDataAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + 8 /*subOp.McStringLengthWords.Value*/, writeLotNoPart2).ConfigureAwait(false);
-                        await _mcProtocolService.WriteIntDataAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + 10 /*subOp.McStringLengthWords.Value + 2*/, processInfo.ReadIntValue.Value).ConfigureAwait(false);
+                        await _mcProtocolService.WriteWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + subOp.McStringLengthWords.Value, writeLotNoPart2).ConfigureAwait(false);
+                        await _mcProtocolService.WriteWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + subOp.McStringLengthWords.Value + 2, processInfo.ReadIntValue.Value).ConfigureAwait(false);
 
                         Debug.WriteLine($"[RobotMissionService] McWriteLotNoBoxCount: LotNo '{processInfo.ReadStringValue}', BoxCount {processInfo.ReadIntValue.Value} Written.");
                         break;
@@ -870,11 +870,13 @@ namespace WPF_WMS01.Services
                         bool targetState = (subOp.Type == SubOperationType.McWaitSensorOn); // ON을 기다리면 true, OFF를 기다리면 false
                         DateTime startTime = DateTime.Now;
                         bool sensorStateReached = false;
+                        subOp.McWordAddress = 0x1508;
 
                         while (DateTime.Now - startTime < TimeSpan.FromSeconds(subOp.WaitTimeoutSeconds.Value) && !processInfo.CancellationTokenSource.Token.IsCancellationRequested)
                         {
                             ushort currentState = await _mcProtocolService.ReadWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value).ConfigureAwait(false);
-                            if ((currentState != 0) == targetState) // 0이 아니면 ON, 0이면 OFF로 간주
+                            //if ((currentState != 0) == targetState) // 0이 아니면 ON, 0이면 OFF로 간주
+                            if (currentState == subOp.McWriteValueInt.Value)
                             {
                                 sensorStateReached = true;
                                 break;
@@ -899,7 +901,7 @@ namespace WPF_WMS01.Services
                         if (rack != null)
                         {
                             processInfo.ReadStringValue = rack.LotNumber;
-                            processInfo.ReadIntValue = rack.BoxCount;
+                            processInfo.ReadIntValue = (ushort)rack.BoxCount;
                             Debug.WriteLine($"[RobotMissionService] DbReadRackData: Rack {rack.Title} (ID: {rack.Id}) - LotNo '{processInfo.ReadStringValue}', BoxCount {processInfo.ReadIntValue}");
                         }
                         else
@@ -943,6 +945,22 @@ namespace WPF_WMS01.Services
                             throw new ArgumentException("SetPlcStatusIsPaused: PauseButtonCallPlcStatus 지정되지 않았습니다.");
                         }
                         _mainViewModel.PlcStatusIsPaused = subOp.PauseButtonCallPlcStatus.Value;
+                        break;
+
+                    case SubOperationType.DbInsertInboundData:
+                        if (!subOp.DestRackIdForDbUpdate.HasValue)
+                        {
+                            throw new ArgumentException("DbUpdateRackState: DestRackIdForDbUpdate가 지정되지 않았습니다.");
+                        }
+                        await PerformDbInsertForInbound(processInfo, subOp.DestRackIdForDbUpdate).ConfigureAwait(false);
+                        break;
+
+                    case SubOperationType.DbUpdateOutboundData:
+                        if (!subOp.SourceRackIdForDbUpdate.HasValue && !subOp.DestRackIdForDbUpdate.HasValue)
+                        {
+                            throw new ArgumentException("DbUpdateRackState: SourceRackIdForDbUpdate (= inserted line id) 가 지정되지 않았습니다.");
+                        }
+                        await PerformDbUpdateForOutbound(processInfo, subOp.SourceRackIdForDbUpdate).ConfigureAwait(false);
                         break;
 
                     case SubOperationType.None:
@@ -1290,6 +1308,74 @@ namespace WPF_WMS01.Services
             }
         }
 
+        /// <summary>
+        /// DbUpdateRackState 서브 동작을 위한 실제 DB 업데이트 로직을 수행합니다.
+        /// </summary>
+        /// <param name="processInfo">현재 미션 프로세스 정보.</param>
+        /// <param name="sourceRackId">원본 랙 ID.</param>
+        /// <param name="destinationRackId">목적지 랙 ID.</param>
+        private async Task PerformDbInsertForInbound(RobotMissionInfo processInfo, int? destinationRackId)
+        {
+            Debug.WriteLine($"[RobotMissionService] Performing DB insert for inbound step. ProcessType: {processInfo.ProcessType}, DestinationRackId: {destinationRackId}");
+
+            RackViewModel destinationRackVm = null;
+            if (destinationRackId.HasValue)
+            {
+                destinationRackVm = _getRackViewModelByIdFunc(destinationRackId.Value);
+                if (destinationRackVm == null)
+                {
+                    Debug.WriteLine($"[RobotMissionService] Warning: DestinationRackViewModel not found for ID {destinationRackId.Value}.");
+                }
+            }
+
+            try
+            {
+                // 모든 이동 작업의 결과는 source rack에서 destination rack으로의 파레트 이동이며,
+                // 이 때, source rack의 파레트 정보 (RackType, BulletType, Lot No.)를 destination rack의 파레트 정보로 copy하고
+                // source rack의 파레트 정보를 초기화 (BulletType = 0, Lot No. = null)하는 것이다.
+                // 특별한 경우는 1) source rack이 WAIT rack일 경우는 BulletType과 Lot No.를 InputStringForButton으로 부터 얻는 것과,
+                // 2) ProcessType이 "FakeExecuteInboundProduct" 또는 "HandleHalfPalletExport" RackType이 바뀌는 경우 뿐이다.
+                string rackName = destinationRackVm.Title;
+                int bulletType = destinationRackVm.BulletType;
+                string lotNumber = destinationRackVm.LotNumber;
+                int boxCount = destinationRackVm.BoxCount;
+                DateTime? inboundAt = destinationRackVm.RackedAt;
+
+                var innsertedIn = await _databaseService.InsertInbountDBAsync(rackName, bulletType, lotNumber, boxCount, inboundAt);
+                await _databaseService.UpdateIsInsertedInAsync((int)destinationRackId, innsertedIn);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[RobotMissionService] Error performing DB insert for inbound step: {ex.Message}");
+                OnShowAutoClosingMessage?.Invoke($"미션 완료 후 DB 업데이트 중 오류 발생: {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}");
+                throw; // 예외를 다시 던져 상위 호출자가 이를 인지하게 함
+            }
+        }
+
+        /// <summary>
+        /// DbUpdateRackState 서브 동작을 위한 실제 DB 업데이트 로직을 수행합니다.
+        /// </summary>
+        /// <param name="processInfo">현재 미션 프로세스 정보.</param>
+        /// <param name="sourceRackId">원본 랙 ID.</param>
+        /// <param name="destinationRackId">목적지 랙 ID.</param>
+        private async Task PerformDbUpdateForOutbound(RobotMissionInfo processInfo, int? insertedInID)
+        {
+            Debug.WriteLine($"[RobotMissionService] Performing DB update for outbound step. ProcessType: {processInfo.ProcessType}, inserted lin id: {insertedInID}");
+
+            if (insertedInID.HasValue)
+            {
+                try
+                {
+                    await _databaseService.UpdateOutboundDBAsync((int)insertedInID);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[RobotMissionService] Error performing DB update for outbound step: {ex.Message}");
+                    OnShowAutoClosingMessage?.Invoke($"미션 완료 후 DB 업데이트 중 오류 발생: {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}");
+                    throw; // 예외를 다시 던져 상위 호출자가 이를 인지하게 함
+                }
+            }
+        }
 
         /// <summary>
         /// 서비스 자원을 해제합니다.
