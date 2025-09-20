@@ -635,7 +635,7 @@ namespace WPF_WMS01.ViewModels
                 {
                     if(buttonVm.IsProcessing == true)
                     {
-                        MessageBox.Show("콜 버튼 작업이 진행 중에는 재공품 반출이 불가능합니다", "알림", MessageBoxButton.OK, MessageBoxImage.Information);
+                        MessageBox.Show("콜 버튼 작업이 진행 중이거나, 재공품 반출 중에는 추가적인 재공품 반출이 불가능합니다", "알림", MessageBoxButton.OK, MessageBoxImage.Information);
                         return;
                     }
                 }
@@ -876,6 +876,7 @@ namespace WPF_WMS01.ViewModels
                     ushort? mcWordAddress = null;
                     string? readStringValue = null;
                     ushort? readIntvalue = null;
+                    ushort? coilAddress = null;
 
                     if (selectedLine.Id == 1)
                     {
@@ -883,6 +884,7 @@ namespace WPF_WMS01.ViewModels
                         swapPoint = "308";
                         mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddress762mm"] ?? "127.168.200.103"; ;
                         mcWordAddress = 0x1010; // 0x1010
+                        coilAddress = 6;
                     }
                     else if (selectedLine.Id == 2)
                     {
@@ -890,6 +892,7 @@ namespace WPF_WMS01.ViewModels
                         swapPoint = "223_2";
                         mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddress556mm2"] ?? "192.168.200.102";
                         mcWordAddress = 0x1020; // 0x1010
+                        coilAddress = 4;
                     }
                     else if (selectedLine.Id == 3)
                     {
@@ -897,6 +900,7 @@ namespace WPF_WMS01.ViewModels
                         swapPoint = "223_2";
                         mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddress556mm2"] ?? "192.168.200.102";
                         mcWordAddress = 0x1010; // 0x1010
+                        coilAddress = 3;
                     }
                     else if (selectedLine.Id == 4)
                     {
@@ -904,6 +908,7 @@ namespace WPF_WMS01.ViewModels
                         swapPoint = "223_1";
                         mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddress556mm1"] ?? "127.0.0.1";
                         mcWordAddress = 0x1020; // 0x1010
+                        coilAddress = 1;
                     }
                     else if (selectedLine.Id == 5)
                     {
@@ -911,21 +916,25 @@ namespace WPF_WMS01.ViewModels
                         swapPoint = "223_1";
                         mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddress556mm1"] ?? "127.0.0.1"; // 192.168.200.101
                         mcWordAddress = 0x1010; // 0x1010
+                        coilAddress = 0;
                     }
                     else if (selectedLine.Id == 6)
                     {
                         workPoint = "Manual_1";
                         swapPoint = "Manual";
+                        coilAddress = 9;
                     }
                     else if (selectedLine.Id == 7)
                     {
                         workPoint = "Manual_2";
                         swapPoint = "Manual";
+                        coilAddress = 10;
                     }
                     else //if (selectedLine.Id == 8)
                     {
                         workPoint = "Etc";
                         swapPoint = "Etc";
+                        coilAddress = 11;
                     }
 
                     switch (selectedLine.Id)
@@ -1150,10 +1159,14 @@ namespace WPF_WMS01.ViewModels
                             missionSteps,
                             lockedRackIds, // 잠긴 랙 ID 목록 전달
                             null, // racksToProcess
-                            null, // initiatingCoilAddress
-                            true // isWarehouseMission = true로 전달
+                            coilAddress, // initiatingCoilAddress
+                            false // isWarehouseMission = true로 전달
                         );
                         ShowAutoClosingMessage($"로봇 미션 프로세스 시작됨: {processId}");
+
+                        var modbuttonVm = _mainViewModel.ModbusButtons.FirstOrDefault(b => b.CoilOutputAddress == coilAddress);
+                        modbuttonVm.IsProcessing = true;
+                        await _mainViewModel.ExecuteModbusButtonCommand(modbuttonVm);
                     }
                     catch (Exception ex)
                     {

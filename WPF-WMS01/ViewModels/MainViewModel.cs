@@ -1092,7 +1092,7 @@ namespace WPF_WMS01.ViewModels
         }
 
         // Modbus 버튼 클릭 시 실행될 Command (HMI에서 작업 진행 상황 확인)
-        private async Task ExecuteModbusButtonCommand(ModbusButtonViewModel buttonVm)
+        public async Task ExecuteModbusButtonCommand(ModbusButtonViewModel buttonVm)
         {
             if (buttonVm == null) return;
 
