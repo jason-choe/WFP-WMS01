@@ -785,17 +785,20 @@ namespace WPF_WMS01.Services
                         }
 
                         // ConnectAsync는 내부적으로 재연결 로직을 포함하고 있으므로 여기서 직접 Connect/Disconnect를 관리하지 않아도 됩니다.
-                        string lotNoPart1 = await _mcProtocolService.ReadStringDataAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value).ConfigureAwait(false);
-                        ushort lotNoPart2 = await _mcProtocolService.ReadWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + subOp.McStringLengthWords.Value).ConfigureAwait(false);
-                        ushort boxCount = await _mcProtocolService.ReadWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + subOp.McStringLengthWords.Value + 2).ConfigureAwait(false);
-
-                        processInfo.ReadStringValue = $"{lotNoPart1.Trim()}-{lotNoPart2:D4}"; // "5-3"에 따라 LotNo 조합
+                        string lotNoPart1 = await _mcProtocolService.ReadStringDataAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value);//.ConfigureAwait(false);
+                        ushort lotNoPart2 = await _mcProtocolService.ReadWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + subOp.McStringLengthWords.Value);//.ConfigureAwait(false);
+                        ushort boxCount = await _mcProtocolService.ReadWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + subOp.McStringLengthWords.Value + 2);//.ConfigureAwait(false);
+              
+                        if(lotNoPart1.Length > 1 && lotNoPart1[0] == 'P') // PSD... 의 경우 lot number는 3자리
+                            processInfo.ReadStringValue = $"{lotNoPart1.Trim()}-{lotNoPart2:D3}";
+                        else
+                            processInfo.ReadStringValue = $"{lotNoPart1.Trim()}-{lotNoPart2:D4}"; // "5-3"에 따라 LotNo 조합
                         processInfo.ReadIntValue = boxCount; // Box Count 저장
 
-                        Debug.WriteLine($"[RobotMissionService] McReadLotNoBoxCount: LotNo '{processInfo.ReadStringValue}', BoxCount {processInfo.ReadIntValue}");
+                        Debug.WriteLine($"[RobotMissionService] McReadLotNoBoxCount: Addr {subOp.McWordAddress.Value}, LotNo '{processInfo.ReadStringValue}', BoxCount {processInfo.ReadIntValue}");
                         break;
 
-                    case SubOperationType.McReadSingleWord:
+                    case SubOperationType.McReadSingleWord: 
                         if (subOp.McProtocolIpAddress == null || !subOp.McWordAddress.HasValue)
                         {
                             throw new ArgumentException("McReadSingleWord: IpAddress, WordAddress가 지정되지 않았습니다.");

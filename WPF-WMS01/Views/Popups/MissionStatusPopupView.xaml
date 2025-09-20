@@ -35,7 +35,7 @@
             <StackPanel>
                 <TextBlock FontWeight="Bold" FontSize="16" Margin="0,0,0,5">
                     <Run Text="미션 유형:"/>
-                    <Run Text="{Binding ProcessType}"/>
+                    <Run Text="{Binding ProcessType}" Foreground="{Binding OverallStatusColor}"/>
                 </TextBlock>
                 <TextBlock FontWeight="Bold" FontSize="16" Margin="0,0,0,5">
                     <Run Text="{Binding Payload}" Foreground="{Binding OverallStatusColor}"/>

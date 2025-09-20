@@ -363,21 +363,21 @@ namespace WPF_WMS01.ViewModels
                     }
                     break;
                 case int i when i >= 1 && i <= 12: // ImageIndex가 1에서 12 사이인 경우
-                    await HandleTransferToWrapRack(clickedRackViewModel); // WRAP 랙으로 이동 로직 호출
+                    await HandleTransferToWrapRack(clickedRackViewModel); // 포장 전 팔레트를 포장기로 옮기는 작업
                     break;
                 case 26:
                     break;
                 case int i when i >= 27 && i <= 38: // ImageIndex가 27에서 38 사이인 경우, WRAP rack click
-                    await HandleRackTransfer(clickedRackViewModel); // 기존 이동/복사 로직 호출
+                    await HandleRackTransfer(clickedRackViewModel); // 포장된 팔레트를 랙으로 옮기는 작업
                     break;
                 case int i when i >= 14 && i <= 25:
-                    await HandleRackShipout(clickedRackViewModel);
+                    await HandleRackShipout(clickedRackViewModel); // 제품 팔레트를 출고하는 작업
                     break;
                 case int i when i >= 40 && i <= 51:
                     if(clickedRackViewModel.Title.Equals("OUT"))
-                        await HandleHalfPalletExport(clickedRackViewModel);
+                        await HandleHalfPalletExport(clickedRackViewModel); // 반제품 팔레트를 반출하는 작업
                     else
-                        await HandleHalfPalletMove(clickedRackViewModel);
+                        await HandleHalfPalletMove(clickedRackViewModel); // 반제품 팔레트를 반출 장소로 옮기는 작업
                     break;
                 default:
                     MessageBox.Show($"랙 {Title} (ImageIndex: {ImageIndex}): 기타 유형의 팝업!", "랙 상세", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -454,6 +454,7 @@ namespace WPF_WMS01.ViewModels
                 if (sourceRackViewModel.Title.Equals(_mainViewModel._waitRackTitle))
                     shelf = sourceRackViewModel.Title;
                 else
+                    //shelf = sourceRackViewModel.Title.Replace('-', '_');
                     shelf = $"{33 - int.Parse(sourceRackViewModel.Title.Split('-')[0]):D2}_{sourceRackViewModel.Title.Split('-')[1]}";
                 // 로봇 미션 단계 정의 (사용자 요청에 따라 4단계로 복원 및 IsLinkable, LinkedMission 조정)
                 if (sourceRackViewModel.LocationArea == 2)
@@ -733,9 +734,9 @@ namespace WPF_WMS01.ViewModels
                             Payload = _mainViewModel.WarehousePayload,
                             IsLinkable = true,
                             LinkWaitTimeout = 3600,
-                            PreMissionOperations = new List<MissionSubOperation> {
-                                new MissionSubOperation { Type = SubOperationType.DbReadRackData, Description = "LotNo., Box count 임시 저장", TargetRackId = sourceRackViewModel.Id }
-                            },
+                            //PreMissionOperations = new List<MissionSubOperation> {
+                            //    new MissionSubOperation { Type = SubOperationType.DbReadRackData, Description = "LotNo., Box count 임시 저장", TargetRackId = sourceRackViewModel.Id }
+                            //},
                             PostMissionOperations = new List<MissionSubOperation> {
                                 new MissionSubOperation { Type = SubOperationType.DbUpdateRackState, Description = "랙 상태 업데이트", SourceRackIdForDbUpdate = sourceRackViewModel.Id, DestRackIdForDbUpdate = amrRackViewModel.Id }
                             }
@@ -862,38 +863,54 @@ namespace WPF_WMS01.ViewModels
                     }
 
                     ShowAutoClosingMessage($"로봇 미션: 랙 {sourceRackViewModel.Title}의  재공품을 '{selectedLine.Name}'(으)로 반출 시작. 명령 전송 중...");
-                    
+
                     var amrRackViewModel = _mainViewModel.RackList?.FirstOrDefault(r => r.Title.Equals("AMR"));
                     //var outRackViewModel = _mainViewModel.RackList?.FirstOrDefault(r => r.Title.Equals("OUT"));
 
                     List<MissionStepDefinition> missionSteps;
-                    
+
                     string workPoint;
                     string swapPoint;
+                    // Determine MC Protocol IP address based on button content
+                    string? mcProtocolIpAddress = null;
+                    ushort? mcWordAddress = null;
+                    string? readStringValue = null;
+                    ushort? readIntvalue = null;
+
                     if (selectedLine.Id == 1)
                     {
                         workPoint = "308";
                         swapPoint = "308";
+                        mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddress762mm"] ?? "127.168.200.103"; ;
+                        mcWordAddress = 0x1010; // 0x1010
                     }
                     else if (selectedLine.Id == 2)
                     {
                         workPoint = "223_2_2";
                         swapPoint = "223_2";
+                        mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddress556mm2"] ?? "192.168.200.102";
+                        mcWordAddress = 0x1020; // 0x1010
                     }
                     else if (selectedLine.Id == 3)
                     {
                         workPoint = "223_2_1";
                         swapPoint = "223_2";
+                        mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddress556mm2"] ?? "192.168.200.102";
+                        mcWordAddress = 0x1010; // 0x1010
                     }
                     else if (selectedLine.Id == 4)
                     {
                         workPoint = "223_1_2";
                         swapPoint = "223_1";
+                        mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddress556mm1"] ?? "127.0.0.1";
+                        mcWordAddress = 0x1020; // 0x1010
                     }
                     else if (selectedLine.Id == 5)
                     {
                         workPoint = "223_1_1";
                         swapPoint = "223_1";
+                        mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddress556mm1"] ?? "127.0.0.1"; // 192.168.200.101
+                        mcWordAddress = 0x1010; // 0x1010
                     }
                     else if (selectedLine.Id == 6)
                     {
@@ -910,87 +927,189 @@ namespace WPF_WMS01.ViewModels
                         workPoint = "Etc";
                         swapPoint = "Etc";
                     }
-                    missionSteps = new List<MissionStepDefinition>
+
+                    switch (selectedLine.Id)
                     {
-                        // Move from Charger, Turn
-                        new MissionStepDefinition {
-                            ProcessStepDescription = $"충전소에서 이동",
-                            MissionType = "8",
-                            ToNode = "Turn_Charge2",
-                            Payload = _mainViewModel.ProductionLinePayload,
-                            IsLinkable = true,
-                            LinkedMission = null,
-                            LinkWaitTimeout = 3600
-                        },
-                        // Move, Pickup, Update DB
-                        new MissionStepDefinition {
-                            ProcessStepDescription = $"재공품 반출 장소로 이동하여, 재공품 픽업",
-                            MissionType = "8",
-                            ToNode = "Palette_IN_PickUP",
-                            Payload = _mainViewModel.ProductionLinePayload,
-                            IsLinkable = true,
-                            LinkWaitTimeout = 3600,
-                            PostMissionOperations = new List<MissionSubOperation> {
-                                new MissionSubOperation { Type = SubOperationType.DbUpdateRackState, Description = "랙 상태 업데이트", SourceRackIdForDbUpdate = outRackViewModel.Id, DestRackIdForDbUpdate = null },
-                                new MissionSubOperation { Type = SubOperationType.SetPlcStatusIsPaused, Description = "콜버튼 액션 허용", PauseButtonCallPlcStatus = false }
-                            }
-                        },
-                        // Move, Drop
-                        new MissionStepDefinition {
-                            ProcessStepDescription = "대기장소로 이동하여, 재공품 드롭",
-                            MissionType = "8",
-                            ToNode = $"Empty_{swapPoint}_Drop",
-                            Payload = _mainViewModel.ProductionLinePayload,
-                            IsLinkable = true,
-                            LinkedMission = null,
-                            LinkWaitTimeout = 3600
-                        },
-                        // Sensor OFF, Move, Pickup
-                        new MissionStepDefinition {
-                            ProcessStepDescription = $"{selectedLine.Name}(으)로 이동하여, 제품 팔레트 픽업",
-                            MissionType = "8",
-                            ToNode = $"Work_{workPoint}_PickUP",
-                            Payload = _mainViewModel.ProductionLinePayload,
-                            IsLinkable = true,
-                            LinkWaitTimeout = 3600
-                        },
-                        // Move, Drop
-                        new MissionStepDefinition {
-                            ProcessStepDescription = "대기장소로 이동하여, 제품 팔레트 드롭",
-                            MissionType = "8",
-                            ToNode = $"Full_{swapPoint}_Drop",
-                            Payload = _mainViewModel.ProductionLinePayload,
-                            IsLinkable = true,
-                            LinkWaitTimeout = 3600
-                        },
-                        // Move, Pickup
-                        new MissionStepDefinition {
-                            ProcessStepDescription = "대기장소로 이동하여, 재공품 픽업 ",
-                            MissionType = "8",
-                            ToNode = $"Empty_{swapPoint}_PickUP",
-                            Payload = _mainViewModel.ProductionLinePayload,
-                            IsLinkable = true,
-                            LinkWaitTimeout = 3600
-                        },
-                        // Move, Drop
-                        new MissionStepDefinition {
-                            ProcessStepDescription = $"{selectedLine.Name}(으)로 이동하여, 재공품 드롭",
-                            MissionType = "8",
-                            ToNode = $"Work_{workPoint}_Drop",
-                            Payload = _mainViewModel.ProductionLinePayload,
-                            IsLinkable = true,
-                            LinkWaitTimeout = 3600
-                        },
-                        // Move, Pickup, Sensor ON
-                        new MissionStepDefinition {
-                            ProcessStepDescription = $"대기장소로 이동하여, 제품 팔레트 픽업",
-                            MissionType = "8",
-                            ToNode = $"Full_{swapPoint}_PickUP",
-                            Payload = _mainViewModel.ProductionLinePayload,
-                            IsLinkable = true,
-                            LinkWaitTimeout = 3600
-                        }
-                    };
+                        case 1:
+                        case 2:
+                        case 3:
+                        case 4:
+                        case 5:
+                            missionSteps = new List<MissionStepDefinition>
+                            {
+                                // Move from Charger, Turn
+                                new MissionStepDefinition {
+                                    ProcessStepDescription = $"충전소에서 이동",
+                                    MissionType = "8",
+                                    ToNode = "Turn_Charge2",
+                                    Payload = _mainViewModel.ProductionLinePayload,
+                                    IsLinkable = true,
+                                    LinkedMission = null,
+                                    LinkWaitTimeout = 3600
+                                },
+                                // Move, Pickup, Update DB
+                                new MissionStepDefinition {
+                                    ProcessStepDescription = $"재공품 반출 장소로 이동하여, 재공품 픽업",
+                                    MissionType = "8",
+                                    ToNode = "Palette_IN_PickUP",
+                                    Payload = _mainViewModel.ProductionLinePayload,
+                                    IsLinkable = true,
+                                    LinkWaitTimeout = 3600,
+                                    PostMissionOperations = new List<MissionSubOperation> {
+                                        new MissionSubOperation { Type = SubOperationType.DbReadRackData, Description = "랙 데이터 읽어 오기", TargetRackId = outRackViewModel.Id },
+                                        new MissionSubOperation { Type = SubOperationType.DbUpdateRackState, Description = "랙 상태 업데이트", SourceRackIdForDbUpdate = outRackViewModel.Id, DestRackIdForDbUpdate = null },
+                                        new MissionSubOperation { Type = SubOperationType.SetPlcStatusIsPaused, Description = "콜버튼 액션 허용", PauseButtonCallPlcStatus = false }
+                                    }
+                                },
+                                // Move, Drop
+                                new MissionStepDefinition {
+                                    ProcessStepDescription = "대기장소로 이동하여, 재공품 드롭",
+                                    MissionType = "8",
+                                    ToNode = $"Empty_{swapPoint}_Drop",
+                                    Payload = _mainViewModel.ProductionLinePayload,
+                                    IsLinkable = true,
+                                    LinkedMission = null,
+                                    LinkWaitTimeout = 3600
+                                },
+                                // Sensor OFF, Move, Pickup
+                                new MissionStepDefinition {
+                                    ProcessStepDescription = $"{selectedLine.Name}(으)로 이동하여, 제품 팔레트 픽업",
+                                    MissionType = "8",
+                                    ToNode = $"Work_{workPoint}_PickUP",
+                                    Payload = _mainViewModel.ProductionLinePayload,
+                                    IsLinkable = true,
+                                    LinkWaitTimeout = 3600
+                                },
+                                // Move, Drop
+                                new MissionStepDefinition {
+                                    ProcessStepDescription = "대기장소로 이동하여, 제품 팔레트 드롭",
+                                    MissionType = "8",
+                                    ToNode = $"Full_{swapPoint}_Drop",
+                                    Payload = _mainViewModel.ProductionLinePayload,
+                                    IsLinkable = true,
+                                    LinkWaitTimeout = 3600
+                                },
+                                // Move, Pickup
+                                new MissionStepDefinition {
+                                    ProcessStepDescription = "대기장소로 이동하여, 재공품 픽업 ",
+                                    MissionType = "8",
+                                    ToNode = $"Empty_{swapPoint}_PickUP",
+                                    Payload = _mainViewModel.ProductionLinePayload,
+                                    IsLinkable = true,
+                                    LinkWaitTimeout = 3600
+                                },
+                                // Move, Drop
+                                new MissionStepDefinition
+                                {
+                                    ProcessStepDescription = $"{selectedLine.Name}(으)로 이동하여, 재공품 드롭",
+                                    MissionType = "8",
+                                    ToNode = $"Work_{workPoint}_Drop",
+                                    Payload = _mainViewModel.ProductionLinePayload,
+                                    IsLinkable = true,
+                                    LinkWaitTimeout = 3600,
+                                    PostMissionOperations = new List<MissionSubOperation> {
+                                        new MissionSubOperation { Type = SubOperationType.McWriteLotNoBoxCount, Description = "LotNo., BoxCount 쓰기", WordDeviceCode = "W", McWordAddress = mcWordAddress, McStringLengthWords = 8, McProtocolIpAddress = mcProtocolIpAddress }
+                                    }
+                                },
+                                // Move, Pickup, Sensor ON
+                                new MissionStepDefinition {
+                                    ProcessStepDescription = $"대기장소로 이동하여, 제품 팔레트 픽업",
+                                    MissionType = "8",
+                                    ToNode = $"Full_{swapPoint}_PickUP",
+                                    Payload = _mainViewModel.ProductionLinePayload,
+                                    IsLinkable = true,
+                                    LinkWaitTimeout = 3600
+                                }
+                            };
+                            break;
+
+                        default:
+                            missionSteps = new List<MissionStepDefinition>
+                            {
+                                // Move from Charger, Turn
+                                new MissionStepDefinition {
+                                    ProcessStepDescription = $"충전소에서 이동",
+                                    MissionType = "8",
+                                    ToNode = "Turn_Charge2",
+                                    Payload = _mainViewModel.ProductionLinePayload,
+                                    IsLinkable = true,
+                                    LinkedMission = null,
+                                    LinkWaitTimeout = 3600
+                                },
+                                // Move, Pickup, Update DB
+                                new MissionStepDefinition {
+                                    ProcessStepDescription = $"재공품 반출 장소로 이동하여, 재공품 픽업",
+                                    MissionType = "8",
+                                    ToNode = "Palette_IN_PickUP",
+                                    Payload = _mainViewModel.ProductionLinePayload,
+                                    IsLinkable = true,
+                                    LinkWaitTimeout = 3600,
+                                    PostMissionOperations = new List<MissionSubOperation> {
+                                        new MissionSubOperation { Type = SubOperationType.DbReadRackData, Description = "랙 데이터 읽어 오기", TargetRackId = outRackViewModel.Id },
+                                        new MissionSubOperation { Type = SubOperationType.DbUpdateRackState, Description = "랙 상태 업데이트", SourceRackIdForDbUpdate = outRackViewModel.Id, DestRackIdForDbUpdate = null },
+                                        new MissionSubOperation { Type = SubOperationType.SetPlcStatusIsPaused, Description = "콜버튼 액션 허용", PauseButtonCallPlcStatus = false }
+                                    }
+                                },
+                                // Move, Drop
+                                new MissionStepDefinition {
+                                    ProcessStepDescription = "대기장소로 이동하여, 재공품 드롭",
+                                    MissionType = "8",
+                                    ToNode = $"Empty_{swapPoint}_Drop",
+                                    Payload = _mainViewModel.ProductionLinePayload,
+                                    IsLinkable = true,
+                                    LinkedMission = null,
+                                    LinkWaitTimeout = 3600
+                                },
+                                // Sensor OFF, Move, Pickup
+                                new MissionStepDefinition {
+                                    ProcessStepDescription = $"{selectedLine.Name}(으)로 이동하여, 제품 팔레트 픽업",
+                                    MissionType = "8",
+                                    ToNode = $"Work_{workPoint}_PickUP",
+                                    Payload = _mainViewModel.ProductionLinePayload,
+                                    IsLinkable = true,
+                                    LinkWaitTimeout = 3600
+                                },
+                                // Move, Drop
+                                new MissionStepDefinition {
+                                    ProcessStepDescription = "대기장소로 이동하여, 제품 팔레트 드롭",
+                                    MissionType = "8",
+                                    ToNode = $"Full_{swapPoint}_Drop",
+                                    Payload = _mainViewModel.ProductionLinePayload,
+                                    IsLinkable = true,
+                                    LinkWaitTimeout = 3600
+                                },
+                                // Move, Pickup
+                                new MissionStepDefinition {
+                                    ProcessStepDescription = "대기장소로 이동하여, 재공품 픽업 ",
+                                    MissionType = "8",
+                                    ToNode = $"Empty_{swapPoint}_PickUP",
+                                    Payload = _mainViewModel.ProductionLinePayload,
+                                    IsLinkable = true,
+                                    LinkWaitTimeout = 3600
+                                },
+                                // Move, Drop
+                                new MissionStepDefinition
+                                {
+                                    ProcessStepDescription = $"{selectedLine.Name}(으)로 이동하여, 재공품 드롭",
+                                    MissionType = "8",
+                                    ToNode = $"Work_{workPoint}_Drop",
+                                    Payload = _mainViewModel.ProductionLinePayload,
+                                    IsLinkable = true,
+                                    LinkWaitTimeout = 3600
+                                },
+                                // Move, Pickup, Sensor ON
+                                new MissionStepDefinition {
+                                    ProcessStepDescription = $"대기장소로 이동하여, 제품 팔레트 픽업",
+                                    MissionType = "8",
+                                    ToNode = $"Full_{swapPoint}_PickUP",
+                                    Payload = _mainViewModel.ProductionLinePayload,
+                                    IsLinkable = true,
+                                    LinkWaitTimeout = 3600
+                                }
+                            };
+                            break;
+                    }
+
                     if(selectedLine.Id == 2 || selectedLine.Id == 3 || selectedLine.Id == 4 || selectedLine.Id == 5)
                     {
                         // Move, Turn

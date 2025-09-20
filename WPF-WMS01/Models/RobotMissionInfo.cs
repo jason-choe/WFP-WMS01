@@ -152,4 +152,19 @@ namespace WPF_WMS01.Models
         PENDING = 6, // 커스텀 상태: ANT 서버에 아직 전송되지 않았거나 초기 상태
         UNKNOWN = 99 // 정의되지 않은 상태
     }
+
+    public enum ProcessTypeEnum
+    {
+        WIPMOVEIN = 0, // 제공품 입고
+        WIPMOVE = 1, // 제공품 출고 (이동)
+        WIPOUT = 2, // 제공품 출고 (반출)
+        UNPACKED = 3, // 미포장 입고
+        PACKING = 4, // 포장기로 이동
+        PACKED = 5, // 포장 입고
+        SINGLEOUT = 6, // 단일 출고
+        MULTIOUT = 7, // 멀티 출고
+        TOBUFFER = 8, // AMR 2 임시 이동
+        REPACKED = 9, // 포장 재입고
+        UNKNOWN = 99 // 정의되지 않은 상태
+    }
 }
