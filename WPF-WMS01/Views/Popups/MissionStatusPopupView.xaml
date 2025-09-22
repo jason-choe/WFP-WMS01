@@ -61,6 +61,10 @@
                     <Run Text="현재 단계:"/>
                     <Run Text="{Binding CurrentStepDescription}"/>
                 </TextBlock>
+                <!--TextBlock FontWeight="Bold" FontSize="16">
+                    <Run Text="  서브 작업:"/>
+                    <Run Text="{Binding ProcessStepDescription}"/>
+                </TextBlock-->
             </StackPanel>
         </Border>
 

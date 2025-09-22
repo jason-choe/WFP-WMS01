@@ -347,8 +347,8 @@
                     <Border Background="#455A64" CornerRadius="5" BorderThickness="1" BorderBrush="#263238" Padding="5"
                             Effect="{StaticResource DefaultShadow}">
                         <StackPanel>
-                            <Button Content="안전지역으로 AMR_2 이동" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding MoveAmr2ToBufferNode}"/>
-                            <Button Content="팔레트 이동, 재 입고" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding MoveAndUnloadCommand}"/>
+                            <Button Content="AMR_2 대기 지역으로" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding MoveAmr2ToBufferNode}"/>
+                            <Button Content="AMR_1 이동, 재 입고" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding MoveAndUnloadCommand}"/>
                             <Button Content="잠긴 랙 잠금 풀기" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding UnlockRackCommand}"/>
                             <!-- 팝업이 닫힐 때 IsMenuOpen을 False로 설정하는 버튼 추가 -->
                             <Button Content="메뉴 닫기" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding CloseMenuCommand}" Margin="0,10,0,0"/>
@@ -455,13 +455,21 @@
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Button Content="{Binding Content}"
-                                            Command="{Binding ExecuteButtonCommand}"
-                                            CommandParameter="{Binding}"
-                                            IsEnabled="{Binding IsEnabled}"
-                                            Width="135" Height="64" FontSize="20" FontWeight="Bold"
-                                    VerticalAlignment="Center" HorizontalAlignment="Right"
-                                    Margin="0,5,20,5" Style="{StaticResource ModernButtonStyle}">
+                                    <Button
+                                        Command="{Binding ExecuteButtonCommand}"
+                                        CommandParameter="{Binding}"
+                                        IsEnabled="{Binding IsEnabled}"
+                                        Width="135" Height="64" FontSize="20" FontWeight="Bold"
+                                        VerticalAlignment="Center" HorizontalAlignment="Right"
+                                        Margin="0,5,20,5" Style="{StaticResource ModernButtonStyle}">               
+                                        <Button.Content>
+                                            <TextBlock 
+                                                Text="{Binding Title}" 
+                                                TextAlignment="Center"
+                                                TextWrapping="Wrap"
+                                                VerticalAlignment="Center" 
+                                                HorizontalAlignment="Center" /> 
+                                        </Button.Content>
                                     </Button>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>

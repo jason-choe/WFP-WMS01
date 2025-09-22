@@ -72,8 +72,8 @@ namespace WPF_WMS01.ViewModels.Popups
             }
             else if(type == 1)
             {
-                MessageTitle = "안전 지역으로 AMR_2 이동";
-                Message = "Poongsan_2 AMR을 traffic free 영역으로 이동시키겠습니까?";
+                MessageTitle = "대기 지역으로 AMR_2 이동";
+                Message = "Poongsan_2 AMR을 대기 지역로 이동시키겠습니까?";
             }
             else if(type == 2)
             {
