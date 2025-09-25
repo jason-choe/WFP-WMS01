@@ -329,16 +329,16 @@ namespace WPF_WMS01.ViewModels
             // Discrete Input Address와 Coil Output Address를 스펙에 맞춰 매핑
             ModbusButtons = new ObservableCollection<ModbusButtonViewModel>
             {
-                new ModbusButtonViewModel("223A 1", ConfigurationManager.AppSettings["CallButton01Title"] ?? "223#1 A", 0, 0),    // Discrete Input 100000 -> 0x02 Read 0 / Coil Output 0x05 Write 0
-                new ModbusButtonViewModel("223A 2", ConfigurationManager.AppSettings["CallButton02Title"] ?? "223#1 B", 1, 1),    // Discrete Input 100001 -> 0x02 Read 1 / Coil Output 0x05 Write 1
+                new ModbusButtonViewModel("223A 2", ConfigurationManager.AppSettings["CallButton01Title"] ?? "223#1 A", 0, 0),    // Discrete Input 100000 -> 0x02 Read 0 / Coil Output 0x05 Write 0
+                new ModbusButtonViewModel("223A 1", ConfigurationManager.AppSettings["CallButton02Title"] ?? "223#1 B", 1, 1),    // Discrete Input 100001 -> 0x02 Read 1 / Coil Output 0x05 Write 1
                 new ModbusButtonViewModel("223A Bypass", ConfigurationManager.AppSettings["CallButton03Title"] ?? "223#1  Bypass", 2, 2),    // Discrete Input 100002 -> 0x02 Read 2 / Coil Output 0x05 Write 2
-                new ModbusButtonViewModel("223B 1", ConfigurationManager.AppSettings["CallButton04Title"] ?? "223#2 A", 3, 3),    // Discrete Input 100003 -> 0x02 Read 3 / Coil Output 0x05 Write 3
-                new ModbusButtonViewModel("223B 2", ConfigurationManager.AppSettings["CallButton05Title"] ?? "223#2 B", 4, 4),    // Discrete Input 100004 -> 0x02 Read 4 / Coil Output 0x05 Write 4
+                new ModbusButtonViewModel("223B 2", ConfigurationManager.AppSettings["CallButton04Title"] ?? "223#2 A", 3, 3),    // Discrete Input 100003 -> 0x02 Read 3 / Coil Output 0x05 Write 3
+                new ModbusButtonViewModel("223B 1", ConfigurationManager.AppSettings["CallButton05Title"] ?? "223#2 B", 4, 4),    // Discrete Input 100004 -> 0x02 Read 4 / Coil Output 0x05 Write 4
                 new ModbusButtonViewModel("223B Bypass", ConfigurationManager.AppSettings["CallButton06Title"] ?? "223#2  Bypass", 5, 5),    // Discrete Input 100005 -> 0x02 Read 5 / Coil Output 0x05 Write 5
                 new ModbusButtonViewModel("7.62mm", ConfigurationManager.AppSettings["CallButton07Title"] ?? "308", 6, 6),       // Discrete Input 100006 -> 0x02 Read 6 / Coil Output 0x05 Write 6
                 new ModbusButtonViewModel("팔레트 공급", ConfigurationManager.AppSettings["CallButton08Title"] ?? "Pallet 공급", 7, 7),  // Discrete Input 100007 -> 0x02 Read 7 / Coil Output 0x05 Write 7
                 new ModbusButtonViewModel("딘프라 공급", ConfigurationManager.AppSettings["CallButton09Title"] ?? "Pad 공급", 8, 8),  // Discrete Input 100008 -> 0x02 Read 8 / Coil Output 0x05 Write 8
-                new ModbusButtonViewModel("특수 포장", ConfigurationManager.AppSettings["CallButton10Title"] ?? "특수 포장", 9, 9),    // Discrete Input 100011 -> 0x02 Read 9 / Coil Output 0x05 Write 9
+                new ModbusButtonViewModel("특수 포장", ConfigurationManager.AppSettings["CallButton10Title"] ?? "특수포장", 9, 9),    // Discrete Input 100011 -> 0x02 Read 9 / Coil Output 0x05 Write 9
                 new ModbusButtonViewModel("카타르 1", ConfigurationManager.AppSettings["CallButton11Title"] ?? "카타르 A", 10, 10),  // Discrete Input 100009 -> 0x02 Read 10 / Coil Output 0x05 Write 10
                 new ModbusButtonViewModel("카타르 2", ConfigurationManager.AppSettings["CallButton12Title"] ?? "카타르 B", 11, 11),  // Discrete Input 100010 -> 0x02 Read 11 / Coil Output 0x05 Write 11
             };
@@ -1694,7 +1694,8 @@ namespace WPF_WMS01.ViewModels
                             swapPoint = "Manual";
                             readStringValue = "카타르 1";
                             readIntvalue = 99;
-                            mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddressQatar"] ?? "192.168.200.66";
+                            mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddressQatar"] ?? "192.168.200.120";
+                            mcWordAddress = 0x1000 /*0x1520*/;
                         }
                         else if (buttonVm.Content.Equals("카타르 2"))
                         {
@@ -1702,7 +1703,8 @@ namespace WPF_WMS01.ViewModels
                             swapPoint = "Manual";
                             readStringValue = "카타르 2";
                             readIntvalue = 99;
-                            mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddressQatar"] ?? "192.168.200.66";
+                            mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddressQatar"] ?? "192.168.200.120";
+                            mcWordAddress = 0x1020 /*0x1520*/;
                         }
                         else if (buttonVm.Content.Equals("특수 포장"))
                         {
@@ -1710,7 +1712,8 @@ namespace WPF_WMS01.ViewModels
                             swapPoint = "Etc";
                             readStringValue = "특수 포장";
                             readIntvalue = 99;
-                            mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddressQatar"] ?? "192.168.200.66";
+                            mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddressQatar"] ?? "192.168.200.120";
+                            mcWordAddress = 0x1020 /*0x1520*/;
                         }
                         processType = $"{buttonVm.Content} 제품 입고 작업";
 
@@ -1722,7 +1725,11 @@ namespace WPF_WMS01.ViewModels
                             ToNode = "AMR2_WAIT",
                             Payload = ProductionLinePayload,
                             IsLinkable = true,
-                            LinkWaitTimeout = 3600
+                            LinkWaitTimeout = 3600,
+                            //PostMissionOperations = new List<MissionSubOperation> // 경광등 켜기
+                            //{
+                            //    new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "경광등 켜기", WordDeviceCode = "W", McWordAddress = (ushort)(mcWordAddress + 13), McProtocolIpAddress = mcProtocolIpAddress, McWriteValueInt = 1 }
+                            //}
                         });
                         // Step 2 : Check, Move, Pickup
                         missionSteps.Add(new MissionStepDefinition
@@ -1757,9 +1764,9 @@ namespace WPF_WMS01.ViewModels
                             Payload = ProductionLinePayload,
                             IsLinkable = true,
                             LinkWaitTimeout = 3600,
-                            //PreMissionOperations = new List<MissionSubOperation> // 안전 센서 OFF
+                            //PreMissionOperations = new List<MissionSubOperation> // 안전 센서 OFF (= 진입 요청)
                             //{
-                            //    new MissionSubOperation { Type = SubOperationType.McWaitSensorOff, Description = "안전 센서 끄기", WordDeviceCode = "W", McWordAddress = 0x1008, McWriteValueInt = 1, McProtocolIpAddress = mcProtocolIpAddress }
+                            //    new MissionSubOperation { Type = SubOperationType.McWaitSensorOff, Description = "안전 센서 끄기", WordDeviceCode = "W", McWordAddress = 0x1008, McWriteValueInt = 2, McProtocolIpAddress = mcProtocolIpAddress }
                             //}
                         });
                         // Step 5 : Move, Drop
@@ -1801,7 +1808,7 @@ namespace WPF_WMS01.ViewModels
                             Payload = ProductionLinePayload,
                             IsLinkable = true,
                             LinkWaitTimeout = 3600,
-                            //PostMissionOperations = new List<MissionSubOperation> // 안전 센서 ON
+                            //PostMissionOperations = new List<MissionSubOperation> // 안전 센서 ON (= 관련 작업 완료)
                             //{
                             //    new MissionSubOperation { Type = SubOperationType.McWaitSensorOn, Description = "안전 센서 켜기", WordDeviceCode = "W", McWordAddress = 0x1008, McWriteValueInt = 2, McProtocolIpAddress = mcProtocolIpAddress }
                             //}
@@ -1829,7 +1836,11 @@ namespace WPF_WMS01.ViewModels
                             ToNode = "Charge2",
                             Payload = ProductionLinePayload,
                             IsLinkable = false,
-                            LinkWaitTimeout = 3600
+                            LinkWaitTimeout = 3600,
+                            //PreMissionOperations = new List<MissionSubOperation> // 경광등 끄기
+                            //{
+                            //    new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "경광등 끄기", WordDeviceCode = "W", McWordAddress = (ushort)(mcWordAddress + 13), McProtocolIpAddress = mcProtocolIpAddress, McWriteValueInt = 2 }
+                            //}
                         });
                         break;
 
@@ -2751,7 +2762,7 @@ namespace WPF_WMS01.ViewModels
                     {
                         // 로봇 미션 프로세스 시작
                         string processId = await InitiateRobotMissionProcess(
-                            "ExecuteInboundProduct", // 미션 프로세스 유형
+                            "미포장 입고 작업", // 미션 프로세스 유형
                             missionSteps,
                             lockedRackIds, // 잠긴 랙 ID 목록 전달
                             null, // racksToProcess
@@ -3073,7 +3084,7 @@ namespace WPF_WMS01.ViewModels
                     {
                         // 로봇 미션 프로세스 시작
                         string processId = await InitiateRobotMissionProcess(
-                            "FakeExecuteInboundProduct", // 미션 프로세스 유형
+                            "재공품 입고 작업", // 미션 프로세스 유형
                             missionSteps,
                             lockedRackIds, // 잠긴 랙 ID 목록 전달
                             null, // racksToProcess
@@ -3270,7 +3281,7 @@ namespace WPF_WMS01.ViewModels
                     {
                         // 로봇 미션 프로세스 시작 (sourceRack, destinationRack은 이제 null로 전달)
                         string processId = await InitiateRobotMissionProcess(
-                            "ExecuteCheckoutProduct", // 미션 프로세스 유형
+                            "다중 출고 작업", // 미션 프로세스 유형
                             missionSteps,
                             lockedRackIds, // 잠긴 랙 ID 목록 전달
                             racksToProcess, // 처리할 랙 ViewModel 목록 전달

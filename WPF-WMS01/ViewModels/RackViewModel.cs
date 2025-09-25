@@ -543,7 +543,7 @@ namespace WPF_WMS01.ViewModels
                 {
                     // MainViewModel을 통해 로봇 미션 프로세스 시작 (이제 MainViewModel이 RobotMissionService로 위임)
                     string processId = await _mainViewModel.InitiateRobotMissionProcess(
-                        "WaitToWrapTransfer", // 미션 프로세스 유형
+                        "포장 준비 작업", // 미션 프로세스 유형
                         missionSteps,
                         lockedRackIds,
                         null, // racksToProcess
@@ -701,7 +701,7 @@ namespace WPF_WMS01.ViewModels
                 {
                     // 로봇 미션 프로세스 시작
                     string processId = await _mainViewModel.InitiateRobotMissionProcess(
-                        "HandleHalfPalletMove", // 미션 프로세스 유형
+                        "재공품 반출 준비", //"HandleHalfPalletMove", // 미션 프로세스 유형
                         missionSteps,
                         lockedRackIds, // 잠긴 랙 ID 목록 전달
                         null, // racksToProcess
@@ -797,7 +797,7 @@ namespace WPF_WMS01.ViewModels
                     ushort? readIntvalue = null;
                     ushort? coilAddress = null;
 
-                    if (selectedLine.Id == 1)
+                    if (selectedLine.Id == 2)
                     {
                         workPoint = "223A1";
                         swapPoint = "223A";
@@ -805,7 +805,7 @@ namespace WPF_WMS01.ViewModels
                         mcWordAddress = 0x1010; // 0x1010
                         coilAddress = 0;
                     }
-                    else if (selectedLine.Id == 2)
+                    else if (selectedLine.Id == 1)
                     {
                         workPoint = "223A2";
                         swapPoint = "223A";
@@ -813,7 +813,7 @@ namespace WPF_WMS01.ViewModels
                         mcWordAddress = 0x1020; // 0x1010
                         coilAddress = 1;
                     }
-                    else if (selectedLine.Id == 3)
+                    else if (selectedLine.Id == 4)
                     {
                         workPoint = "223B1";
                         swapPoint = "223B";
@@ -821,7 +821,7 @@ namespace WPF_WMS01.ViewModels
                         mcWordAddress = 0x1010; // 0x1010
                         coilAddress = 3;
                     }
-                    else if (selectedLine.Id == 4)
+                    else if (selectedLine.Id == 3)
                     {
                         workPoint = "223B2";
                         swapPoint = "223B";
@@ -1088,7 +1088,7 @@ namespace WPF_WMS01.ViewModels
                     {
                         // 로봇 미션 프로세스 시작
                         string processId = await _mainViewModel.InitiateRobotMissionProcess(
-                            "HandleHalfPalletExport", // 미션 프로세스 유형
+                            "재공품 반출 작업", // 미션 프로세스 유형
                             missionSteps,
                             lockedRackIds, // 잠긴 랙 ID 목록 전달
                             null, // racksToProcess
@@ -1348,7 +1348,7 @@ namespace WPF_WMS01.ViewModels
                     // MainViewModel을 통해 로봇 미션 프로세스 시작
                     // LinkedMission은 MainViewModel의 SendNextRobotMissionInProcess에서 처리될 것입니다.
                     string processId = await _mainViewModel.InitiateRobotMissionProcess(
-                        "HandleRackTransfer", // 미션 프로세스 유형
+                        "완제품 입고 작업", // 미션 프로세스 유형
                         missionSteps,
                         lockedRackIds, // 잠긴 랙 ID 목록 전달
                         null, // racksToProcess
@@ -1473,7 +1473,7 @@ namespace WPF_WMS01.ViewModels
                 {
                     // MainViewModel을 통해 로봇 미션 프로세스 시작 (이제 MainViewModel이 RobotMissionService로 위임)
                     string processId = await _mainViewModel.InitiateRobotMissionProcess(
-                        "HandleRackShipout", // 미션 프로세스 유형
+                        "단일 출고 작업", // 미션 프로세스 유형
                         missionSteps,
                         lockedRackIds, // 잠긴 랙 ID 목록 전달 
                         null, // racksToProcess

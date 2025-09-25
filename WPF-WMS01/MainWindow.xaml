@@ -348,7 +348,7 @@
                             Effect="{StaticResource DefaultShadow}">
                         <StackPanel>
                             <Button Content="AMR_2 대기 지역으로" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding MoveAmr2ToBufferNode}"/>
-                            <Button Content="AMR_1 이동, 재 입고" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding MoveAndUnloadCommand}"/>
+                            <Button Content="AMR_1 Pallet 재 입고" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding MoveAndUnloadCommand}"/>
                             <Button Content="잠긴 랙 잠금 풀기" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding UnlockRackCommand}"/>
                             <!-- 팝업이 닫힐 때 IsMenuOpen을 False로 설정하는 버튼 추가 -->
                             <Button Content="메뉴 닫기" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding CloseMenuCommand}" Margin="0,10,0,0"/>

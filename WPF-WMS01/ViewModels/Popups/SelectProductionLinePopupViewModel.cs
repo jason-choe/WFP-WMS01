@@ -56,13 +56,13 @@ namespace WPF_WMS01.ViewModels.Popups
             // 샘플 생산 라인 장소 데이터 초기화 (8개)
             ProductionLineLocations = new ObservableCollection<ProductionLineLocation>
             {
-                new ProductionLineLocation { Id = 1, Name = "223A 1" },
-                new ProductionLineLocation { Id = 2, Name = "223A 2" },
-                new ProductionLineLocation { Id = 3, Name = "223B 1" },
-                new ProductionLineLocation { Id = 4, Name = "223B 2" },
-                new ProductionLineLocation { Id = 5, Name = "7.62mm" },
-                new ProductionLineLocation { Id = 6, Name = "카타르 1" },
-                new ProductionLineLocation { Id = 7, Name = "카타르 2" },
+                new ProductionLineLocation { Id = 1, Name = "223#1 A" },
+                new ProductionLineLocation { Id = 2, Name = "223#1 B" },
+                new ProductionLineLocation { Id = 3, Name = "223#2 A" },
+                new ProductionLineLocation { Id = 4, Name = "223#2 B" },
+                new ProductionLineLocation { Id = 5, Name = "308" },
+                new ProductionLineLocation { Id = 6, Name = "카타르 A" },
+                new ProductionLineLocation { Id = 7, Name = "카타르 B" },
                 new ProductionLineLocation { Id = 8, Name = "특수포장" },
             };
 

@@ -1191,13 +1191,13 @@ namespace WPF_WMS01.Services
                         sourceBoxCount = sourceRackVm.BoxCount;
                     }
 
-                    // 특별한 경우 2): ProcessType이 "FakeExecuteInboundProduct"일 경우 RackType 변경
-                    if (processInfo.ProcessType == "FakeExecuteInboundProduct") // WAIT -> AMR -> Rack
+                    // 특별한 경우 2): ProcessType이 "재공품 입고 작업 = FakeExecuteInboundProduct"일 경우 RackType 변경
+                    if (processInfo.ProcessType == "재공품 입고 작업") // WAIT -> AMR -> Rack
                     {
                         newDestinationRackType = 3; // 재공품 랙 타입으로 변경 (완제품 랙에서 재공품 랙으로)
                         if (sourceRackVm.Title.Equals("AMR")) newSourceRackType = 2;
                     }
-                    else if (processInfo.ProcessType == "HandleHalfPalletMove" || processInfo.ProcessType == "HandleHalfPalletExport") // Rack -> AMR -> OUT -> (NULL)
+                    else if (processInfo.ProcessType == "재공품 반출 준비" || processInfo.ProcessType == "재공품 반출 작업") // Rack -> AMR -> OUT -> (NULL)
                     {
                         newDestinationRackType = 3;
                         if (sourceRackVm.Title.Equals("AMR")) newSourceRackType = 2; // AMR -> OUT
@@ -1265,7 +1265,7 @@ namespace WPF_WMS01.Services
                     // 랙 비우기 (BulletType = 0, LotNumber = String.Empty)
                     int newSourceRackType = sourceRackVm.RackType;
 
-                    if (processInfo.ProcessType == "HandleHalfPalletExport")
+                    if (processInfo.ProcessType == "재공품 반출 작업")
                     {
                         // 반출의 경우 RackType은 1 (완제품)으로 유지
                         // newSourceRackType = 1;
@@ -1292,7 +1292,7 @@ namespace WPF_WMS01.Services
 
                     OnShowAutoClosingMessage?.Invoke($"랙 {sourceRackVm.Title} {processInfo.ProcessType} 성공.");
                 }
-                else if (processInfo.RacksToProcess != null && processInfo.RacksToProcess.Any() && processInfo.ProcessType == "ExecuteCheckoutProduct")
+                else if (processInfo.RacksToProcess != null && processInfo.RacksToProcess.Any() && processInfo.ProcessType == "다중 출고 작업")
                 {
                     // 다중 랙 출고 (ExecuteCheckoutProduct) - RacksToProcess 목록을 기반으로 처리
                     // 이 부분은 위의 sourceRackVm != null && destinationRackId == null 로직으로 처리될 것임.
@@ -1461,14 +1461,14 @@ namespace WPF_WMS01.Services
                         sourceBoxCount = sourceRackVm.BoxCount;
                     }
 
-                    // 특별한 경우 2): ProcessType이 "FakeExecuteInboundProduct"일 경우 RackType 변경
-                    if (processInfo.ProcessType == "FakeExecuteInboundProduct")
+                    // 특별한 경우 2): ProcessType이 "재공품 입고 작업 = FakeExecuteInboundProduct"일 경우 RackType 변경
+                    if (processInfo.ProcessType == "재공품 입고 작업")
                     {
                         newDestinationRackType = 3; // 재공품 랙 타입으로 변경 (완제품 랙에서 재공품 랙으로)
                         if (sourceRackVm.Title.Equals("WAIT")) newSourceRackType = 2;
                         else if(sourceRackVm.Title.Equals("AMR")) newSourceRackType = 1;
                     }
-                    else if (processInfo.ProcessType == "HandleHalfPalletExport")
+                    else if (processInfo.ProcessType == "재공품 반출 작업")
                     {
                         newDestinationRackType = 3;
                         newSourceRackType = 1;
@@ -1520,7 +1520,7 @@ namespace WPF_WMS01.Services
                     // HandleHalfPalletExport 또는 HandleRackShipout (단일 랙 출고)
                     // 랙 비우기 (BulletType = 0, LotNumber = String.Empty)
                     int newSourceRackType = sourceRackVm.RackType;
-                    if (processInfo.ProcessType == "HandleHalfPalletExport")
+                    if (processInfo.ProcessType == "재공품 반출 작업   ")
                     {
                         // 반출의 경우 RackType은 1 (완제품)으로 유지
                         newSourceRackType = 1;
@@ -1545,7 +1545,7 @@ namespace WPF_WMS01.Services
 
                     OnShowAutoClosingMessage?.Invoke($"랙 {sourceRackVm.Title} {processInfo.ProcessType} 성공.");
                 }
-                else if (processInfo.RacksToProcess != null && processInfo.RacksToProcess.Any() && processInfo.ProcessType == "ExecuteCheckoutProduct")
+                else if (processInfo.RacksToProcess != null && processInfo.RacksToProcess.Any() && processInfo.ProcessType == "다중 출고 작업")
                 {
                     // 다중 랙 출고 (ExecuteCheckoutProduct) - RacksToProcess 목록을 기반으로 처리
                     // 이 시나리오는 각 랙에 대한 개별 미션 완료 시점이 아니라, 전체 출고 프로세스 완료 시점에
