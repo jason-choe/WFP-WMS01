@@ -296,6 +296,7 @@ namespace WPF_WMS01.Services
                                     foreach (var subOperation in completedStepDefinition.PostMissionOperations)
                                     {
                                         if (processInfo.IsFailed) break; // ex: Modbus access 실패 시 Rack update는 안하는 경우
+                                        processInfo.HmiStatus.SubOpDescription = subOperation.Description;
                                         await PerformSubOperation(subOperation, processInfo);
                                     }
 
@@ -494,6 +495,7 @@ namespace WPF_WMS01.Services
             // 미션 정의에 따라 순서를 조정합니다.
             foreach (var subOperation in currentStep.PreMissionOperations)
             {
+                processInfo.HmiStatus.SubOpDescription = subOperation.Description;
                 await PerformSubOperation(subOperation, processInfo);
                 // PerformSubOperation 내부에서 예외 발생 시 해당 미션은 이미 실패 처리되므로, 추가적인 예외 처리는 필요 없습니다.
                 if (processInfo.IsFailed || processInfo.CancellationTokenSource.Token.IsCancellationRequested)
@@ -785,17 +787,30 @@ namespace WPF_WMS01.Services
                         }
 
                         // ConnectAsync는 내부적으로 재연결 로직을 포함하고 있으므로 여기서 직접 Connect/Disconnect를 관리하지 않아도 됩니다.
-                        string lotNoPart1 = await _mcProtocolService.ReadStringDataAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value);//.ConfigureAwait(false);
-                        ushort lotNoPart2 = await _mcProtocolService.ReadWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + subOp.McStringLengthWords.Value);//.ConfigureAwait(false);
-                        ushort boxCount = await _mcProtocolService.ReadWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + subOp.McStringLengthWords.Value + 2);//.ConfigureAwait(false);
-              
-                        if(lotNoPart1.Length > 1 && lotNoPart1[0] == 'P') // PSD... 의 경우 lot number는 3자리
+                        string? lotNoPart1 = await _mcProtocolService.ReadStringDataAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value);//.ConfigureAwait(false);
+                        ushort? lotNoPart2 = await _mcProtocolService.ReadWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + subOp.McStringLengthWords.Value);//.ConfigureAwait(false);
+                        ushort? boxCount = await _mcProtocolService.ReadWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + subOp.McStringLengthWords.Value + 2);//.ConfigureAwait(false);
+
+                        if (lotNoPart1 == null || lotNoPart2 == null || boxCount == null)
+                        {
+                            // 이 시점에서 미션 프로세스를 실패 상태로 마크하고 완료 처리
+                            processInfo.CurrentStatus = MissionStatusEnum.FAILED;
+                            processInfo.HmiStatus.Status = "FAILED";
+                            //processInfo.HmiStatus.ProgressPercentage = 100;
+                            processInfo.IsFailed = true; // 프로세스 실패 플래그 설정
+                            processInfo.CancellationTokenSource.Cancel(); // 미션 취소 요청
+                            await HandleRobotMissionCompletion(processInfo);
+                            break;
+                        }
+
+                        if (lotNoPart1.Length > 1 && lotNoPart1[0] == 'P') // PSD... 의 경우 lot number는 3자리
                             processInfo.ReadStringValue = $"{lotNoPart1.Trim()}-{lotNoPart2:D3}";
                         else
                             processInfo.ReadStringValue = $"{lotNoPart1.Trim()}-{lotNoPart2:D4}"; // "5-3"에 따라 LotNo 조합
                         processInfo.ReadIntValue = boxCount; // Box Count 저장
 
                         Debug.WriteLine($"[RobotMissionService] McReadLotNoBoxCount: Addr {subOp.McWordAddress.Value}, LotNo '{processInfo.ReadStringValue}', BoxCount {processInfo.ReadIntValue}");
+                        processInfo.HmiStatus.SubOpDescription = "";
                         break;
 
                     case SubOperationType.McReadSingleWord: 
@@ -803,9 +818,10 @@ namespace WPF_WMS01.Services
                         {
                             throw new ArgumentException("McReadSingleWord: IpAddress, WordAddress가 지정되지 않았습니다.");
                         }
-                        ushort readWord = await _mcProtocolService.ReadWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value).ConfigureAwait(false);
+                        ushort? readWord = await _mcProtocolService.ReadWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value).ConfigureAwait(false);
                         processInfo.ReadIntValue = readWord;
                         Debug.WriteLine($"[RobotMissionService] McReadSingleWord: Device '{subOp.WordDeviceCode}', Address {subOp.McWordAddress.Value}, Value {readWord}");
+                        processInfo.HmiStatus.SubOpDescription = "";
                         break;
 
                     case SubOperationType.McWriteLotNoBoxCount:
@@ -827,6 +843,7 @@ namespace WPF_WMS01.Services
                         await _mcProtocolService.WriteWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + subOp.McStringLengthWords.Value + 2, processInfo.ReadIntValue.Value).ConfigureAwait(false);
 
                         Debug.WriteLine($"[RobotMissionService] McWriteLotNoBoxCount: LotNo '{processInfo.ReadStringValue}', BoxCount {processInfo.ReadIntValue.Value} Written.");
+                        processInfo.HmiStatus.SubOpDescription = "";
                         break;
 
                     case SubOperationType.McWriteSingleWord:
@@ -836,6 +853,7 @@ namespace WPF_WMS01.Services
                         }
                         await _mcProtocolService.WriteWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value, (ushort)subOp.McWriteValueInt.Value).ConfigureAwait(false);
                         Debug.WriteLine($"[RobotMissionService] McWriteSingleWord: Device '{subOp.WordDeviceCode}', Address {subOp.McWordAddress.Value}, Value {(ushort)subOp.McWriteValueInt.Value}");
+                        processInfo.HmiStatus.SubOpDescription = "";
                         break;
 
                     case SubOperationType.McWaitAvailable:
@@ -845,9 +863,21 @@ namespace WPF_WMS01.Services
                         }
                         while (!processInfo.CancellationTokenSource.Token.IsCancellationRequested)
                         {
-                            ushort currentState = await _mcProtocolService.ReadWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value).ConfigureAwait(false);
+                            ushort? currentState = await _mcProtocolService.ReadWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value).ConfigureAwait(false);
+                            if (currentState == null)
+                            {
+                                // 이 시점에서 미션 프로세스를 실패 상태로 마크하고 완료 처리
+                                processInfo.CurrentStatus = MissionStatusEnum.FAILED;
+                                processInfo.HmiStatus.Status = "FAILED";
+                                //processInfo.HmiStatus.ProgressPercentage = 100;
+                                processInfo.IsFailed = true; // 프로세스 실패 플래그 설정
+                                processInfo.CancellationTokenSource.Cancel(); // 미션 취소 요청
+                                await HandleRobotMissionCompletion(processInfo);
+                                break;
+                            }
                             if (currentState == subOp.McWateValueInt)
                             {
+                                processInfo.HmiStatus.SubOpDescription = "";
                                 break;
                             }
                             await Task.Delay(500).ConfigureAwait(false); // 0.5초마다 체크
@@ -877,11 +907,23 @@ namespace WPF_WMS01.Services
 
                         while (DateTime.Now - startTime < TimeSpan.FromSeconds(subOp.WaitTimeoutSeconds.Value) && !processInfo.CancellationTokenSource.Token.IsCancellationRequested)
                         {
-                            ushort currentState = await _mcProtocolService.ReadWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value).ConfigureAwait(false);
+                            ushort? currentState = await _mcProtocolService.ReadWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value).ConfigureAwait(false);
                             //if ((currentState != 0) == targetState) // 0이 아니면 ON, 0이면 OFF로 간주
+                            if (currentState == null)
+                            {
+                                // 이 시점에서 미션 프로세스를 실패 상태로 마크하고 완료 처리
+                                processInfo.CurrentStatus = MissionStatusEnum.FAILED;
+                                processInfo.HmiStatus.Status = "FAILED";
+                                //processInfo.HmiStatus.ProgressPercentage = 100;
+                                processInfo.IsFailed = true; // 프로세스 실패 플래그 설정
+                                processInfo.CancellationTokenSource.Cancel(); // 미션 취소 요청
+                                await HandleRobotMissionCompletion(processInfo);
+                                break;
+                            }
                             if (currentState == subOp.McWriteValueInt.Value)
                             {
                                 sensorStateReached = true;
+                                processInfo.HmiStatus.SubOpDescription = "";
                                 break;
                             }
                             await Task.Delay(500).ConfigureAwait(false); // 0.5초마다 체크
@@ -913,6 +955,7 @@ namespace WPF_WMS01.Services
                             processInfo.ReadStringValue = "";
                             processInfo.ReadIntValue = 0;
                         }
+                        processInfo.HmiStatus.SubOpDescription = "";
                         break;
 
                     case SubOperationType.DbUpdateRackState:
@@ -921,6 +964,7 @@ namespace WPF_WMS01.Services
                             throw new ArgumentException("DbUpdateRackState: SourceRackIdForDbUpdate 또는 DestRackIdForDbUpdate가 지정되지 않았습니다.");
                         }
                         await PerformDbUpdateForCompletedStepLogic(processInfo, subOp.SourceRackIdForDbUpdate, subOp.DestRackIdForDbUpdate).ConfigureAwait(false);
+                        processInfo.HmiStatus.SubOpDescription = "";
                         break;
 
                     case SubOperationType.UiDisplayLotNoBoxCount:
@@ -935,7 +979,8 @@ namespace WPF_WMS01.Services
                             _setInputStringForButtonFunc(processInfo.ReadStringValue);
                             _setInputStringForBoxesFunc(processInfo.ReadIntValue.ToString());
                             OnShowAutoClosingMessage?.Invoke($"UI 표시: LotNo: {processInfo.ReadStringValue}, BoxCount: {processInfo.ReadIntValue.Value}");
-                       }
+                        }
+                        processInfo.HmiStatus.SubOpDescription = "";
                         break;
 
                     case SubOperationType.CheckModbusDiscreteInput:
@@ -1061,6 +1106,7 @@ namespace WPF_WMS01.Services
                     else
                     {
                         Debug.WriteLine($"[RobotMissionService] Modbus Discrete Input {discreteInputAddress.Value} is 0. Proceeding with mission step.");
+                        processInfo.HmiStatus.SubOpDescription = "";
                         return; // Modbus 체크 성공, 함수 종료
                     }
                 }

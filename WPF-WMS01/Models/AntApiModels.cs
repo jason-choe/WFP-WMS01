@@ -472,6 +472,13 @@ namespace WPF_WMS01.Models
             set => SetProperty(ref _currentStepIndex, value);
         }
 
+        private string _subOpDescription;
+        public string SubOpDescription
+        {
+            get => _subOpDescription;
+            set => SetProperty(ref _subOpDescription, value);
+        }
+
         private int _totalSteps;
         public int TotalSteps
         {

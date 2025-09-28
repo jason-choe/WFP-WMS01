@@ -24,6 +24,7 @@ namespace WPF_WMS01.ViewModels.Popups
         private int _overallCurrentStep;
         private int _overallTotalStep;
         private string _currentStepDescription;
+        private string _subOpDescription;
         private ObservableCollection<MissionStepStatusViewModel> _missionStepsStatus;
 
         // 새로 추가된 Title 속성
@@ -88,6 +89,12 @@ namespace WPF_WMS01.ViewModels.Popups
         {
             get => _currentStepDescription;
             set => SetProperty(ref _currentStepDescription, value);
+        }
+
+        public string SubOpDescription
+        {
+            get => _subOpDescription;
+            set => SetProperty(ref _subOpDescription, value);
         }
 
         public ObservableCollection<MissionStepStatusViewModel> MissionStepsStatus
@@ -177,8 +184,8 @@ namespace WPF_WMS01.ViewModels.Popups
                 Debug.WriteLine($"[CheckPoint] missionInfo.CurrentStepIndex = {missionInfo.CurrentStepIndex}, OverallCurrentStep = {OverallCurrentStep}");
                 OverallTotalStep = missionInfo.TotalSteps;
                 CurrentStepDescription = missionInfo.HmiStatus?.CurrentStepDescription;
-
-                if(missionInfo.CurrentStepIndex < allMissionStepDefinitions.Count) // Index was out of range exception 방지
+                SubOpDescription = missionInfo.HmiStatus?.SubOpDescription;
+                if (missionInfo.CurrentStepIndex < allMissionStepDefinitions.Count) // Index was out of range exception 방지
                     Payload = allMissionStepDefinitions[missionInfo.CurrentStepIndex].Payload.Equals("AMR_2")?"Poongsan_2":"Poongsan_1";
 
                 switch (missionInfo.CurrentStatus)

@@ -221,7 +221,9 @@ namespace WPF_WMS01.Services
                 Debug.WriteLine("[McProtocolService] Not connected. Attempting to reconnect for ReadWordsAsync.");
                 if (!await ConnectAsync(ipAddress))//.ConfigureAwait(false))
                 {
-                    throw new InvalidOperationException("ReadWordsAsync: MC Protocol PLC에 연결되어 있지 않습니다.");
+                    Debug.WriteLine("[McProtocolService] ReadWordAsync: Failed to reconnect.");
+                    return null;
+                    //throw new InvalidOperationException("ReadWordsAsync: MC Protocol PLC에 연결되어 있지 않습니다.");
                 }
             }
 
@@ -368,7 +370,7 @@ namespace WPF_WMS01.Services
         /// <param name="deviceCode">디바이스 코드 (예: "D", "R").</param>
         /// <param name="address">디바이스 주소.</param>
         /// <returns>읽은 워드 값.</returns>
-        public async Task<ushort> ReadWordAsync(string ipAddress, string deviceCode, int address)
+        public async Task<ushort?> ReadWordAsync(string ipAddress, string deviceCode, int address)
         {
             // ReadWordsAsync를 사용하여 단일 워드를 읽습니다.
             ushort[] result = await ReadWordsAsync(ipAddress, deviceCode, address, 1);//.ConfigureAwait(false);
@@ -376,7 +378,8 @@ namespace WPF_WMS01.Services
             {
                 return result[0];
             }
-            throw new Exception("MC Protocol 워드 읽기 응답 데이터 없음.");
+            return null;
+            //throw new Exception("MC Protocol 워드 읽기 응답 데이터 없음.");
         }
 
         /// <summary>
@@ -399,7 +402,7 @@ namespace WPF_WMS01.Services
         /// <param name="deviceCode">디바이스 코드 (예: "D", "R").</param>
         /// <param name="address">시작 디바이스 주소.</param>
         /// <returns>읽은 문자열.</returns>
-        public async Task<string> ReadStringDataAsync(string ipAddress, string deviceCode, int address)
+        public async Task<string?> ReadStringDataAsync(string ipAddress, string deviceCode, int address)
         {
             try
             {
