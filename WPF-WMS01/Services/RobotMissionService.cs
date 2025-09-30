@@ -781,6 +781,7 @@ namespace WPF_WMS01.Services
                 switch (subOp.Type)
                 {
                     case SubOperationType.McReadLotNoBoxCount:
+                        break; // pre online test
                         if (subOp.McProtocolIpAddress == null || !subOp.McWordAddress.HasValue || !subOp.McStringLengthWords.HasValue)
                         {
                             throw new ArgumentException("McReadLotNoBoxCount: IpAddress, WordAddress 또는 StringLengthWords가 지정되지 않았습니다.");
@@ -813,7 +814,8 @@ namespace WPF_WMS01.Services
                         processInfo.HmiStatus.SubOpDescription = "";
                         break;
 
-                    case SubOperationType.McReadSingleWord: 
+                    case SubOperationType.McReadSingleWord:
+                        break; // pre online test
                         if (subOp.McProtocolIpAddress == null || !subOp.McWordAddress.HasValue)
                         {
                             throw new ArgumentException("McReadSingleWord: IpAddress, WordAddress가 지정되지 않았습니다.");
@@ -825,6 +827,7 @@ namespace WPF_WMS01.Services
                         break;
 
                     case SubOperationType.McWriteLotNoBoxCount:
+                        break; // pre online test
                         if (subOp.McProtocolIpAddress == null || !subOp.McWordAddress.HasValue || !subOp.McStringLengthWords.HasValue || string.IsNullOrEmpty(processInfo.ReadStringValue) || !processInfo.ReadIntValue.HasValue)
                         {
                             throw new ArgumentException("McWriteLotNoBoxCount: 필요한 파라미터 (IpAddress, WordAddress, StringLengthWords, ReadStringValue, ReadIntValue)가 충분하지 않습니다.");
@@ -838,32 +841,34 @@ namespace WPF_WMS01.Services
                         string writeLotNoPart1 = lotNoParts[0];
                         ushort writeLotNoPart2 = ushort.Parse(lotNoParts[1]);
 
-                        await _mcProtocolService.WriteStringDataAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value, writeLotNoPart1).ConfigureAwait(false);
-                        await _mcProtocolService.WriteWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + subOp.McStringLengthWords.Value, writeLotNoPart2).ConfigureAwait(false);
-                        await _mcProtocolService.WriteWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + subOp.McStringLengthWords.Value + 2, processInfo.ReadIntValue.Value).ConfigureAwait(false);
+                        await _mcProtocolService.WriteStringDataAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value, writeLotNoPart1);//.ConfigureAwait(false);
+                        await _mcProtocolService.WriteWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + subOp.McStringLengthWords.Value, writeLotNoPart2);//.ConfigureAwait(false);
+                        await _mcProtocolService.WriteWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + subOp.McStringLengthWords.Value + 2, processInfo.ReadIntValue.Value);//.ConfigureAwait(false);
 
                         Debug.WriteLine($"[RobotMissionService] McWriteLotNoBoxCount: LotNo '{processInfo.ReadStringValue}', BoxCount {processInfo.ReadIntValue.Value} Written.");
                         processInfo.HmiStatus.SubOpDescription = "";
                         break;
 
                     case SubOperationType.McWriteSingleWord:
+                        //break; // pre online test
                         if (subOp.McProtocolIpAddress == null || !subOp.McWordAddress.HasValue || !subOp.McWriteValueInt.HasValue)
                         {
                             throw new ArgumentException("McWriteSingleWord: IpAddress, WordAddress 또는 WriteValueInt가 지정되지 않았습니다.");
                         }
-                        await _mcProtocolService.WriteWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value, (ushort)subOp.McWriteValueInt.Value).ConfigureAwait(false);
+                        await _mcProtocolService.WriteWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value, (ushort)subOp.McWriteValueInt.Value);//.ConfigureAwait(false);
                         Debug.WriteLine($"[RobotMissionService] McWriteSingleWord: Device '{subOp.WordDeviceCode}', Address {subOp.McWordAddress.Value}, Value {(ushort)subOp.McWriteValueInt.Value}");
                         processInfo.HmiStatus.SubOpDescription = "";
                         break;
 
                     case SubOperationType.McWaitAvailable:
+                        //break; // pre online test
                         if (subOp.McProtocolIpAddress == null || !subOp.McWordAddress.HasValue || !subOp.McWateValueInt.HasValue)
                         {
                             throw new ArgumentException("McWaitSensorOff/On: IpAddress, WordAddress 또는 WriteValueInt가 지정되지 않았습니다.");
                         }
                         while (!processInfo.CancellationTokenSource.Token.IsCancellationRequested)
                         {
-                            ushort? currentState = await _mcProtocolService.ReadWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value).ConfigureAwait(false);
+                            ushort? currentState = await _mcProtocolService.ReadWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value); //.ConfigureAwait(false);
                             if (currentState == null)
                             {
                                 // 이 시점에서 미션 프로세스를 실패 상태로 마크하고 완료 처리
@@ -886,9 +891,11 @@ namespace WPF_WMS01.Services
 
                     case SubOperationType.McWaitSensorOff:
                     case SubOperationType.McWaitSensorOn:
+                        //break; // pre online test
                         if (subOp.McProtocolIpAddress == null || !subOp.McWordAddress.HasValue || !subOp.McWriteValueInt.HasValue)
                         {
-                            throw new ArgumentException("McWaitSensorOff/On: WordAddress 또는 WriteValueInt가 지정되지 않았습니다.");
+                            break; // No action
+                            //throw new ArgumentException("McWaitSensorOff/On: WordAddress 또는 WriteValueInt가 지정되지 않았습니다.");
                         }
                         if (!subOp.WaitTimeoutSeconds.HasValue || subOp.WaitTimeoutSeconds.Value <= 0)
                         {
@@ -897,7 +904,7 @@ namespace WPF_WMS01.Services
                         }
 
                         // 센서 명령 (켜거나 끄기)
-                        await _mcProtocolService.WriteWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value, (ushort)subOp.McWriteValueInt.Value).ConfigureAwait(false);
+                        await _mcProtocolService.WriteWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value, (ushort)subOp.McWriteValueInt.Value);//.ConfigureAwait(false);
                         Debug.WriteLine($"[RobotMissionService] McWaitSensor: Command written to Device '{subOp.WordDeviceCode}', Address {subOp.McWordAddress.Value}, Value {(ushort)subOp.McWriteValueInt.Value}. Waiting for sensor state...");
 
                         bool targetState = (subOp.Type == SubOperationType.McWaitSensorOn); // ON을 기다리면 true, OFF를 기다리면 false
@@ -907,7 +914,7 @@ namespace WPF_WMS01.Services
 
                         while (DateTime.Now - startTime < TimeSpan.FromSeconds(subOp.WaitTimeoutSeconds.Value) && !processInfo.CancellationTokenSource.Token.IsCancellationRequested)
                         {
-                            ushort? currentState = await _mcProtocolService.ReadWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value).ConfigureAwait(false);
+                            ushort? currentState = await _mcProtocolService.ReadWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value);//.ConfigureAwait(false);
                             //if ((currentState != 0) == targetState) // 0이 아니면 ON, 0이면 OFF로 간주
                             if (currentState == null)
                             {
@@ -932,7 +939,15 @@ namespace WPF_WMS01.Services
                         if (!sensorStateReached)
                         {
                             processInfo.CancellationTokenSource.Token.ThrowIfCancellationRequested(); // 취소된 경우 예외 던지기
-                            throw new TimeoutException($"McWaitSensor: 센서 상태 대기 시간 초과 ({subOp.WaitTimeoutSeconds.Value}초). 목표 상태: {(targetState ? "ON" : "OFF")}");
+                                                                                                      // 이 시점에서 미션 프로세스를 실패 상태로 마크하고 완료 처리
+                            processInfo.CurrentStatus = MissionStatusEnum.FAILED;
+                            processInfo.HmiStatus.Status = "FAILED";
+                            //processInfo.HmiStatus.ProgressPercentage = 100;
+                            processInfo.IsFailed = true; // 프로세스 실패 플래그 설정
+                            processInfo.CancellationTokenSource.Cancel(); // 미션 취소 요청
+                            await HandleRobotMissionCompletion(processInfo);
+                            break;
+                            //throw new TimeoutException($"McWaitSensor: 센서 상태 대기 시간 초과 ({subOp.WaitTimeoutSeconds.Value}초). 목표 상태: {(targetState ? "ON" : "OFF")}");
                         }
                         Debug.WriteLine($"[RobotMissionService] McWaitSensor: Sensor state {(targetState ? "ON" : "OFF")} reached.");
                         break;
@@ -984,6 +999,7 @@ namespace WPF_WMS01.Services
                         break;
 
                     case SubOperationType.CheckModbusDiscreteInput:
+                        //break; // pre online test
                         await PerformModbusDiscreteInputCheck(processInfo, subOp.McDiscreteInputAddress).ConfigureAwait(false);
                         break;
 

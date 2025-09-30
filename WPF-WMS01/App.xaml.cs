@@ -111,7 +111,9 @@ namespace WPF_WMS01
                 ModbusClientService missionCheckModbusService;
                 if (missionModbusMode.Equals("TCP", StringComparison.OrdinalIgnoreCase))
                 {
-                    missionCheckModbusService = new ModbusClientService(missionModbusIp, missionModbusPort, missionModbusSlaveId);
+                    missionCheckModbusService = new ModbusClientService(
+                        ConfigurationManager.AppSettings["WarehouseAMR"].Equals("AMR_1") ? "192.168.200.202" : "192.168.200.222", // missionModbusIp, 
+                        missionModbusPort, missionModbusSlaveId);
                 }
                 else // RTU
                 {

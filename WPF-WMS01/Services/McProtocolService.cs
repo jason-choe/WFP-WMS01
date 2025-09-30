@@ -372,6 +372,7 @@ namespace WPF_WMS01.Services
         /// <returns>읽은 워드 값.</returns>
         public async Task<ushort?> ReadWordAsync(string ipAddress, string deviceCode, int address)
         {
+            await ConnectAsync(ipAddress).ConfigureAwait(false); // 매 호출마다 연결
             // ReadWordsAsync를 사용하여 단일 워드를 읽습니다.
             ushort[] result = await ReadWordsAsync(ipAddress, deviceCode, address, 1);//.ConfigureAwait(false);
             if (result != null && result.Length > 0)
@@ -391,6 +392,7 @@ namespace WPF_WMS01.Services
         /// <returns>쓰기 성공 여부.</returns>
         public async Task<bool> WriteWordAsync(string ipAddress, string deviceCode, int address, ushort value)
         {
+            await ConnectAsync(ipAddress).ConfigureAwait(false); // 매 호출마다 연결
             // WriteWordsAsync를 사용하여 단일 워드를 씁니다.
             return await WriteWordsAsync(ipAddress, deviceCode, address, new ushort[] { value });//.ConfigureAwait(false);
         }
@@ -406,7 +408,7 @@ namespace WPF_WMS01.Services
         {
             try
             {
-                await ConnectAsync(ipAddress, 6000).ConfigureAwait(false); // 매 호출마다 연결
+                await ConnectAsync(ipAddress).ConfigureAwait(false); // 매 호출마다 연결
                 const ushort STRING_WORD_LENGTH = 8; // 16 bytes = 8 words
                 ushort[] words = await ReadWordsAsync(ipAddress, deviceCode, address, STRING_WORD_LENGTH);//.ConfigureAwait(false);
 
@@ -442,7 +444,7 @@ namespace WPF_WMS01.Services
         {
             try
             {
-                await ConnectAsync(ipAddress, 6000).ConfigureAwait(false); // 매 호출마다 연결
+                await ConnectAsync(ipAddress).ConfigureAwait(false); // 매 호출마다 연결
                 const ushort STRING_BYTE_LENGTH = 16;
                 const ushort STRING_WORD_LENGTH = 8; // 16 bytes = 8 words
 
@@ -479,7 +481,7 @@ namespace WPF_WMS01.Services
         {
             try
             {
-                await ConnectAsync(ipAddress, 6000).ConfigureAwait(false); // 매 호출마다 연결
+                await ConnectAsync(ipAddress).ConfigureAwait(false); // 매 호출마다 연결
                 const ushort INT_WORD_LENGTH = 2; // 32-bit int = 2 words
                 ushort[] words = await ReadWordsAsync(ipAddress, deviceCode, address, INT_WORD_LENGTH);//.ConfigureAwait(false);
 
@@ -510,7 +512,7 @@ namespace WPF_WMS01.Services
         {
             try
             {
-                await ConnectAsync(ipAddress, 6000).ConfigureAwait(false); // 매 호출마다 연결
+                await ConnectAsync(ipAddress).ConfigureAwait(false); // 매 호출마다 연결
                 ushort[] words = new ushort[2];
                 words[0] = (ushort)(value & 0xFFFF); // 하위 16비트
                 words[1] = (ushort)((value >> 16) & 0xFFFF); // 상위 16비트
