@@ -54,6 +54,7 @@ namespace WPF_WMS01.Services
         private const int PLC_CONNECT_RETRY_DELAY_SECONDS = 5; // MC Protocol 재시도 간 지연 시간 // PLC_CONNECT_RETRY_DELAY_SECONDS
 
         private bool _isPollingInProgress = false; // 폴링 타이머 재진입 방지 플래그
+        private readonly bool _mcProtocolInterface = ConfigurationManager.AppSettings["McProtocolInterface"].Equals("true") ? true : false;
 
         /// <summary>
         /// MainViewModel로 상태를 다시 보고하기 위한 이벤트
@@ -119,7 +120,7 @@ namespace WPF_WMS01.Services
         private void SetupRobotMissionPollingTimer()
         {
             _robotMissionPollingTimer = new DispatcherTimer();
-            _robotMissionPollingTimer.Interval = TimeSpan.FromSeconds(5); // 5초마다 폴링 (조정 가능)
+            _robotMissionPollingTimer.Interval = TimeSpan.FromSeconds(5); // 1초마다 폴링 (조정 가능)
             _robotMissionPollingTimer.Tick += RobotMissionPollingTimer_Tick;
             _robotMissionPollingTimer.Start();
             Debug.WriteLine("[RobotMissionService] Robot Mission Polling Timer Started.");
@@ -781,6 +782,7 @@ namespace WPF_WMS01.Services
                 switch (subOp.Type)
                 {
                     case SubOperationType.McReadLotNoBoxCount:
+                        if (!_mcProtocolInterface) break;
                         break; // pre online test
                         if (subOp.McProtocolIpAddress == null || !subOp.McWordAddress.HasValue || !subOp.McStringLengthWords.HasValue)
                         {
@@ -815,7 +817,7 @@ namespace WPF_WMS01.Services
                         break;
 
                     case SubOperationType.McReadSingleWord:
-                        break; // pre online test
+                        if (!_mcProtocolInterface) break;
                         if (subOp.McProtocolIpAddress == null || !subOp.McWordAddress.HasValue)
                         {
                             throw new ArgumentException("McReadSingleWord: IpAddress, WordAddress가 지정되지 않았습니다.");
@@ -827,6 +829,7 @@ namespace WPF_WMS01.Services
                         break;
 
                     case SubOperationType.McWriteLotNoBoxCount:
+                        if (!_mcProtocolInterface) break;
                         break; // pre online test
                         if (subOp.McProtocolIpAddress == null || !subOp.McWordAddress.HasValue || !subOp.McStringLengthWords.HasValue || string.IsNullOrEmpty(processInfo.ReadStringValue) || !processInfo.ReadIntValue.HasValue)
                         {
@@ -850,7 +853,7 @@ namespace WPF_WMS01.Services
                         break;
 
                     case SubOperationType.McWriteSingleWord:
-                        //break; // pre online test
+                        if (!_mcProtocolInterface) break;
                         if (subOp.McProtocolIpAddress == null || !subOp.McWordAddress.HasValue || !subOp.McWriteValueInt.HasValue)
                         {
                             throw new ArgumentException("McWriteSingleWord: IpAddress, WordAddress 또는 WriteValueInt가 지정되지 않았습니다.");
@@ -861,7 +864,7 @@ namespace WPF_WMS01.Services
                         break;
 
                     case SubOperationType.McWaitAvailable:
-                        //break; // pre online test
+                        if (!_mcProtocolInterface) break;
                         if (subOp.McProtocolIpAddress == null || !subOp.McWordAddress.HasValue || !subOp.McWateValueInt.HasValue)
                         {
                             throw new ArgumentException("McWaitSensorOff/On: IpAddress, WordAddress 또는 WriteValueInt가 지정되지 않았습니다.");
@@ -891,7 +894,7 @@ namespace WPF_WMS01.Services
 
                     case SubOperationType.McWaitSensorOff:
                     case SubOperationType.McWaitSensorOn:
-                        //break; // pre online test
+                        if (!_mcProtocolInterface) break;
                         if (subOp.McProtocolIpAddress == null || !subOp.McWordAddress.HasValue || !subOp.McWriteValueInt.HasValue)
                         {
                             break; // No action
@@ -999,7 +1002,6 @@ namespace WPF_WMS01.Services
                         break;
 
                     case SubOperationType.CheckModbusDiscreteInput:
-                        //break; // pre online test
                         await PerformModbusDiscreteInputCheck(processInfo, subOp.McDiscreteInputAddress).ConfigureAwait(false);
                         break;
 
