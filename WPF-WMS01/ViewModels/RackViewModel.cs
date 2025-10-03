@@ -485,7 +485,7 @@ namespace WPF_WMS01.ViewModels
                         new MissionStepDefinition {
                             ProcessStepDescription = "래핑기로 이동하여, 미포장 팔레트 드롭",
                             MissionType = "7",
-                            FromNode = "Turn_Rack",
+                            FromNode = "Wrapping_Turn", //"Turn_Rack",
                             ToNode = "Wrapping_Drop",
                             Payload = _mainViewModel.WarehousePayload,
                             IsLinkable = true,
@@ -870,9 +870,9 @@ namespace WPF_WMS01.ViewModels
                             {
                                 // 1. Move from Charger, Turn
                                 new MissionStepDefinition {
-                                    ProcessStepDescription = $"충전소에서 이동",
+                                    ProcessStepDescription = "충전소에서 대기 장소로 이동",
                                     MissionType = "8",
-                                    ToNode = "AMR2_WAIT",
+                                    ToNode = "Pallet_BWD_Pos",
                                     Payload = _mainViewModel.ProductionLinePayload,
                                     IsLinkable = true,
                                     LinkedMission = null,
@@ -965,9 +965,9 @@ namespace WPF_WMS01.ViewModels
                             {
                                 // 1. Move from Charger, Turn
                                 new MissionStepDefinition {
-                                    ProcessStepDescription = $"충전소에서 이동",
+                                    ProcessStepDescription = "충전소에서 대기 장소로 이동",
                                     MissionType = "8",
-                                    ToNode = "AMR2_WAIT",
+                                    ToNode = "Pallet_BWD_Pos",
                                     Payload = _mainViewModel.ProductionLinePayload,
                                     IsLinkable = true,
                                     LinkedMission = null,
@@ -1078,10 +1078,9 @@ namespace WPF_WMS01.ViewModels
                     // 11. Move, Charge
                     missionSteps.Add(new MissionStepDefinition
                     {
-                        ProcessStepDescription = $"충전소로 복귀",
-                        MissionType = "7",
-                        FromNode = "AMR2_WAIT",
-                        ToNode = "Charge2",
+                        ProcessStepDescription = "작업 대기 장소로 이동",
+                        MissionType = "8",
+                        ToNode = "Pallet_BWD_Pos",
                         Payload = _mainViewModel.ProductionLinePayload,
                         IsLinkable = false,
                         LinkWaitTimeout = 3600

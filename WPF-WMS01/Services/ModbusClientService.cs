@@ -189,6 +189,8 @@ namespace WPF_WMS01.Services
                         DataBits = _dataBits
                     };
                     Debug.WriteLine($"[ModbusClientService] Attempting to open RTU port: {_comPort}... Instance ID: {_instanceId}");
+                    if (_serialPort == null)
+                        return false;
                     _serialPort.Open();
                     _modbusMaster = Modbus.Device.ModbusSerialMaster.CreateRtu(_serialPort);
                     // ModbusMaster 생성 후 null 체크 추가 (RTU에도 동일하게 적용)
@@ -369,7 +371,7 @@ namespace WPF_WMS01.Services
             if (_modbusMaster != null)
             {
                 _modbusMaster.Dispose();
-                _modbusMaster = null;
+                //_modbusMaster = null;
                 Debug.WriteLine($"[ModbusClientService] Modbus Master disposed. Instance ID: {_instanceId}");
             }
             if (_tcpClient != null)

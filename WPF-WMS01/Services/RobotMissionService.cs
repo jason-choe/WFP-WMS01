@@ -120,7 +120,7 @@ namespace WPF_WMS01.Services
         private void SetupRobotMissionPollingTimer()
         {
             _robotMissionPollingTimer = new DispatcherTimer();
-            _robotMissionPollingTimer.Interval = TimeSpan.FromSeconds(5); // 1초마다 폴링 (조정 가능)
+            _robotMissionPollingTimer.Interval = TimeSpan.FromSeconds(1); // 1초마다 폴링 (조정 가능)
             _robotMissionPollingTimer.Tick += RobotMissionPollingTimer_Tick;
             _robotMissionPollingTimer.Start();
             Debug.WriteLine("[RobotMissionService] Robot Mission Polling Timer Started.");

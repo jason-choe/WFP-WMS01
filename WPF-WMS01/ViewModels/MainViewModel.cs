@@ -341,7 +341,7 @@ namespace WPF_WMS01.ViewModels
                 new ModbusButtonViewModel("223B Bypass", ConfigurationManager.AppSettings["CallButton06Title"] ?? "223#2  Bypass", 5, 5),    // Discrete Input 100005 -> 0x02 Read 5 / Coil Output 0x05 Write 5
                 new ModbusButtonViewModel("7.62mm", ConfigurationManager.AppSettings["CallButton07Title"] ?? "308", 6, 6),       // Discrete Input 100006 -> 0x02 Read 6 / Coil Output 0x05 Write 6
                 new ModbusButtonViewModel("팔레트 공급", ConfigurationManager.AppSettings["CallButton08Title"] ?? "Pallet 공급", 7, 7),  // Discrete Input 100007 -> 0x02 Read 7 / Coil Output 0x05 Write 7
-                new ModbusButtonViewModel("딘프라 공급", ConfigurationManager.AppSettings["CallButton09Title"] ?? "Pad 공급", 8, 8),  // Discrete Input 100008 -> 0x02 Read 8 / Coil Output 0x05 Write 8
+                new ModbusButtonViewModel("단프라 공급", ConfigurationManager.AppSettings["CallButton09Title"] ?? "Pad 공급", 8, 8),  // Discrete Input 100008 -> 0x02 Read 8 / Coil Output 0x05 Write 8
                 new ModbusButtonViewModel("특수 포장", ConfigurationManager.AppSettings["CallButton10Title"] ?? "특수포장", 9, 9),    // Discrete Input 100011 -> 0x02 Read 9 / Coil Output 0x05 Write 9
                 new ModbusButtonViewModel("카타르 1", ConfigurationManager.AppSettings["CallButton11Title"] ?? "카타르 A", 10, 10),  // Discrete Input 100009 -> 0x02 Read 10 / Coil Output 0x05 Write 10
                 new ModbusButtonViewModel("카타르 2", ConfigurationManager.AppSettings["CallButton12Title"] ?? "카타르 B", 11, 11),  // Discrete Input 100010 -> 0x02 Read 11 / Coil Output 0x05 Write 11
@@ -1029,55 +1029,102 @@ namespace WPF_WMS01.ViewModels
 
                 if (discreteInputStates != null && discreteInputStates.Length >= numberOfDiscreteInputs)
                 {
-                    // UI 업데이트는 UI 스레드에서 수행
+                    if (Application.Current?.Dispatcher == null)
+                    {
+                        Debug.WriteLine("[Error] Application.Current.Dispatcher is null.");
+                        return;
+                    }
+
                     Application.Current.Dispatcher.Invoke(async () =>
                     {
+                        if (ModbusButtons == null)
+                        {
+                            Debug.WriteLine("[Error] ModbusButtons is null.");
+                            return;
+                        }
+                        if (discreteInputStates == null)
+                        {
+                            Debug.WriteLine("[Error] discreteInputStates is null.");
+                            return;
+                        }
+                        if (discreteInputStates.Length < numberOfDiscreteInputs || ModbusButtons.Count < numberOfDiscreteInputs)
+                        {
+                            Debug.WriteLine("[Error] Insufficient elements in discreteInputStates or ModbusButtons.");
+                            return;
+                        }
+
                         for (int i = 0; i < numberOfDiscreteInputs; i++)
                         {
                             var buttonVm = ModbusButtons[i];
+                            if (buttonVm == null)
+                            {
+                                Debug.WriteLine($"[Error] ModbusButtons[{i}] is null.");
+                                continue;
+                            }
+
                             bool currentDiscreteInputState = discreteInputStates[i];
                             bool previousDiscreteInputState = buttonVm.CurrentDiscreteInputState;
 
-                            // Discrete Input 상태 업데이트 (다음 틱에서 이전 상태 비교를 위해)
                             buttonVm.CurrentDiscreteInputState = currentDiscreteInputState;
-
-                            // 버튼의 IsEnabled 상태는 PLC가 Run 상태이고, 해당 Discrete Input이 1일 때 활성화
-                            // IsProcessing 상태는 IsEnabled에 직접 영향을 주지 않음 (XAML DataTrigger에서 시각적 변화 처리)
                             buttonVm.IsEnabled = PlcStatusIsRun && currentDiscreteInputState;
 
-                            // PLC 신호 (Discrete Input 0->1) 감지 및 PLC가 Run 상태일 때
-                            // 그리고 해당 버튼에 대한 작업이 아직 시작되지 않았을 때만 트리거
                             if (currentDiscreteInputState && !previousDiscreteInputState && PlcStatusIsRun && !buttonVm.IsTaskInitiatedByDiscreteInput)
                             {
-                                // 이 버튼에 대한 작업이 이미 시작되지 않았고, Discrete Input이 0에서 1로 전환되었다면
-                                buttonVm.IsTaskInitiatedByDiscreteInput = true; // 작업 시작 플래그 설정
-                                buttonVm.IsProcessing = true; // 작업 진행 중 상태로 변경 (UI에 ProgressBar 표시)
-                                buttonVm.CurrentProgress = 0; // 진행률 초기화
+                                buttonVm.IsTaskInitiatedByDiscreteInput = true;
+                                buttonVm.IsProcessing = true;
+                                buttonVm.CurrentProgress = 0;
+
                                 Debug.WriteLine($"[Modbus] Call Button (Discrete Input {buttonVm.DiscreteInputAddress}) activated (0->1). Initiating task.");
                                 ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} Call Button 신호 감지! 작업 자동 시작됩니다.");
 
-                                // 해당 경광등 Coil을 1로 켜기 (App -> PLC)
-                                bool writeLampSuccess = await _modbusService.WriteSingleCoilAsync(buttonVm.CoilOutputAddress, true).ConfigureAwait(false);
+                                if (_modbusService == null)
+                                {
+                                    Debug.WriteLine("[Error] _modbusService is null.");
+                                    // 작업 시작 실패 플래그 초기화
+                                    buttonVm.IsTaskInitiatedByDiscreteInput = false;
+                                    buttonVm.IsProcessing = false;
+                                    buttonVm.CurrentProgress = 0;
+                                    continue;
+                                }
+
+                                bool writeLampSuccess = false;
+                                try
+                                {
+                                    writeLampSuccess = await _modbusService.WriteSingleCoilAsync(buttonVm.CoilOutputAddress, true).ConfigureAwait(false);
+                                }
+                                catch (Exception ex)
+                                {
+                                    Debug.WriteLine($"[Error] Exception in WriteSingleCoilAsync: {ex.Message}");
+                                    writeLampSuccess = false;
+                                }
+
                                 if (writeLampSuccess)
                                 {
                                     Debug.WriteLine($"[Modbus] Lamp Coil {buttonVm.CoilOutputAddress} set to ON (1).");
-                                    // 10초 지연 후 메인 비동기 작업 시작
-                                    _ = HandleCallButtonActivatedTask(buttonVm); // 백그라운드에서 실행 (fire-and-forget)
+                                    _ = HandleCallButtonActivatedTask(buttonVm);
                                 }
                                 else
                                 {
                                     Debug.WriteLine($"[Modbus] Failed to write Lamp Coil {buttonVm.CoilOutputAddress} to ON (1). Task not started.");
                                     ShowAutoClosingMessage($"[Modbus] {buttonVm.Content} 경광등 켜기 실패! 작업 시작 불가.");
-                                    // 작업 시작 실패했으므로 플래그 리셋 (UI 스레드에서)
                                     buttonVm.IsTaskInitiatedByDiscreteInput = false;
                                     buttonVm.IsProcessing = false;
                                     buttonVm.CurrentProgress = 0;
                                 }
                             }
-                            // Command의 CanExecute 상태를 명시적으로 갱신하여 UI가 IsEnabled/IsProcessing 변화에 즉시 반응하도록 함
-                            ((RelayCommand)buttonVm.ExecuteButtonCommand)?.RaiseCanExecuteChanged();
+
+                            var relayCommand = buttonVm.ExecuteButtonCommand as RelayCommand;
+                            if (relayCommand != null)
+                            {
+                                relayCommand.RaiseCanExecuteChanged();
+                            }
+                            else
+                            {
+                                Debug.WriteLine($"[Warning] ExecuteButtonCommand for ModbusButtons[{i}] is null or not a RelayCommand.");
+                            }
                         }
                     });
+
                 }
             }
             catch (Exception ex)
@@ -1237,9 +1284,9 @@ namespace WPF_WMS01.ViewModels
                         // Move from Charger, Turn
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = "충전소에서 이동",
+                            ProcessStepDescription = "충전소에서 대기 장소로 이동",
                             MissionType = "8",
-                            ToNode = "AMR2_WAIT",
+                            ToNode = "Pallet_BWD_Pos",
                             Payload = ProductionLinePayload,
                             IsLinkable = true,
                             LinkWaitTimeout = 3600
@@ -1268,9 +1315,9 @@ namespace WPF_WMS01.ViewModels
                         });
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = "충전소로 복귀",
+                            ProcessStepDescription = "작업 대기 장소로 이동",
                             MissionType = "8",
-                            ToNode = "Charge2",
+                            ToNode = "Pallet_BWD_Pos",
                             Payload = ProductionLinePayload,
                             IsLinkable = false,
                             LinkWaitTimeout = 3600,
@@ -1282,9 +1329,9 @@ namespace WPF_WMS01.ViewModels
                         // Move from charger, Turn
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = "충전소에서 이동",
+                            ProcessStepDescription = "충전소에서 대기 장소로 이동",
                             MissionType = "8",
-                            ToNode = "AMR2_WAIT",
+                            ToNode = "Pallet_BWD_Pos",
                             Payload = ProductionLinePayload,
                             IsLinkable = true,
                             LinkWaitTimeout = 3600
@@ -1371,9 +1418,9 @@ namespace WPF_WMS01.ViewModels
                         });
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = "충전소로 복귀",
+                            ProcessStepDescription = "작업 대기 장소로 이동",
                             MissionType = "8",
-                            ToNode = "Charge2",
+                            ToNode = "Pallet_BWD_Pos",
                             Payload = ProductionLinePayload,
                             IsLinkable = false,
                             LinkWaitTimeout = 3600,
@@ -1426,9 +1473,9 @@ namespace WPF_WMS01.ViewModels
                         // Step 1 : Move from chatger, Turn
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = $"충전소에서 이동",
+                            ProcessStepDescription = "충전소에서 대기 장소로 이동",
                             MissionType = "8",
-                            ToNode = "AMR2_WAIT",
+                            ToNode = "Pallet_BWD_Pos",
                             Payload = ProductionLinePayload,
                             Priority = buttonVm.Content.Equals("7.62mm") ? 3 : 1,
                             IsLinkable = true,
@@ -1560,10 +1607,9 @@ namespace WPF_WMS01.ViewModels
                         // Step 11 : Move, Charge
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = $"충전소로 복귀",
-                            MissionType = "7",
-                            FromNode = "AMR2_WAIT",
-                            ToNode = "Charge2",
+                            ProcessStepDescription = "작업 대기 장소로 이동",
+                            MissionType = "8",
+                            ToNode = "Pallet_BWD_Pos",
                             Payload = ProductionLinePayload,
                             IsLinkable = false,
                             LinkWaitTimeout = 3600,
@@ -1593,9 +1639,9 @@ namespace WPF_WMS01.ViewModels
                         // Step 1 : Move from charger, Turn
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = $"충전소에서 이동",
+                            ProcessStepDescription = "충전소에서 대기 장소로 이동",
                             MissionType = "8",
-                            ToNode = "AMR2_WAIT",
+                            ToNode = "Pallet_BWD_Pos",
                             Payload = ProductionLinePayload,
                             IsLinkable = true,
                             LinkWaitTimeout = 3600
@@ -1636,10 +1682,9 @@ namespace WPF_WMS01.ViewModels
                         // Step 11 : Move, Charge
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = $"충전소로 복귀",
-                            MissionType = "7",
-                            FromNode = "AMR2_WAIT",
-                            ToNode = "Charge2",
+                            ProcessStepDescription = "작업 대기 장소로 이동",
+                            MissionType = "8",
+                            ToNode = "Pallet_BWD_Pos",
                             Payload = ProductionLinePayload,
                             IsLinkable = false,
                             LinkWaitTimeout = 3600
@@ -1681,9 +1726,9 @@ namespace WPF_WMS01.ViewModels
                         // Step 1 : Move from charger, Turn
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = $"충전소에서 이동",
+                            ProcessStepDescription = "충전소에서 대기 장소로 이동",
                             MissionType = "8",
-                            ToNode = "AMR2_WAIT",
+                            ToNode = "Pallet_BWD_Pos",
                             Payload = ProductionLinePayload,
                             IsLinkable = true,
                             LinkWaitTimeout = 3600,
@@ -1796,10 +1841,9 @@ namespace WPF_WMS01.ViewModels
                         // Step 10 : Move, Charge
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = $"충전소로 복귀",
-                            MissionType = "7",
-                            FromNode = "AMR2_WAIT",
-                            ToNode = "Charge2",
+                            ProcessStepDescription = "작업 대기 장소로 이동",
+                            MissionType = "8",
+                            ToNode = "Pallet_BWD_Pos",
                             Payload = ProductionLinePayload,
                             IsLinkable = false,
                             LinkWaitTimeout = 3600,
@@ -1817,9 +1861,9 @@ namespace WPF_WMS01.ViewModels
                         // Move from charger, Turn
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = "충전소에서 이동",
+                            ProcessStepDescription = "충전소에서 대기 장소로 이동",
                             MissionType = "8",
-                            ToNode = "AMR2_WAIT",
+                            ToNode = "Pallet_BWD_Pos",
                             Payload = ProductionLinePayload,
                             IsLinkable = true,
                             LinkWaitTimeout = 3600
@@ -1847,10 +1891,9 @@ namespace WPF_WMS01.ViewModels
                         // Move, Charge
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = "대기 장소로 이동하여, 충전소로 복귀",
-                            MissionType = "7", // Move/Drop
-                            FromNode = "AMR2_WAIT",
-                            ToNode = "Charge2", // Return to charge station after drop-off
+                            ProcessStepDescription = "작업 대기 장소로 이동",
+                            MissionType = "8",
+                            ToNode = "Pallet_BWD_Pos",
                             Payload = ProductionLinePayload,
                             IsLinkable = false, // This is the final step of this specific mission
                             LinkWaitTimeout = 3600
@@ -1874,11 +1917,11 @@ namespace WPF_WMS01.ViewModels
                 );
                 Debug.WriteLine($"[MainViewModel] Initialized MissionStatusPopupVm for {buttonVm.Content} (Coil: {buttonVm.CoilOutputAddress}).");
 
-                if(readStringValue == null)
+                /*if(readStringValue == null)
                 {
                     readStringValue = "Lot번호를 입력하세요";
                     readIntvalue = 0;
-                }
+                }*/
                 // Initiate the robot mission
                 string processId = await InitiateRobotMissionProcess(
                     processType,
@@ -2220,9 +2263,9 @@ namespace WPF_WMS01.ViewModels
                 {
                     // 1. Move, Turn
                     new MissionStepDefinition {
-                        ProcessStepDescription = $"AMR_2, AMR2_WAIT 노드로 이동",
+                        ProcessStepDescription = $"AMR_2, Pallet_BWD_Pos 노드로 이동",
                         MissionType = "8",
-                        ToNode = "AMR2_WAIT",
+                        ToNode = "Pallet_BWD_Pos",
                         Payload = ProductionLinePayload,
                         IsLinkable = false,
                         LinkWaitTimeout = 3600
@@ -2239,7 +2282,7 @@ namespace WPF_WMS01.ViewModels
                         null, // initiatingCoilAddress
                         true // isWarehouseMission = true로 전달
                     );
-                    ShowAutoClosingMessage($"Poongsan_2, AMR2_WAIT 노드로 이동: {processId}");
+                    ShowAutoClosingMessage($"Poongsan_2, Pallet_BWD_Pos 노드로 이동: {processId}");
                 }
                 catch (Exception ex)
                 {
