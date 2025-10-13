@@ -595,14 +595,14 @@ namespace WPF_WMS01.ViewModels
                 return;
             }
 
-            // Call button에 의한 mission이 싱행되고 있으면 재공품 반출 못함 
-            if(_mainViewModel.ModbusButtons != null)
+            // Call button에 의한 mission이 실행되고 있으면 라이트 반출 못함 
+            if (_mainViewModel.ModbusButtons != null)
             {
                 foreach(var buttonVm in _mainViewModel.ModbusButtons)
                 {
                     if(buttonVm.IsProcessing == true)
                     {
-                        MessageBox.Show("콜 버튼 작업이 진행 중이거나, 재공품 반출 중에는 추가적인 재공품 반출이 불가능합니다", "알림", MessageBoxButton.OK, MessageBoxImage.Information);
+                        MessageBox.Show("콜 버튼 작업이 진행 중이거나, 라이트 반출 중에는 추가적인 라이트 반출이 불가능합니다", "알림", MessageBoxButton.OK, MessageBoxImage.Information);
                         return;
                     }
                 }
@@ -615,12 +615,12 @@ namespace WPF_WMS01.ViewModels
                 DataContext = popupViewModel
             };
 
-            popupView.Title = $"랙 {sourceRackViewModel.Title} 재공품 반출";
+            popupView.Title = $"랙 {sourceRackViewModel.Title} 라이트 반출";
             bool? result = popupView.ShowDialog();
 
             if (result == true) // 사용자가 '확인'을 눌렀을 경우
             {
-                ShowAutoClosingMessage($"랙 {sourceRackViewModel.Title}의 재공품을 반출 대기 장소로 옮깁니다. 잠금 중...");
+                ShowAutoClosingMessage($"랙 {sourceRackViewModel.Title}의 라이트 팔레트를 반출 대기 장소로 옮깁니다. 잠금 중...");
                 List<int> lockedRackIds = new List<int>();
                 try
                 {
@@ -642,7 +642,7 @@ namespace WPF_WMS01.ViewModels
                     return; // 더 이상 진행하지 않음
                 }
 
-                ShowAutoClosingMessage($"로봇 미션: 랙 {sourceRackViewModel.Title}의  재공품을 반출 대기 장소로 이동 시작. 명령 전송 중...");
+                ShowAutoClosingMessage($"로봇 미션: 랙 {sourceRackViewModel.Title}의  라이트 팔레트를 반출 대기 장소로 이동 시작. 명령 전송 중...");
 
                 var amrRackViewModel = _mainViewModel.RackList?.FirstOrDefault(r => r.Title.Equals("AMR"));
 
@@ -654,7 +654,7 @@ namespace WPF_WMS01.ViewModels
                 {
                     // 1. Move, Pickup
                     new MissionStepDefinition {
-                        ProcessStepDescription = $"랙 {sourceRackViewModel.Title}(으)로 이동하여, 재공품 팔레트 픽업",
+                        ProcessStepDescription = $"랙 {sourceRackViewModel.Title}(으)로 이동하여, 라이트 팔레트 픽업",
                         MissionType = "8",
                         ToNode = $"Rack_{shelf}_PickUP",
                         Payload = _mainViewModel.WarehousePayload,
@@ -701,7 +701,7 @@ namespace WPF_WMS01.ViewModels
                 {
                     // 로봇 미션 프로세스 시작
                     string processId = await _mainViewModel.InitiateRobotMissionProcess(
-                        "재공품 반출 준비", //"HandleHalfPalletMove", // 미션 프로세스 유형
+                        "라이트 반출 준비", //"HandleHalfPalletMove", // 미션 프로세스 유형
                         missionSteps,
                         lockedRackIds, // 잠긴 랙 ID 목록 전달
                         null, // racksToProcess
@@ -723,11 +723,11 @@ namespace WPF_WMS01.ViewModels
             else
             {
                 _mainViewModel.PlcStatusIsPaused = false; // 콜버튼 액션 허용
-                ShowAutoClosingMessage("재공품 반출작업이 취소되었습니다.");
+                ShowAutoClosingMessage("라이트 반출작업이 취소되었습니다.");
             }
         }
 
-        // 반 팔레트 반출을 처리하는 비동기 메서드 (이전과 동일하게 유지)
+        // 라이트 반출을 처리하는 비동기 메서드 (이전과 동일하게 유지)
         private async Task HandleHalfPalletExport(RackViewModel sourceRackViewModel)
         {
             // "WAIT", "OUT" 랙 찾기
@@ -759,7 +759,7 @@ namespace WPF_WMS01.ViewModels
                 var selectedLine = popupViewModel.SelectedLocation;
                 if (selectedLine != null)
                 {
-                    ShowAutoClosingMessage($"랙 {sourceRackViewModel.Title}의 재공품을 '{selectedLine.Name}'(으)로 반출합니다. 잠금 중...");
+                    ShowAutoClosingMessage($"랙 {sourceRackViewModel.Title}의 라이트 팔레트를 '{selectedLine.Name}'(으)로 반출합니다. 잠금 중...");
                     List<int> lockedRackIds = new List<int>();
                     try
                     {
@@ -781,7 +781,7 @@ namespace WPF_WMS01.ViewModels
                         return; // 더 이상 진행하지 않음
                     }
 
-                    ShowAutoClosingMessage($"로봇 미션: 랙 {sourceRackViewModel.Title}의  재공품을 '{selectedLine.Name}'(으)로 반출 시작. 명령 전송 중...");
+                    ShowAutoClosingMessage($"로봇 미션: 랙 {sourceRackViewModel.Title}의  라이트 팔레트를 '{selectedLine.Name}'(으)로 반출 시작. 명령 전송 중...");
 
                     var amrRackViewModel = _mainViewModel.RackList?.FirstOrDefault(r => r.Title.Equals("AMR"));
                     //var outRackViewModel = _mainViewModel.RackList?.FirstOrDefault(r => r.Title.Equals("OUT"));
@@ -880,7 +880,7 @@ namespace WPF_WMS01.ViewModels
                                 },
                                 // 2. Move, Pickup, Update DB
                                 new MissionStepDefinition {
-                                    ProcessStepDescription = $"재공품 반출 장소로 이동하여, 재공품 픽업",
+                                    ProcessStepDescription = $"라이트 반출 장소로 이동하여, 라이트 팔레트 픽업",
                                     MissionType = "8",
                                     ToNode = "Pallet_IN_PickUP",
                                     Payload = _mainViewModel.ProductionLinePayload,
@@ -894,7 +894,7 @@ namespace WPF_WMS01.ViewModels
                                 },
                                 // 3. Move, Drop
                                 new MissionStepDefinition {
-                                    ProcessStepDescription = "대기장소로 이동하여, 재공품 드롭",
+                                    ProcessStepDescription = "대기장소로 이동하여, 라이트 팔레트 드롭",
                                     MissionType = "8",
                                     ToNode = $"Empty_{swapPoint}_Drop",
                                     Payload = _mainViewModel.ProductionLinePayload,
@@ -925,7 +925,7 @@ namespace WPF_WMS01.ViewModels
                                 },
                                 // 6. Move, Pickup
                                 new MissionStepDefinition {
-                                    ProcessStepDescription = "대기장소로 이동하여, 재공품 픽업 ",
+                                    ProcessStepDescription = "대기장소로 이동하여, 라이트 팔레트 픽업 ",
                                     MissionType = "8",
                                     ToNode = $"Empty_{swapPoint}_PickUP",
                                     Payload = _mainViewModel.ProductionLinePayload,
@@ -935,7 +935,7 @@ namespace WPF_WMS01.ViewModels
                                 // 7. Move, Drop
                                 new MissionStepDefinition
                                 {
-                                    ProcessStepDescription = $"{selectedLine.Name}(으)로 이동하여, 재공품 드롭",
+                                    ProcessStepDescription = $"{selectedLine.Name}(으)로 이동하여, 라이트 팔레트 드롭",
                                     MissionType = "8",
                                     ToNode = $"Work_{workPoint}_Drop",
                                     Payload = _mainViewModel.ProductionLinePayload,
@@ -975,7 +975,7 @@ namespace WPF_WMS01.ViewModels
                                 },
                                 // 2. Move, Pickup, Update DB
                                 new MissionStepDefinition {
-                                    ProcessStepDescription = $"재공품 반출 장소로 이동하여, 재공품 픽업",
+                                    ProcessStepDescription = $"라이트 반출 장소로 이동하여, 라이트 팔레트 픽업",
                                     MissionType = "8",
                                     ToNode = "Pallet_IN_PickUP",
                                     Payload = _mainViewModel.ProductionLinePayload,
@@ -989,7 +989,7 @@ namespace WPF_WMS01.ViewModels
                                 },
                                 // 3. Move, Drop
                                 new MissionStepDefinition {
-                                    ProcessStepDescription = "대기장소로 이동하여, 재공품 드롭",
+                                    ProcessStepDescription = "대기장소로 이동하여, 라이트 팔레트 드롭",
                                     MissionType = "8",
                                     ToNode = $"Empty_{swapPoint}_Drop",
                                     Payload = _mainViewModel.ProductionLinePayload,
@@ -1020,7 +1020,7 @@ namespace WPF_WMS01.ViewModels
                                 },
                                 // 6. Move, Pickup
                                 new MissionStepDefinition {
-                                    ProcessStepDescription = "대기장소로 이동하여, 재공품 픽업 ",
+                                    ProcessStepDescription = "대기장소로 이동하여, 라이트 팔레트 픽업 ",
                                     MissionType = "8",
                                     ToNode = $"Empty_{swapPoint}_PickUP",
                                     Payload = _mainViewModel.ProductionLinePayload,
@@ -1030,7 +1030,7 @@ namespace WPF_WMS01.ViewModels
                                 // 7. Move, Drop
                                 new MissionStepDefinition
                                 {
-                                    ProcessStepDescription = $"{selectedLine.Name}(으)로 이동하여, 재공품 드롭",
+                                    ProcessStepDescription = $"{selectedLine.Name}(으)로 이동하여, 라이트 팔레트 드롭",
                                     MissionType = "8",
                                     ToNode = $"Work_{workPoint}_Drop",
                                     Payload = _mainViewModel.ProductionLinePayload,
@@ -1090,7 +1090,7 @@ namespace WPF_WMS01.ViewModels
                     {
                         // 로봇 미션 프로세스 시작
                         string processId = await _mainViewModel.InitiateRobotMissionProcess(
-                            "재공품 반출 작업", // 미션 프로세스 유형
+                            "라이트 반출 작업", // 미션 프로세스 유형
                             missionSteps,
                             lockedRackIds, // 잠긴 랙 ID 목록 전달
                             null, // racksToProcess
@@ -1115,12 +1115,12 @@ namespace WPF_WMS01.ViewModels
                 }
                 else
                 {
-                    ShowAutoClosingMessage("재공품 반출장소가 선택되지 않았습니다."); // It never happens
+                    ShowAutoClosingMessage("라이트 반출장소가 선택되지 않았습니다."); // It never happens
                 }
             }
             else
             {
-                ShowAutoClosingMessage("재공품 반출작업이 취소되었습니다.");
+                ShowAutoClosingMessage("라이트 팔레트 반출작업이 취소되었습니다.");
             }
         }
 

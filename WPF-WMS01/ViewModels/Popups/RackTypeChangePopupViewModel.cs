@@ -77,8 +77,8 @@ namespace WPF_WMS01.ViewModels.Popups
             }
             else if(type == 2)
             {
-                MessageTitle = "재공품 반출";
-                Message = "재공품을 반출 대기 장소로 이동시키겠습니까?";
+                MessageTitle = "라이트 팔레트 반출";
+                Message = "라이트 팔레트를 반출 대기 장소로 이동시키겠습니까?";
             }
             else
             {

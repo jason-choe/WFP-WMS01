@@ -76,7 +76,7 @@ namespace WPF_WMS01.ViewModels.Popups
         {
             if (SelectedLocation == null)
             {
-                MessageBox.Show("재공품이 반출될 장소를 선택해주세요.", "선택 필요", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("라이트 팔레트가 반출될 장소를 선택해주세요.", "선택 필요", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
             DialogResult = true;

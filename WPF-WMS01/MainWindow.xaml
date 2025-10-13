@@ -381,12 +381,12 @@
                              Text="Lot 번호:"
                              FontSize="18" Foreground="Black" FontWeight="Light"
                              VerticalAlignment="Top"/>
-                        <TextBox  Grid.Column="0"                     
+                        <TextBox  Grid.Column="0"
                              Text="{Binding InputStringForButton, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              MaxLength="15" Width="300" Height="80" Background="LightSeaGreen"
                              VerticalAlignment="Center" HorizontalAlignment="Left"
                              Margin="0,0,20,0"
-                             BorderThickness="3" 
+                             BorderThickness="3"
                              BorderBrush="Black"
                              FontSize="28" Foreground="White"
                              VerticalContentAlignment="Center"
@@ -396,7 +396,7 @@
                              Text="Box 수:"
                              FontSize="18" Foreground="Black" FontWeight="Light"
                              VerticalAlignment="Top"/>
-                        <TextBox  Grid.Column="1"  
+                        <TextBox  Grid.Column="1"
                              Name="ProductBoxCount"
                              Text="{Binding InputStringForBoxes, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              PreviewTextInput="ProductBoxCount_PreviewTextInput"
@@ -405,7 +405,7 @@
                              MaxLength="3" Width="80" Height="80" Background="LightSeaGreen"
                              VerticalAlignment="Center" HorizontalAlignment="Left"
                              Margin="0,0,20,0"
-                             BorderThickness="3" 
+                             BorderThickness="3"
                              BorderBrush="Black"
                              FontSize="28" Foreground="White"
                              VerticalContentAlignment="Center"
@@ -416,13 +416,68 @@
                              VerticalAlignment="Center" HorizontalAlignment="Left" Margin="0,0,20,0"
                              Style="{StaticResource ModernButtonStyle}"/>
 
-                        <Button Grid.Column="3" Content="재공품 입고"
+                        <Button Grid.Column="3" Content="라이트 입고"
                              Command="{Binding FakeInboundProductCommand}"
                              Width="120" Height="64" FontSize="20" FontWeight="Bold"
                              VerticalAlignment="Center" HorizontalAlignment="Left"
                              Style="{StaticResource ModernButtonStyle}"/>
                     </Grid>
                 </TabItem>
+                <!--TabItem Header="[야간] 입고 관리" Width ="180" FontSize="20" FontWeight="Bold">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0"
+                             Margin="5,10,0,0"
+                             Text="Lot 번호:"
+                             FontSize="18" Foreground="Black" FontWeight="Light"
+                             VerticalAlignment="Top"/>
+                        <TextBox  Grid.Column="0"
+                             Text="test"
+                             MaxLength="15" Width="300" Height="80" Background="LightSeaGreen"
+                             VerticalAlignment="Center" HorizontalAlignment="Left"
+                             Margin="0,0,20,0"
+                             BorderThickness="3"
+                             BorderBrush="Black"
+                             FontSize="28" Foreground="White"
+                             VerticalContentAlignment="Center"
+                             TextAlignment="Center" />
+                        <TextBlock Grid.Column="1"
+                             Margin="5,10,0,0"
+                             Text="Box 수:"
+                             FontSize="18" Foreground="Black" FontWeight="Light"
+                             VerticalAlignment="Top"/>
+                        <TextBox  Grid.Column="1"
+                             Name="ProductBoxCount2"
+                             Text=""
+                             PreviewTextInput="ProductBoxCount_PreviewTextInput"
+                             GotFocus="ProductBoxCount_GotFocus"
+                             LostFocus="ProductBoxCount_LostFocus"
+                             MaxLength="3" Width="80" Height="80" Background="LightSeaGreen"
+                             VerticalAlignment="Center" HorizontalAlignment="Left"
+                             Margin="0,0,20,0"
+                             BorderThickness="3"
+                             BorderBrush="Black"
+                             FontSize="28" Foreground="White"
+                             VerticalContentAlignment="Center"
+                             TextAlignment="Center" />
+                        <Button Grid.Column="2" Content="미포장 입고"
+                             Command="{Binding InboundProductCommand}"
+                             Width="120" Height="64" FontSize="20" FontWeight="Bold"
+                             VerticalAlignment="Center" HorizontalAlignment="Left" Margin="0,0,20,0"
+                             Style="{StaticResource ModernButtonStyle}"/>
+
+                        <Button Grid.Column="3" Content="라이트 입고"
+                             Command="{Binding FakeInboundProductCommand}"
+                             Width="120" Height="64" FontSize="20" FontWeight="Bold"
+                             VerticalAlignment="Center" HorizontalAlignment="Left"
+                             Style="{StaticResource ModernButtonStyle}"/>
+                    </Grid>
+                </TabItem-->
             </TabControl>
     
             <Separator Grid.Column="1">

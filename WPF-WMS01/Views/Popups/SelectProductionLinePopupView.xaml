@@ -21,10 +21,10 @@
         <TextBlock Grid.Row="0"
                    FontSize="22" FontWeight="Bold" Margin="10,0,0,10">
             <Run Text="Lot No. : "/>
-            <Run Text="{Binding LotNo}"/> <Run Text=" / 재공품 반출"/>
+            <Run Text="{Binding LotNo}"/> <Run Text=" / 라이트 팔레트 반출"/>
             <LineBreak/> <LineBreak/> <Run Text="아래 리스트에서"/>
             <LineBreak/>
-            <Run Text="반팔렛 재공품을 반출할 생산 라인 장소를 선택하세요."/>
+            <Run Text="라이트 팔레트를 반출할 생산 라인 장소를 선택하세요."/>
         </TextBlock>
 
         <ListView Grid.Row="1" ItemsSource="{Binding ProductionLineLocations}"

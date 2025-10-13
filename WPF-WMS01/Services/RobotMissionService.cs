@@ -1255,13 +1255,13 @@ namespace WPF_WMS01.Services
                         sourceBoxCount = sourceRackVm.BoxCount;
                     }
 
-                    // 특별한 경우 2): ProcessType이 "재공품 입고 작업 = FakeExecuteInboundProduct"일 경우 RackType 변경
-                    if (processInfo.ProcessType == "재공품 입고 작업") // WAIT -> AMR -> Rack
+                    // 특별한 경우 2): ProcessType이 "라이트 입고 작업 = FakeExecuteInboundProduct"일 경우 RackType 변경
+                    if (processInfo.ProcessType == "라이트 입고 작업") // WAIT -> AMR -> Rack
                     {
-                        newDestinationRackType = 3; // 재공품 랙 타입으로 변경 (완제품 랙에서 재공품 랙으로)
+                        newDestinationRackType = 3; // 라이트 랙 타입으로 변경 (완제품 랙에서 라이트 랙으로)
                         if (sourceRackVm.Title.Equals("AMR")) newSourceRackType = 2;
                     }
-                    else if (processInfo.ProcessType == "재공품 반출 준비" || processInfo.ProcessType == "재공품 반출 작업") // Rack -> AMR -> OUT -> (NULL)
+                    else if (processInfo.ProcessType == "라이트 반출 준비" || processInfo.ProcessType == "라이트 반출 작업") // Rack -> AMR -> OUT -> (NULL)
                     {
                         newDestinationRackType = 3;
                         if (sourceRackVm.Title.Equals("AMR")) newSourceRackType = 2; // AMR -> OUT
@@ -1329,7 +1329,7 @@ namespace WPF_WMS01.Services
                     // 랙 비우기 (BulletType = 0, LotNumber = String.Empty)
                     int newSourceRackType = sourceRackVm.RackType;
 
-                    if (processInfo.ProcessType == "재공품 반출 작업")
+                    if (processInfo.ProcessType == "라이트 반출 작업")
                     {
                         // 반출의 경우 RackType은 1 (완제품)으로 유지
                         // newSourceRackType = 1;
@@ -1525,14 +1525,14 @@ namespace WPF_WMS01.Services
                         sourceBoxCount = sourceRackVm.BoxCount;
                     }
 
-                    // 특별한 경우 2): ProcessType이 "재공품 입고 작업 = FakeExecuteInboundProduct"일 경우 RackType 변경
-                    if (processInfo.ProcessType == "재공품 입고 작업")
+                    // 특별한 경우 2): ProcessType이 "라이트 입고 작업 = FakeExecuteInboundProduct"일 경우 RackType 변경
+                    if (processInfo.ProcessType == "라이트 입고 작업")
                     {
-                        newDestinationRackType = 3; // 재공품 랙 타입으로 변경 (완제품 랙에서 재공품 랙으로)
+                        newDestinationRackType = 3; // 라이트 랙 타입으로 변경 (완제품 랙에서 라이트 랙으로)
                         if (sourceRackVm.Title.Equals("WAIT")) newSourceRackType = 2;
                         else if(sourceRackVm.Title.Equals("AMR")) newSourceRackType = 1;
                     }
-                    else if (processInfo.ProcessType == "재공품 반출 작업")
+                    else if (processInfo.ProcessType == "라이트 반출 작업")
                     {
                         newDestinationRackType = 3;
                         newSourceRackType = 1;
@@ -1584,7 +1584,7 @@ namespace WPF_WMS01.Services
                     // HandleHalfPalletExport 또는 HandleRackShipout (단일 랙 출고)
                     // 랙 비우기 (BulletType = 0, LotNumber = String.Empty)
                     int newSourceRackType = sourceRackVm.RackType;
-                    if (processInfo.ProcessType == "재공품 반출 작업   ")
+                    if (processInfo.ProcessType == "라이트 반출 작업")
                     {
                         // 반출의 경우 RackType은 1 (완제품)으로 유지
                         newSourceRackType = 1;

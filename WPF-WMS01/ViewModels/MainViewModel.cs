@@ -194,7 +194,7 @@ namespace WPF_WMS01.ViewModels
             }
         }
 
-        private bool _plcStatusIsPaused = false; // PLC 구동 상태 : 재공품 반출 시 off (= true)
+        private bool _plcStatusIsPaused = false; // PLC 구동 상태 : 라이트 반출 시 off (= true)
         public bool PlcStatusIsPaused
         {
             get => _plcStatusIsPaused;
@@ -490,7 +490,7 @@ namespace WPF_WMS01.ViewModels
         private void InitializeCommands()
         {
             InboundProductCommand = new RelayCommand(ExecuteInboundProduct, CanExecuteInboundProduct);  // 미포장 입고
-            FakeInboundProductCommand = new RelayCommand(FakeExecuteInboundProduct, CanFakeExecuteInboundProduct); // 재공품 입고
+            FakeInboundProductCommand = new RelayCommand(FakeExecuteInboundProduct, CanFakeExecuteInboundProduct); // 라이트 입고
             Checkout223aProductCommand = new RelayCommand(
                 param => ExecuteCheckoutProduct(new CheckoutRequest { BulletType = 1, ProductName = "233A" }),
                 param => CanExecuteCheckoutProduct(new CheckoutRequest { BulletType = 1, ProductName = "233A" }));
@@ -1509,7 +1509,6 @@ namespace WPF_WMS01.ViewModels
                             {
                                 new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "공 파렛트 배출 완료 신호", WordDeviceCode = "W", McWordAddress = 0x101E, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"}
                             }
-
                         });
                         // Step 4 : Sensor OFF, Move, Pickup
                         missionSteps.Add(new MissionStepDefinition
@@ -2899,14 +2898,14 @@ namespace WPF_WMS01.ViewModels
 
             if (emptyRacks == null || !emptyRacks.Any())
             {
-                MessageBox.Show("현재 재공품을 적재할 빈 랙이 없습니다..", "알림", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show("현재 라이트 팔레트를 적재할 빈 랙이 없습니다..", "알림", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
             var selectEmptyRackViewModel = new SelectEmptyRackPopupViewModel(emptyRacks.Select(r => r.RackModel).ToList(),
-                _inputStringForButton.TrimStart().TrimEnd(_militaryCharacter), "재공품 적재", "재공품");
+                _inputStringForButton.TrimStart().TrimEnd(_militaryCharacter), "라이트 적재", "라이트");
             var selectEmptyRackView = new SelectEmptyRackPopupView { DataContext = selectEmptyRackViewModel };
-            selectEmptyRackView.Title = $"재공품 입고 랙 선택";
+            selectEmptyRackView.Title = $"라이트 입고 랙 선택";
 
             if (selectEmptyRackView.ShowDialog() == true && selectEmptyRackViewModel.DialogResult == true)
             {
@@ -2918,7 +2917,7 @@ namespace WPF_WMS01.ViewModels
                     var amrRackVm = RackList?.FirstOrDefault(r => r.Title == _amrRackTitle);
 
                     if (targetRackVm == null) return;
-                    ShowAutoClosingMessage($"랙 {targetRackVm.Title}에 재공품 {InputStringForButton.TrimStart().TrimEnd(_militaryCharacter)}의 입고 작업을 시작합니다.");
+                    ShowAutoClosingMessage($"랙 {targetRackVm.Title}에 라이트 팔레트 {InputStringForButton.TrimStart().TrimEnd(_militaryCharacter)}의 입고 작업을 시작합니다.");
 
                     // 🚨 ToDo : WAIT  Rack으로부터 이동 시에는 inputString의 입력을 disable해야 한다.아니면 이동 전에  Lot No.를 DB에 copy.
                     int newBulletType = GetBulletTypeFromInputString(_inputStringForButton); // Helper method
@@ -2964,7 +2963,7 @@ namespace WPF_WMS01.ViewModels
                         {
                             // 1. Move, Turn
                             new MissionStepDefinition {
-                                ProcessStepDescription = $"재공품 입고를 위한 회전장소로 이동",
+                                ProcessStepDescription = $"라이트 입고를 위한 회전장소로 이동",
                                 MissionType = "8",
                                 ToNode = "Turn_Rack",
                                 Payload = WarehousePayload,
@@ -2973,7 +2972,7 @@ namespace WPF_WMS01.ViewModels
                             },
                             // 2. Move, Pickup, Update DB
                             new MissionStepDefinition {
-                                ProcessStepDescription = $"입고 대기 장소로 이동하여, 재공품 팔레트 픽업",
+                                ProcessStepDescription = $"입고 대기 장소로 이동하여, 라이트 팔레트 픽업",
                                 MissionType = "8",
                                 ToNode = "Pallet_OUT_PickUP",
                                 Payload = WarehousePayload,
@@ -2985,7 +2984,7 @@ namespace WPF_WMS01.ViewModels
                             },
                             // 3. Move, Turn
                             new MissionStepDefinition {
-                                ProcessStepDescription = $"재공품 입고를 위한 회전장소로 이동",
+                                ProcessStepDescription = $"라이트 입고를 위한 회전장소로 이동",
                                 MissionType = "8",
                                 ToNode = "Turn_Rack",
                                 Payload = WarehousePayload,
@@ -3004,7 +3003,7 @@ namespace WPF_WMS01.ViewModels
                             },
                             // 5. Move, Drop, Check, Update DB
                             new MissionStepDefinition {
-                                ProcessStepDescription = $"랙 {targetRackVm.Title}(으)로 이동하여, 재공품 팔레트 드롭",
+                                ProcessStepDescription = $"랙 {targetRackVm.Title}(으)로 이동하여, 라이트 팔레트 드롭",
                                 MissionType = "8",
                                 ToNode = $"Rack_{shelf}_Drop",
                                 Payload = WarehousePayload,
@@ -3033,7 +3032,7 @@ namespace WPF_WMS01.ViewModels
                         {
                             // 1. Move, Turn
                             new MissionStepDefinition {
-                                ProcessStepDescription = $"재공품 입고를 위한 회전장소로 이동",
+                                ProcessStepDescription = $"라이트 입고를 위한 회전장소로 이동",
                                 MissionType = "8",
                                 ToNode = "Turn_Rack",
                                 Payload = WarehousePayload,
@@ -3042,7 +3041,7 @@ namespace WPF_WMS01.ViewModels
                             },
                             // 2. Move, Pickup, Update DB
                             new MissionStepDefinition {
-                                ProcessStepDescription = $"입고 대기 장소로 이동하여, 재공품 팔레트 픽업",
+                                ProcessStepDescription = $"입고 대기 장소로 이동하여, 라이트 팔레트 픽업",
                                 MissionType = "8",
                                 ToNode = "Pallet_OUT_PickUP",
                                 Payload = WarehousePayload,
@@ -3063,7 +3062,7 @@ namespace WPF_WMS01.ViewModels
                             },
                             // 4. Move, Drop, Check, Update DB
                             new MissionStepDefinition {
-                                ProcessStepDescription = $"랙 {targetRackVm.Title}(으)로 이동하여, 재공품 팔레트 드롭",
+                                ProcessStepDescription = $"랙 {targetRackVm.Title}(으)로 이동하여, 라이트 팔레트 드롭",
                                 MissionType = "8",
                                 ToNode = $"Rack_{shelf}_Drop",
                                 Payload = WarehousePayload,
@@ -3092,7 +3091,7 @@ namespace WPF_WMS01.ViewModels
                         {
                             // 1. Move, Turn
                             new MissionStepDefinition {
-                                ProcessStepDescription = $"재공품 입고를 위한 회전장소로 이동",
+                                ProcessStepDescription = $"라이트 입고를 위한 회전장소로 이동",
                                 MissionType = "8",
                                 ToNode = "Turn_Rack",
                                 Payload = WarehousePayload,
@@ -3101,7 +3100,7 @@ namespace WPF_WMS01.ViewModels
                             },
                             // 2. Move, Pickup, Update DB
                             new MissionStepDefinition {
-                                ProcessStepDescription = $"입고 대기 장소로 이동하여, 재공품 팔레트 픽업",
+                                ProcessStepDescription = $"입고 대기 장소로 이동하여, 라이트 팔레트 픽업",
                                 MissionType = "8",
                                 ToNode = $"Pallet_OUT_PickUP",
                                 Payload = WarehousePayload,
@@ -3113,7 +3112,7 @@ namespace WPF_WMS01.ViewModels
                             },
                             // 3. Move, Drop, Check, Update DB
                             new MissionStepDefinition {
-                                ProcessStepDescription = $"랙 {targetRackVm.Title}(으)로 이동하여, 재공품 팔레트 드롭",
+                                ProcessStepDescription = $"랙 {targetRackVm.Title}(으)로 이동하여, 라이트 팔레트 드롭",
                                 MissionType = "8",
                                 ToNode = $"Rack_{shelf}_Drop",
                                 Payload = WarehousePayload,
@@ -3140,7 +3139,7 @@ namespace WPF_WMS01.ViewModels
                     {
                         // 로봇 미션 프로세스 시작
                         string processId = await InitiateRobotMissionProcess(
-                            "재공품 입고 작업", // 미션 프로세스 유형
+                            "라이트 입고 작업", // 미션 프로세스 유형
                             missionSteps,
                             lockedRackIds, // 잠긴 랙 ID 목록 전달
                             null, // racksToProcess
@@ -3162,7 +3161,7 @@ namespace WPF_WMS01.ViewModels
             }
             else
             {
-                ShowAutoClosingMessage("재공품 입고가 취소되었습니다.");
+                ShowAutoClosingMessage("라이트 입고가 취소되었습니다.");
             }
         }
 
