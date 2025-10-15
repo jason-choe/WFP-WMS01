@@ -296,6 +296,7 @@ namespace WPF_WMS01.ViewModels
         public ICommand UnlockRackCommand { get; private set; } // UnlockRackCommand 선언 추가 (private set 추가)
         public ICommand MoveAndUnloadCommand { get; private set; } // MoveAndUnloadCommand 선언 추가 (private set 추가)
         public ICommand MoveAmr2ToBufferNode { get; private set; } // MoveAmr2ToBufferNode 선언 추가 (private set 추가)
+        public ICommand OpenInOutLedgerCommand { get; }
 
         private string _popupDebugMessage;
         public string PopupDebugMessage
@@ -369,6 +370,8 @@ namespace WPF_WMS01.ViewModels
             MoveAndUnloadCommand = new RelayCommand(async p => await ExecuteUnloadAmrPayload());
             // AMR_2 완충지역으로 이동 명령 초기화
             MoveAmr2ToBufferNode = new RelayCommand(async p => await ExecuteAmr2ToBufferNode());
+
+            OpenInOutLedgerCommand = new AsyncRelayCommand(ExecuteOpenInOutLedger);
 
             // AMR 미션 상태 팝업 명령 초기화
             ShowAmrMissionStatusCommand = new RelayCommand(async p => await ExecuteShowAmrMissionStatus());
@@ -2292,6 +2295,27 @@ namespace WPF_WMS01.ViewModels
             {
                 ShowAutoClosingMessage("Poongsan_2 AMR 이동이 취소되었습니다.");
             }
+        }
+
+        /// <summary>
+        /// 입출고 장부 뷰 모델을 CurrentView에 설정하여 창을 엽니다.
+        /// </summary>
+        private Task ExecuteOpenInOutLedger(object parameter)
+        {
+            Debug.WriteLine("[MainViewModel] ExecuteOpenInOutLedger command executed..");
+            IsMenuOpen = false; // 메뉴 닫기
+
+/*            if (CurrentView is InOutLedgerViewModel)
+            {
+                // 이미 입출고 장부 뷰가 열려있다면 아무것도 하지 않거나,
+                // 사용자에게 메시지를 표시할 수 있습니다.
+                return Task.CompletedTask;
+            }
+
+            // 새로운 InOutLedgerViewModel 인스턴스를 생성하여 현재 뷰를 전환합니다.
+            CurrentView = new InOutLedgerViewModel();*/
+
+            return Task.CompletedTask;
         }
 
         public void Dispose()

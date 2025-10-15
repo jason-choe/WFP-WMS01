@@ -354,5 +354,22 @@ namespace WPF_WMS01.Services
                 await command.ExecuteNonQueryAsync();
             }
         }
+
+        public async Task<List<InOutLedger>> GetInOutLedgerAsync(string lotNumber, DateTime? inboundStart, DateTime? inboundEnd, DateTime? outboundStart, DateTime? outboundEnd, bool showOnlyCurrentStock)
+        {
+            // 실제 데이터베이스 연결 및 SQL 쿼리 로직 구현
+            // 예: SQL 쿼리에서 lot_number, inbound_at BETWEEN, outbound_at BETWEEN, 
+            //     outbound_at IS NULL (showOnlyCurrentStock이 true일 경우) 등을 WHERE 절에 적용해야 합니다.
+            await Task.Delay(100); // 비동기 작업 시뮬레이션
+
+            // 여기에 실제 DB 조회 코드가 들어갑니다.
+            // 임시 Mock 데이터 반환 (테스트용)
+            return new List<InOutLedger>
+            {
+                new InOutLedger { Id = 1, RackName = "A01", LotNumber = "LOT20231013-001", BulletType = 9, BoxCount = 10, InboundAt = DateTime.Now.AddDays(-5), OutboundAt = null },
+                new InOutLedger { Id = 2, RackName = "B05", LotNumber = "LOT20230920-005", BulletType = 9, BoxCount = 5, InboundAt = DateTime.Now.AddMonths(-1), OutboundAt = DateTime.Now.AddDays(-2) },
+                new InOutLedger { Id = 3, RackName = "C10", LotNumber = "LOT20231013-001", BulletType = 12, BoxCount = 20, InboundAt = DateTime.Now.AddHours(-1), OutboundAt = null }
+            };
+        }
     }
 }
