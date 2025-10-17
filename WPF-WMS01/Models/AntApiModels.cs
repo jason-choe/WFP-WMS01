@@ -58,7 +58,51 @@ namespace WPF_WMS01.Models
         public long TokenExpiryTime { get; set; } // Unix Timestamp (milliseconds)
     }
 
-    // ====== 2. Create Mission (POST) - Appendix G.3 (p. 433) ======
+    // ====== 2. Extract Vehicle (POST) - Appendix G.1.1.16 (p. 461) ======
+    /// <summary>
+    /// ExtractVehicle 요청의 실제 명령부 (command 객체)를 정의합니다.
+    /// </summary>
+    public class ExtractVehicleCommand
+    {
+        [JsonProperty("name")]
+        public string Name { get; set; } // 실행할 명령 이름 (예: "extract")
+
+        [JsonProperty("args")]
+        public object Args { get; set; } = new { }; // 빈 객체
+    }
+
+    /// <summary>
+    /// ExtractVehicle (Custom Command) 요청의 최종 모델입니다.
+    /// </summary>
+    public class ExtractVehicleRequest
+    {
+        [JsonProperty("command")]
+        public ExtractVehicleCommand Command { get; set; } // 명령 정보
+    }
+
+    /// <summary>
+    /// ExtractVehicle 응답의 Payload 객체를 정의합니다. (vehicle 필드만 사용)
+    /// </summary>
+    public class ExtractVehiclePayload
+    {
+        [JsonProperty("vehicle")]
+        public string Vehicle { get; set; } // 명령이 성공적으로 적용된 차량 ID
+    }
+
+    /// <summary>
+    /// ExtractVehicle (Custom Command) 요청의 최종 응답 모델입니다.
+    /// retCode와 payload.vehicle만 참고합니다.
+    /// </summary>
+    public class ExtractVehicleResponse
+    {
+        [JsonProperty("payload")]
+        public ExtractVehiclePayload Payload { get; set; } // 응답 페이로드
+
+        [JsonProperty("retCode")]
+        public int RetCode { get; set; } // 응답 코드 (0: 성공)
+    }
+
+    // ====== 3. Create Mission (POST) - Appendix G.3 (p. 433) ======
     public class MissionRequestParameterValue
     {
         [JsonProperty("payload")]

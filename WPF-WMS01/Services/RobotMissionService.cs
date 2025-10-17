@@ -737,6 +737,38 @@ namespace WPF_WMS01.Services
                 {
                     OnShowAutoClosingMessage?.Invoke($"로봇 미션 프로세스 실패! 관련된 모든 랙 잠금 해제 중...");
                     await UnlockAllRacksInProcess(missionInfo.RacksLockedByProcess);
+
+                    // extract vehicle
+                    var payload = new ExtractVehicleRequest
+                    {
+                        Command = new ExtractVehicleCommand
+                        {
+                            Name = "extract",
+                            Args = new { } // 빈 객체
+                        }
+                    };
+                    string vehicleName = missionInfo.IsWarehouseMission ? "Poongsan_2" : "Poongsan_2";
+                    string requestEndpoint = $"wms/rest/v{_httpService.CurrentApiVersionMajor}.{_httpService.CurrentApiVersionMinor}/vehicles/{vehicleName}/command";
+                    //string requestPayloadJson = JsonConvert.SerializeObject(payload, Formatting.Indented);
+
+                    OnShowAutoClosingMessage?.Invoke($"로봇 미션 프로세스 실패! Extracting {vehicleName} ...");
+                    //_httpService.PostAsync<ExtractVehicleRequest>(requestEndpoint, payload);
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await _httpService.PostAsync<ExtractVehicleRequest>(requestEndpoint, payload);
+                        }
+                        catch (Exception ex)
+                        {
+                            // 예외 로깅 가능
+                            Debug.WriteLine(ex.Message);
+                        }
+                    });
+                    await Application.Current.Dispatcher.Invoke(async () =>
+                    {
+                        MessageBox.Show(Application.Current.MainWindow, $"AMR {vehicleName}(이)가 추출되었습니다.\r\n  AMR 담당자의 조치가 필요합니다..", "AMR 추출", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    });
                 }
             }
             catch (Exception ex)
@@ -1309,6 +1341,7 @@ namespace WPF_WMS01.Services
                     // 3. 랙 잠금 해제 (이동 완료된 랙만 해제)
                     await _databaseService.UpdateIsLockedAsync(sourceRackVm.Id, false);
                     Application.Current.Dispatcher.Invoke(() => OnRackLockStateChanged?.Invoke(sourceRackVm.Id, false));
+                    processInfo.RacksLockedByProcess.Remove(sourceRackVm.Id); // locked list에서 삭제
                     //if (destinationRackVm.Title.Equals("OUT"))
                     //{
                     //    await _databaseService.UpdateIsLockedAsync(destinationRackVm.Id, true); // 재공풐 반출 시 click 안되게...
