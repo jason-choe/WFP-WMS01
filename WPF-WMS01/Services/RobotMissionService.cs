@@ -56,6 +56,9 @@ namespace WPF_WMS01.Services
         private bool _isPollingInProgress = false; // 폴링 타이머 재진입 방지 플래그
         private readonly bool _mcProtocolInterface = ConfigurationManager.AppSettings["McProtocolInterface"].Equals("true") ? true : false;
 
+        private readonly string _warehouseAmrName = ConfigurationManager.AppSettings["WarehouseAMRName"] ?? "";
+        private readonly string _packagingLineAmrName = ConfigurationManager.AppSettings["PackagingLineAMRName"] ?? "";
+
         /// <summary>
         /// MainViewModel로 상태를 다시 보고하기 위한 이벤트
         /// </summary>
@@ -747,7 +750,7 @@ namespace WPF_WMS01.Services
                             Args = new { } // 빈 객체
                         }
                     };
-                    string vehicleName = missionInfo.IsWarehouseMission ? "Poongsan_2" : "Poongsan_2";
+                    string vehicleName = missionInfo.IsWarehouseMission ? _warehouseAmrName : _packagingLineAmrName;
                     string requestEndpoint = $"wms/rest/v{_httpService.CurrentApiVersionMajor}.{_httpService.CurrentApiVersionMinor}/vehicles/{vehicleName}/command";
                     //string requestPayloadJson = JsonConvert.SerializeObject(payload, Formatting.Indented);
 
@@ -767,7 +770,7 @@ namespace WPF_WMS01.Services
                     });
                     await Application.Current.Dispatcher.Invoke(async () =>
                     {
-                        MessageBox.Show(Application.Current.MainWindow, $"AMR {vehicleName}(이)가 추출되었습니다.\r\n  AMR 담당자의 조치가 필요합니다..", "AMR 추출", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        MessageBox.Show(Application.Current.MainWindow, $"AMR {vehicleName}(이)가 추출(Extraction)되었습니다.\r\nAMR 운용 담당자의 후속 조치가 필요합니다.", "AMR 추출", MessageBoxButton.OK, MessageBoxImage.Warning);
                     });
                 }
             }
