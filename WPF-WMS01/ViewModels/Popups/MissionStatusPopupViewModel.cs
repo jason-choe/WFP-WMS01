@@ -180,7 +180,8 @@ namespace WPF_WMS01.ViewModels.Popups
 
                 OverallStatusText = missionInfo.HmiStatus?.Status; // Null-conditional operator
                 OverallProgressPercentage = missionInfo.HmiStatus?.ProgressPercentage ?? 0;
-                OverallCurrentStep = missionInfo.CurrentStepIndex + 1;
+                if(OverallCurrentStep < missionInfo.TotalSteps)
+                    OverallCurrentStep = missionInfo.CurrentStepIndex + 1;
                 Debug.WriteLine($"[CheckPoint] missionInfo.CurrentStepIndex = {missionInfo.CurrentStepIndex}, OverallCurrentStep = {OverallCurrentStep}");
                 OverallTotalStep = missionInfo.TotalSteps;
                 CurrentStepDescription = missionInfo.HmiStatus?.CurrentStepDescription;

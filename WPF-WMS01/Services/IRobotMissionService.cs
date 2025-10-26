@@ -73,7 +73,8 @@ namespace WPF_WMS01.Services
         /// <param name="status">새로운 상태 문자열.</param>
         /// <param name="progressPercentage">새로운 진행률 (0-100).</param>
         /// <param name="currentStepDescription">현재 단계에 대한 설명.</param>
-        Task UpdateHmiStatus(string processId, string status, int progressPercentage, string currentStepDescription);
+        /// <param name="subOpDescription">현재 서브 오퍼레이션에 대한 설명.</param>
+        Task UpdateHmiStatus(string processId, string status, int progressPercentage, string currentStepDescription, string subOpDescription);
 
         /// <summary>
         /// 특정 로봇 미션 프로세스의 단계를 완료 또는 실패로 표시합니다.

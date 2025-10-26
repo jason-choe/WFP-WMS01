@@ -141,13 +141,15 @@ namespace WPF_WMS01
             {
                 string warehousePayload = ConfigurationManager.AppSettings["WarehouseAMR"] ?? "AMR_1";
                 string packagingLinePayload = ConfigurationManager.AppSettings["PackagingLineAMR"] ?? "AMR_2";
+                var mcProtocolService = provider.GetRequiredService<IMcProtocolService>(); // IMcProtocolService 주입
 
                 return new MainViewModel(
                     provider.GetRequiredService<DatabaseService>(),
                     provider.GetRequiredService<HttpService>(),
                     provider.GetRequiredService<ModbusClientService>(), // MainViewModel용 ModbusClientService (기본 등록된 인스턴스)
                     warehousePayload,
-                    packagingLinePayload
+                    packagingLinePayload,
+                    mcProtocolService
                 );
             });
 

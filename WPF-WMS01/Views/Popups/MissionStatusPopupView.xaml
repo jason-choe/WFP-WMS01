@@ -62,7 +62,7 @@
                     <Run Text="{Binding CurrentStepDescription}"/>
                 </TextBlock>
                 <TextBlock FontWeight="Bold" FontSize="16">
-                    <Run Text="  서브 작업:"/>
+                    <Run Text="    현재 진행중인 I/O 작업:"/>
                     <Run Text="{Binding SubOpDescription}"/>
                 </TextBlock>
             </StackPanel>

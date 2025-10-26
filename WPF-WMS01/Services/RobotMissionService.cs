@@ -301,7 +301,10 @@ namespace WPF_WMS01.Services
                                     {
                                         if (processInfo.IsFailed) break; // ex: Modbus access 실패 시 Rack update는 안하는 경우
                                         processInfo.HmiStatus.SubOpDescription = subOperation.Description;
+                                        OnMissionProcessUpdated?.Invoke(processInfo);
                                         await PerformSubOperation(subOperation, processInfo);
+                                        processInfo.HmiStatus.SubOpDescription = "";
+                                        OnMissionProcessUpdated?.Invoke(processInfo);
                                     }
 
                                     // 미션 단계 인덱스 증가
@@ -449,6 +452,8 @@ namespace WPF_WMS01.Services
 
             // 첫 번째 미션 단계를 전송하고 추적을 시작합니다.
             await SendAndTrackMissionStepsForProcess(newMissionProcess);
+            if(initiatingCoilAddress.HasValue)
+                _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] 포장실 미션 started by call button {initiatingCoilAddress + 1}.");
 
             return processId;
         }
@@ -500,7 +505,10 @@ namespace WPF_WMS01.Services
             foreach (var subOperation in currentStep.PreMissionOperations)
             {
                 processInfo.HmiStatus.SubOpDescription = subOperation.Description;
+                OnMissionProcessUpdated?.Invoke(processInfo);
                 await PerformSubOperation(subOperation, processInfo);
+                processInfo.HmiStatus.SubOpDescription = "";
+                OnMissionProcessUpdated?.Invoke(processInfo);
                 // PerformSubOperation 내부에서 예외 발생 시 해당 미션은 이미 실패 처리되므로, 추가적인 예외 처리는 필요 없습니다.
                 if (processInfo.IsFailed || processInfo.CancellationTokenSource.Token.IsCancellationRequested)
                 {
@@ -616,7 +624,7 @@ namespace WPF_WMS01.Services
         /// <param name="status">새로운 상태 문자열.</param>
         /// <param name="progressPercentage">새로운 진행률 (0-100).</param>
         /// <param name="currentStepDescription">현재 단계에 대한 설명.</param>
-        public Task UpdateHmiStatus(string processId, string status, int progressPercentage, string currentStepDescription)
+        public Task UpdateHmiStatus(string processId, string status, int progressPercentage, string currentStepDescription, string subOpDescription)
         {
             RobotMissionInfo processInfo;
             if (_activeRobotProcesses.TryGetValue(processId, out processInfo))
@@ -624,6 +632,7 @@ namespace WPF_WMS01.Services
                 processInfo.HmiStatus.Status = status;
                 processInfo.HmiStatus.ProgressPercentage = progressPercentage;
                 processInfo.HmiStatus.CurrentStepDescription = currentStepDescription;
+                processInfo.HmiStatus.SubOpDescription = subOpDescription;
                 OnMissionProcessUpdated?.Invoke(processInfo);
             }
             return Task.CompletedTask;
@@ -741,7 +750,7 @@ namespace WPF_WMS01.Services
                     OnShowAutoClosingMessage?.Invoke($"로봇 미션 프로세스 실패! 관련된 모든 랙 잠금 해제 중...");
                     await UnlockAllRacksInProcess(missionInfo.RacksLockedByProcess);
 
-                    // extract vehicle
+                    // Extract vehicle
                     var payload = new ExtractVehicleRequest
                     {
                         Command = new ExtractVehicleCommand
@@ -818,7 +827,6 @@ namespace WPF_WMS01.Services
                 {
                     case SubOperationType.McReadLotNoBoxCount:
                         if (!_mcProtocolInterface) break;
-                        break; // pre online test
                         if (subOp.McProtocolIpAddress == null || !subOp.McWordAddress.HasValue || !subOp.McStringLengthWords.HasValue)
                         {
                             throw new ArgumentException("McReadLotNoBoxCount: IpAddress, WordAddress 또는 StringLengthWords가 지정되지 않았습니다.");
@@ -848,6 +856,7 @@ namespace WPF_WMS01.Services
                         processInfo.ReadIntValue = boxCount; // Box Count 저장
 
                         Debug.WriteLine($"[RobotMissionService] McReadLotNoBoxCount: Addr {subOp.McWordAddress.Value}, LotNo '{processInfo.ReadStringValue}', BoxCount {processInfo.ReadIntValue}");
+                        _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"Lot No. = {processInfo.ReadStringValue}, Box Count = {boxCount}");
                         processInfo.HmiStatus.SubOpDescription = "";
                         break;
 
@@ -864,8 +873,8 @@ namespace WPF_WMS01.Services
                         break;
 
                     case SubOperationType.McWriteLotNoBoxCount:
+                        //break;
                         if (!_mcProtocolInterface) break;
-                        break; // pre online test
                         if (subOp.McProtocolIpAddress == null || !subOp.McWordAddress.HasValue || !subOp.McStringLengthWords.HasValue || string.IsNullOrEmpty(processInfo.ReadStringValue) || !processInfo.ReadIntValue.HasValue)
                         {
                             throw new ArgumentException("McWriteLotNoBoxCount: 필요한 파라미터 (IpAddress, WordAddress, StringLengthWords, ReadStringValue, ReadIntValue)가 충분하지 않습니다.");
@@ -888,6 +897,7 @@ namespace WPF_WMS01.Services
                         break;
 
                     case SubOperationType.McWriteSingleWord:
+                        //break;
                         if (!_mcProtocolInterface) break;
                         if (subOp.McProtocolIpAddress == null || !subOp.McWordAddress.HasValue || !subOp.McWriteValueInt.HasValue)
                         {
@@ -929,6 +939,7 @@ namespace WPF_WMS01.Services
 
                     case SubOperationType.McWaitSensorOff:
                     case SubOperationType.McWaitSensorOn:
+                        //break;
                         if (!_mcProtocolInterface) break;
                         if (subOp.McProtocolIpAddress == null || !subOp.McWordAddress.HasValue || !subOp.McWriteValueInt.HasValue)
                         {
@@ -944,6 +955,9 @@ namespace WPF_WMS01.Services
                         // 센서 명령 (켜거나 끄기)
                         await _mcProtocolService.WriteWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value, (ushort)subOp.McWriteValueInt.Value);//.ConfigureAwait(false);
                         Debug.WriteLine($"[RobotMissionService] McWaitSensor: Command written to Device '{subOp.WordDeviceCode}', Address {subOp.McWordAddress.Value}, Value {(ushort)subOp.McWriteValueInt.Value}. Waiting for sensor state...");
+                        // Sensor ON은 확인 없이 진행한다.
+                        if (subOp.Type == SubOperationType.McWaitSensorOn)
+                            break;
 
                         bool targetState = (subOp.Type == SubOperationType.McWaitSensorOn); // ON을 기다리면 true, OFF를 기다리면 false
                         DateTime startTime = DateTime.Now;
@@ -1037,6 +1051,7 @@ namespace WPF_WMS01.Services
                         break;
 
                     case SubOperationType.CheckModbusDiscreteInput:
+                        if (!_mcProtocolInterface) break;
                         await PerformModbusDiscreteInputCheck(processInfo, subOp.McDiscreteInputAddress).ConfigureAwait(false);
                         break;
 
