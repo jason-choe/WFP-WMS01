@@ -948,7 +948,7 @@ namespace WPF_WMS01.Services
                         }
                         if (!subOp.WaitTimeoutSeconds.HasValue || subOp.WaitTimeoutSeconds.Value <= 0)
                         {
-                            subOp.WaitTimeoutSeconds = 30; // 기본 타임아웃 30초
+                            subOp.WaitTimeoutSeconds = 120; // 기본 타임아웃 30초
                             Debug.WriteLine($"[RobotMissionService] McWaitSensor: WaitTimeoutSeconds가 지정되지 않아 기본값 30초 사용.");
                         }
 

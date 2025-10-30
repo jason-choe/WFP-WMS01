@@ -557,7 +557,7 @@ namespace WPF_WMS01.ViewModels
                 {
                     ProcessStepDescription = $"대기 장소로 이동",
                     MissionType = "8",
-                    ToNode = "Wrapping_Turn1",
+                    ToNode = "AMR1_WAIT",  //"Wrapping_Turn1",
                     Payload = _mainViewModel.WarehousePayload,
                     IsLinkable = false,
                     LinkWaitTimeout = 3600
