@@ -833,11 +833,12 @@ namespace WPF_WMS01.Services
                         }
 
                         // ConnectAsync는 내부적으로 재연결 로직을 포함하고 있으므로 여기서 직접 Connect/Disconnect를 관리하지 않아도 됩니다.
-                        string? lotNoPart1 = await _mcProtocolService.ReadStringDataAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value);//.ConfigureAwait(false);
-                        ushort? lotNoPart2 = await _mcProtocolService.ReadWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + subOp.McStringLengthWords.Value);//.ConfigureAwait(false);
-                        ushort? boxCount = await _mcProtocolService.ReadWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + subOp.McStringLengthWords.Value + 2);//.ConfigureAwait(false);
+                        string? bulletType = await _mcProtocolService.ReadStringDataAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + 0, 4);//.ConfigureAwait(false); // 4 words
+                        string? lotNoPart1 = await _mcProtocolService.ReadStringDataAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + 4, 6);//.ConfigureAwait(false); // 6 words
+                        ushort? lotNoPart2 = await _mcProtocolService.ReadWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + 10);//.ConfigureAwait(false);
+                        ushort? boxCount = await _mcProtocolService.ReadWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + 11);//.ConfigureAwait(false);
 
-                        if (lotNoPart1 == null || lotNoPart2 == null || boxCount == null)
+                        if (bulletType == null || lotNoPart1 == null || lotNoPart2 == null || boxCount == null)
                         {
                             // 이 시점에서 미션 프로세스를 실패 상태로 마크하고 완료 처리
                             processInfo.CurrentStatus = MissionStatusEnum.FAILED;
@@ -849,14 +850,15 @@ namespace WPF_WMS01.Services
                             break;
                         }
 
+                        processInfo.ReadBulletTypeValue = $"{bulletType}";
                         if (lotNoPart1.Length > 1 && lotNoPart1[0] == 'P') // PSD... 의 경우 lot number는 3자리
                             processInfo.ReadStringValue = $"{lotNoPart1.Trim()}-{lotNoPart2:D3}";
                         else
                             processInfo.ReadStringValue = $"{lotNoPart1.Trim()}-{lotNoPart2:D4}"; // "5-3"에 따라 LotNo 조합
                         processInfo.ReadIntValue = boxCount; // Box Count 저장
 
-                        Debug.WriteLine($"[RobotMissionService] McReadLotNoBoxCount: Addr {subOp.McWordAddress.Value}, LotNo '{processInfo.ReadStringValue}', BoxCount {processInfo.ReadIntValue}");
-                        _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"Lot No. = {processInfo.ReadStringValue}, Box Count = {boxCount}");
+                        Debug.WriteLine($"[RobotMissionService] McReadLotNoBoxCount: Addr {subOp.McWordAddress.Value}, BulletType '{bulletType}', LotNo '{processInfo.ReadStringValue}', BoxCount {processInfo.ReadIntValue}");
+                        _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] BulletType = '{bulletType}', Lot No. = '{processInfo.ReadStringValue}', Box Count = {boxCount}");
                         processInfo.HmiStatus.SubOpDescription = "";
                         break;
 
@@ -888,9 +890,10 @@ namespace WPF_WMS01.Services
                         string writeLotNoPart1 = lotNoParts[0];
                         ushort writeLotNoPart2 = ushort.Parse(lotNoParts[1]);
 
-                        await _mcProtocolService.WriteStringDataAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value, writeLotNoPart1);//.ConfigureAwait(false);
-                        await _mcProtocolService.WriteWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + subOp.McStringLengthWords.Value, writeLotNoPart2);//.ConfigureAwait(false);
-                        await _mcProtocolService.WriteWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + subOp.McStringLengthWords.Value + 2, processInfo.ReadIntValue.Value);//.ConfigureAwait(false);
+                        await _mcProtocolService.WriteStringDataAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + 0, processInfo.ReadBulletTypeValue, 4);//.ConfigureAwait(false);
+                        await _mcProtocolService.WriteStringDataAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + 4, writeLotNoPart1, 6);//.ConfigureAwait(false);
+                        await _mcProtocolService.WriteWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + 10, writeLotNoPart2);//.ConfigureAwait(false);
+                        await _mcProtocolService.WriteWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value + 11, processInfo.ReadIntValue.Value);//.ConfigureAwait(false);
 
                         Debug.WriteLine($"[RobotMissionService] McWriteLotNoBoxCount: LotNo '{processInfo.ReadStringValue}', BoxCount {processInfo.ReadIntValue.Value} Written.");
                         processInfo.HmiStatus.SubOpDescription = "";
@@ -1012,6 +1015,7 @@ namespace WPF_WMS01.Services
                         var rack = await _databaseService.GetRackByIdAsync(subOp.TargetRackId.Value).ConfigureAwait(false);
                         if (rack != null)
                         {
+                            processInfo.ReadBulletTypeValue = _mainViewModel.GetBulletTypeNameFromNumber(rack.BulletType);  
                             processInfo.ReadStringValue = rack.LotNumber;
                             processInfo.ReadIntValue = (ushort)rack.BoxCount;
                             Debug.WriteLine($"[RobotMissionService] DbReadRackData: Rack {rack.Title} (ID: {rack.Id}) - LotNo '{processInfo.ReadStringValue}', BoxCount {processInfo.ReadIntValue}");
@@ -1019,8 +1023,29 @@ namespace WPF_WMS01.Services
                         else
                         {
                             Debug.WriteLine($"[RobotMissionService] DbReadRackData: Rack ID {subOp.TargetRackId.Value} not found in DB.");
+                            processInfo.ReadBulletTypeValue = "";
                             processInfo.ReadStringValue = "";
                             processInfo.ReadIntValue = 0;
+                        }
+                        processInfo.HmiStatus.SubOpDescription = "";
+                        break;
+
+                    case SubOperationType.DbWriteRackData:
+                        if (!subOp.TargetRackId.HasValue)
+                        {
+                            throw new ArgumentException("DbReadRackData: TargetRackId가 지정되지 않았습니다.");
+                        }
+                        var targetRack = await _databaseService.GetRackByIdAsync(subOp.TargetRackId.Value).ConfigureAwait(false);
+                        if (targetRack != null)
+                        {
+                            targetRack.BulletType = _mainViewModel.GetBulletTypeFromInputString(processInfo.ReadBulletTypeValue);
+                            targetRack.LotNumber = processInfo.ReadStringValue ?? "";
+                            targetRack.BoxCount = processInfo.ReadIntValue ?? 0; ;
+                            Debug.WriteLine($"[RobotMissionService] DbReadRackData: Rack {targetRack.Title} (ID: {targetRack.Id}) - LotNo '{processInfo.ReadStringValue}', BoxCount {processInfo.ReadIntValue}");
+                        }
+                        else
+                        {
+                            throw new ArgumentException("DbWriteRackData: TargetRackId가 지정되지 않습니다.");
                         }
                         processInfo.HmiStatus.SubOpDescription = "";
                         break;

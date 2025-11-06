@@ -77,7 +77,7 @@ namespace WPF_WMS01.Services
         /// <param name="deviceCode">디바이스 코드 (예: "D", "R").</param>
         /// <param name="address">시작 디바이스 주소.</param>
         /// <returns>읽은 문자열.</returns>
-        Task<string?> ReadStringDataAsync(string ipAddress, string deviceCode, int address);
+        Task<string?> ReadStringDataAsync(string ipAddress, string deviceCode, int address, ushort length);
 
         /// <summary>
         /// PLC의 워드 디바이스에 20바이트(10워드) 문자열을 씁니다.
@@ -87,7 +87,7 @@ namespace WPF_WMS01.Services
         /// <param name="address">시작 디바이스 주소.</param>
         /// <param name="value">쓸 문자열 (20바이트로 패딩/잘림).</param>
         /// <returns>쓰기 성공 여부.</returns>
-        Task<bool> WriteStringDataAsync(string ipAddress, string deviceCode, int address, string value);
+        Task<bool> WriteStringDataAsync(string ipAddress, string deviceCode, int address, string value, ushort length);
 
         /// <summary>
         /// PLC의 워드 디바이스에서 32비트 정수(int)를 읽습니다. (2워드)

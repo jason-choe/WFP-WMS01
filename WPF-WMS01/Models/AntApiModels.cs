@@ -452,6 +452,7 @@ namespace WPF_WMS01.Models
 
         // DB Operations
         DbReadRackData,             // 4-2: Database로부터 특정 Rack의 LotNo, Box Count를 임시 저장소에 저장
+        DbWriteRackData,            // 4-2: 임시 저장소에 저장된 정보를 Database의 특정 Rack의 LotNo, Box Count에 저장
         DbUpdateRackState,          // 4-6: 기존 PerformDbUpdateForCompletedStep() 실행 (Source, Destination Rack ID 사용)
 
         // UI Operations

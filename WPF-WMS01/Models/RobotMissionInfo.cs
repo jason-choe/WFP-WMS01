@@ -92,6 +92,7 @@ namespace WPF_WMS01.Models
         }
 
         // 임시 저장소: MC Protocol Read/Write 및 DB Read/Write 간 데이터 전달용
+        public string ReadBulletTypeValue { get; set; }
         public string ReadStringValue { get; set; }
         public ushort? ReadIntValue { get; set; }
 

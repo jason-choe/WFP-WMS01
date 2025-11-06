@@ -403,13 +403,14 @@ namespace WPF_WMS01.Services
         /// </summary>
         /// <param name="deviceCode">디바이스 코드 (예: "D", "R").</param>
         /// <param name="address">시작 디바이스 주소.</param>
+        /// <param name="length">읽을 Word Count.</param>
         /// <returns>읽은 문자열.</returns>
-        public async Task<string?> ReadStringDataAsync(string ipAddress, string deviceCode, int address)
+        public async Task<string?> ReadStringDataAsync(string ipAddress, string deviceCode, int address, ushort length)
         {
             try
             {
                 await ConnectAsync(ipAddress).ConfigureAwait(false); // 매 호출마다 연결
-                const ushort STRING_WORD_LENGTH = 8; // 16 bytes = 8 words
+                ushort STRING_WORD_LENGTH = length; // 12 bytes = 6 words, 또는 8 bytes = 4 words
                 ushort[] words = await ReadWordsAsync(ipAddress, deviceCode, address, STRING_WORD_LENGTH);//.ConfigureAwait(false);
 
                 byte[] bytes = new byte[STRING_WORD_LENGTH * 2];
@@ -439,14 +440,15 @@ namespace WPF_WMS01.Services
         /// <param name="deviceCode">디바이스 코드 (예: "D", "R").</param>
         /// <param name="address">시작 디바이스 주소.</param>
         /// <param name="value">쓸 문자열 (20바이트로 패딩/잘림).</param>
+        /// <param name="length">쓸 Word Count.</param>
         /// <returns>쓰기 성공 여부.</returns>
-        public async Task<bool> WriteStringDataAsync(string ipAddress, string deviceCode, int address, string value)
+        public async Task<bool> WriteStringDataAsync(string ipAddress, string deviceCode, int address, string value, ushort length)
         {
             try
             {
                 await ConnectAsync(ipAddress).ConfigureAwait(false); // 매 호출마다 연결
-                const ushort STRING_BYTE_LENGTH = 16;
-                const ushort STRING_WORD_LENGTH = 8; // 16 bytes = 8 words
+                ushort STRING_BYTE_LENGTH = (ushort)(length * 2);
+                ushort STRING_WORD_LENGTH = length;
 
                 byte[] stringBytes = Encoding.ASCII.GetBytes(value);
                 byte[] paddedBytes = new byte[STRING_BYTE_LENGTH];

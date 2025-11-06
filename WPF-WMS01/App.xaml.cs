@@ -120,6 +120,18 @@ namespace WPF_WMS01
                     missionCheckModbusService = new ModbusClientService(missionModbusComPort, missionModbusBaudRate, missionModbusParity, missionModbusStopBits, missionModbusDataBits, missionModbusSlaveId);
                 }
 
+                ModbusClientService missionCheckModbusService2; // for AMR_2
+                if (missionModbusMode.Equals("TCP", StringComparison.OrdinalIgnoreCase))
+                {
+                    missionCheckModbusService2 = new ModbusClientService(
+                        ConfigurationManager.AppSettings["PackagingLineAMR"].Equals("AMR_2") ? "192.168.200.222" : "192.168.200.202", // missionModbusIp, 
+                        missionModbusPort, missionModbusSlaveId);
+                }
+                else // RTU
+                {
+                    missionCheckModbusService = new ModbusClientService(missionModbusComPort, missionModbusBaudRate, missionModbusParity, missionModbusStopBits, missionModbusDataBits, missionModbusSlaveId);
+                }
+
                 return new RobotMissionService(
                     httpService,
                     databaseService,
