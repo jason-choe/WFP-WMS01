@@ -132,10 +132,10 @@ namespace WPF_WMS01.Models
             //LastCompletedMissionId = null;
             //IsFinished = false;
             //IsFailed = false;
-            ReadStringValue = readStringValue;
-            ReadIntValue = readIntValue;
+            ReadStringValue = readStringValue ?? ""; // readStringValue;
+            ReadIntValue = readIntValue ?? 0;
+            ReadBulletTypeValue = "?";
         }
-
     }
 
     /// <summary>

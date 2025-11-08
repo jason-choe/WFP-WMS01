@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Text.RegularExpressions;
 using WPF_WMS01.Views.Popups; // NumericKeypadPopup 네임스페이스 추가
 using System;
+using System.ComponentModel;  // For CancelEventArgs
 
 namespace WPF_WMS01
 {
@@ -221,6 +222,19 @@ namespace WPF_WMS01
         // Window가 닫힐 때 팝업도 함께 닫히도록 처리 (선택 사항)
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
+            // 종료 확인 메시지 띄우기
+            MessageBoxResult result = MessageBox.Show(
+                "정말 종료하시겠습니까?",
+                "종료 확인",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (result == MessageBoxResult.No)
+            {
+                e.Cancel = true;  // 닫기 취소
+                return;           // 아래 코드 실행하지 않음
+            }
+
             if (_currentKeypadPopup != null)
             {
                 _currentKeypadPopup.Close();

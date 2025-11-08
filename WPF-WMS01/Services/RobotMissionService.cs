@@ -34,11 +34,13 @@ namespace WPF_WMS01.Services
         private readonly ConcurrentDictionary<string, RobotMissionInfo> _activeRobotProcesses = new ConcurrentDictionary<string, RobotMissionInfo>(); // ConcurrentDictionary로 변경
 
         // MainViewModel로부터 주입받을 종속성 (UI 업데이트 및 특정 값 조회용)
-        private readonly string _waitRackTitle;
+        private readonly string _wrapRackTitle;
         private readonly char[] _militaryCharacter;
+        private Func<string> _getInputStringForBulletFunc; // MainViewModel의 InputStringForBullet 값을 가져오는 델리게이트
         private Func<string> _getInputStringForButtonFunc; // MainViewModel의 InputStringForButton 값을 가져오는 델리게이트
         private Func<string> _getInputStringForBoxesFunc;
         // MainViewModel에게 값을 전달하기 위한 델리게이트
+        public Action<string> _setInputStringForBulletFunc { get; set; }
         public Action<string> _setInputStringForButtonFunc { get; set; }
         public Action<string> _setInputStringForBoxesFunc { get; set; }
         private Func<int, RackViewModel> _getRackViewModelByIdFunc; // MainViewModel에서 RackViewModel을 ID로 가져오는 델리게이트
@@ -64,6 +66,7 @@ namespace WPF_WMS01.Services
         /// </summary>
         public event Action<string> OnShowAutoClosingMessage;
         public event Action<int, bool> OnRackLockStateChanged;
+        public event Action OnInputStringForBulletCleared;
         public event Action OnInputStringForButtonCleared;
         public event Action OnInputStringForBoxesCleared;
         public event Action<ushort> OnTurnOffAlarmLightRequest;
@@ -76,24 +79,28 @@ namespace WPF_WMS01.Services
         /// <param name="httpService">HTTP 통신을 위한 서비스 인스턴스.</param>
         /// <param name="databaseService">데이터베이스 접근을 위한 서비스 인스턴스.</param>
         /// <param name="mcProtocolService">MC Protocol 통신을 위한 서비스 인스턴스.</param>
-        /// <param name="waitRackTitle">WAIT 랙의 타이틀 문자열.</param>
+        /// <param name="wrapRackTitle">WAIT 랙의 타이틀 문자열.</param>
         /// <param name="militaryCharacter">군수품 문자 배열.</param>
         /// <param name="getRackViewModelByIdFunc">Rack ID로 RackViewModel을 가져오는 함수.</param>
         /// <param name="missionCheckModbusService">미션 실패 확인용으로 미리 설정된 ModbusClientService 인스턴스.</param>
+        /// <param name="getInputStringForBulletFunc">InputStringForBullet 값을 가져오는 델리게이트 (사용자 입력값).</param>
         /// <param name="getInputStringForButtonFunc">InputStringForButton 값을 가져오는 델리게이트 (사용자 입력값).</param>
         /// <param name="getInputStringForBoxesFunc">InputStringForBoxes 값을 가져오는 델리게이트 (사용자 입력값).</param>
-        /// <param name="setInputStringForButtonFunc">InputStringForButton 값을 가져오는 델리게이트 (사용자 입력값).</param>
-        /// <param name="setInputStringForBoxesFunc">InputStringForBoxes 값을 가져오는 델리게이트 (사용자 입력값).</param>
+        /// <param name="setInputStringForBulletFunc">InputStringForBullet 값을 써넣는 델리게이트 (사용자 입력값).</param>
+        /// <param name="setInputStringForButtonFunc">InputStringForButton 값을 써넣는 델리게이트 (사용자 입력값).</param>
+        /// <param name="setInputStringForBoxesFunc">InputStringForBoxes 값을 써넣는 델리게이트 (사용자 입력값).</param>
         public RobotMissionService(
             HttpService httpService,
             DatabaseService databaseService,
             IMcProtocolService mcProtocolService, // MC Protocol Service 주입
-            string waitRackTitle,
+            string wrapRackTitle,
             char[] militaryCharacter,
             Func<int, RackViewModel> getRackViewModelByIdFunc,
             ModbusClientService missionCheckModbusService, // ModbusClientService 인스턴스를 직접 주입받도록 변경
+            Func<string> getInputStringForBulletFunc, // 델리게이트 재추가
             Func<string> getInputStringForButtonFunc, // 델리게이트 재추가
             Func<string> getInputStringForBoxesFunc, // 델리게이트 재추가
+            Action<string> setInputStringForBulletFunc,
             Action<string> setInputStringForButtonFunc,
             Action<string> setInputStringForBoxesFunc,
             MainViewModel mainViewModel)
@@ -101,11 +108,13 @@ namespace WPF_WMS01.Services
             _httpService = httpService ?? throw new ArgumentNullException(nameof(httpService));
             _databaseService = databaseService ?? throw new ArgumentNullException(nameof(databaseService));
             _mcProtocolService = mcProtocolService ?? throw new ArgumentNullException(nameof(mcProtocolService)); // MC Protocol 서비스 초기화
-            _waitRackTitle = waitRackTitle;
+            _wrapRackTitle = wrapRackTitle;
             _militaryCharacter = militaryCharacter;
             _getRackViewModelByIdFunc = getRackViewModelByIdFunc ?? throw new ArgumentNullException(nameof(getRackViewModelByIdFunc));
+            _getInputStringForBulletFunc = getInputStringForBulletFunc ?? throw new ArgumentNullException(nameof(getInputStringForBulletFunc)); // 델리게이트 초기화
             _getInputStringForButtonFunc = getInputStringForButtonFunc ?? throw new ArgumentNullException(nameof(getInputStringForButtonFunc)); // 델리게이트 초기화
             _getInputStringForBoxesFunc = getInputStringForBoxesFunc ?? throw new ArgumentNullException(nameof(getInputStringForBoxesFunc)); // 델리게이트 초기화
+            _setInputStringForBulletFunc = setInputStringForBulletFunc ?? throw new ArgumentNullException(nameof(setInputStringForBulletFunc));
             _setInputStringForButtonFunc = setInputStringForButtonFunc ?? throw new ArgumentNullException(nameof(setInputStringForButtonFunc));
             _setInputStringForBoxesFunc = setInputStringForBoxesFunc ?? throw new ArgumentNullException(nameof(setInputStringForBoxesFunc));
             _mainViewModel = mainViewModel;
@@ -1031,22 +1040,11 @@ namespace WPF_WMS01.Services
                         break;
 
                     case SubOperationType.DbWriteRackData:
-                        if (!subOp.TargetRackId.HasValue)
+                        if (!subOp.DestRackIdForDbUpdate.HasValue)
                         {
                             throw new ArgumentException("DbReadRackData: TargetRackId가 지정되지 않았습니다.");
                         }
-                        var targetRack = await _databaseService.GetRackByIdAsync(subOp.TargetRackId.Value).ConfigureAwait(false);
-                        if (targetRack != null)
-                        {
-                            targetRack.BulletType = _mainViewModel.GetBulletTypeFromInputString(processInfo.ReadBulletTypeValue);
-                            targetRack.LotNumber = processInfo.ReadStringValue ?? "";
-                            targetRack.BoxCount = processInfo.ReadIntValue ?? 0; ;
-                            Debug.WriteLine($"[RobotMissionService] DbReadRackData: Rack {targetRack.Title} (ID: {targetRack.Id}) - LotNo '{processInfo.ReadStringValue}', BoxCount {processInfo.ReadIntValue}");
-                        }
-                        else
-                        {
-                            throw new ArgumentException("DbWriteRackData: TargetRackId가 지정되지 않습니다.");
-                        }
+                        await PerformDbUpdateForInboundStepLogic(processInfo, subOp.DestRackIdForDbUpdate).ConfigureAwait(false);
                         processInfo.HmiStatus.SubOpDescription = "";
                         break;
 
@@ -1068,6 +1066,7 @@ namespace WPF_WMS01.Services
                         else
                         {
                             // MainViewModel에 직접 값을 전달하는 이벤트 또는 델리게이트가 필요합니다.
+                            _setInputStringForBulletFunc(processInfo.ReadBulletTypeValue);
                             _setInputStringForButtonFunc(processInfo.ReadStringValue);
                             _setInputStringForBoxesFunc(processInfo.ReadIntValue.ToString());
                             OnShowAutoClosingMessage?.Invoke($"UI 표시: LotNo: {processInfo.ReadStringValue}, BoxCount: {processInfo.ReadIntValue.Value}");
@@ -1313,19 +1312,28 @@ namespace WPF_WMS01.Services
                     // 1. Destination Rack에 Source Rack의 제품 정보 복사
                     string sourceLotNumber;
                     int sourceBoxCount;
-                    int sourceBulletType = sourceRackVm.BulletType;
+                    int sourceBulletType; // = sourceRackVm.BulletType;
                     int newDestinationRackType = destinationRackVm.RackType; // 기본적으로 목적지 랙의 현재 RackType 유지
                     int newSourceRackType = sourceRackVm.RackType; // 기본적으로 현재 RackType 유지
 
                     // 특별한 경우 1): source rack이 WAIT rack일 경우
-                    if (sourceRackVm.Title.Equals(_waitRackTitle) && _getInputStringForButtonFunc != null && _getInputStringForBoxesFunc != null)
+                    /*if (sourceRackVm.Title.Equals(_waitRackTitle) && _getInputStringForButtonFunc != null && _getInputStringForBoxesFunc != null)
                     {
                         sourceLotNumber = _getInputStringForButtonFunc.Invoke().TrimStart().TrimEnd(_militaryCharacter);
                         // BulletType은 이미 MainViewModel에서 WAIT 랙에 설정된 상태이므로 sourceRackVm.BulletType 사용
                         sourceBoxCount = string.IsNullOrWhiteSpace(_getInputStringForBoxesFunc.Invoke()) ? 0 : Int32.Parse(_getInputStringForBoxesFunc.Invoke());
+                    }*/
+                    // 특별한 경우 1): source rack이 WRAP rack일 경우
+                    if (sourceRackVm.Title.Equals(_wrapRackTitle) && _getInputStringForBulletFunc != null && _getInputStringForButtonFunc != null && _getInputStringForBoxesFunc != null)
+                    {
+                        // BulletType은 이미 MainViewModel에서 WRAP 랙에 설정된 상태이므로 sourceRackVm.BulletType 사용
+                        sourceBulletType = _mainViewModel.GetBulletTypeFromInputString(_getInputStringForBulletFunc.Invoke().TrimStart());
+                        sourceLotNumber = _getInputStringForButtonFunc.Invoke().TrimStart();
+                        sourceBoxCount = string.IsNullOrWhiteSpace(_getInputStringForBoxesFunc.Invoke()) ? 0 : Int32.Parse(_getInputStringForBoxesFunc.Invoke());
                     }
                     else
                     {
+                        sourceBulletType = sourceRackVm.BulletType;
                         sourceLotNumber = sourceRackVm.LotNumber;
                         sourceBoxCount = sourceRackVm.BoxCount;
                     }
@@ -1347,17 +1355,28 @@ namespace WPF_WMS01.Services
                         if (sourceRackVm.Title.Equals("OUT"))
                             await SetVisibleRackInProcess(sourceRackVm.Id, false);
                     }
-
-                    await _databaseService.UpdateRackStateAsync(
-                        destinationRackVm.Id,
-                        newDestinationRackType,
-                        sourceBulletType
-                    );
-                    await _databaseService.UpdateLotNumberAsync(
-                        destinationRackVm.Id,
-                        sourceLotNumber,
-                        sourceBoxCount
-                    );
+                    // 특별한 경우 3)
+                    if (destinationRackVm.Title.Equals(_wrapRackTitle))
+                    {
+                        _setInputStringForBulletFunc(_mainViewModel.GetBulletTypeNameFromNumber(sourceBulletType));
+                        //_mainViewModel.SetInputStringForBullet(sou_mainViewModel.GetBulletTypeNameFromNumber(sourceBulletType)rceBulletString);
+                        _setInputStringForButtonFunc(sourceLotNumber);
+                        _setInputStringForBoxesFunc(sourceBoxCount.ToString());
+                        //OnShowAutoClosingMessage?.Invoke($"UI 표시: LotNo: {processInfo.ReadStringValue}, BoxCount: {processInfo.ReadIntValue.Value}");
+                    }
+                    else
+                    {
+                        await _databaseService.UpdateRackStateAsync(
+                            destinationRackVm.Id,
+                            newDestinationRackType,
+                            sourceBulletType
+                        );
+                        await _databaseService.UpdateLotNumberAsync(
+                            destinationRackVm.Id,
+                            sourceLotNumber,
+                            sourceBoxCount
+                        );
+                    }
 
                     Debug.WriteLine($"[RobotMissionService] DB Update: Rack {destinationRackVm.Title} (ID: {destinationRackVm.Id}) updated with BulletType {sourceBulletType}, LotNumber '{sourceLotNumber}', RackType {newDestinationRackType}.");
 
@@ -1373,9 +1392,10 @@ namespace WPF_WMS01.Services
                         String.Empty, // LotNumber 비움
                         0
                     );
-                    if (sourceRackVm.Title.Equals(_waitRackTitle))
+                    if (sourceRackVm.Title.Equals(_wrapRackTitle))
                     {
-                        OnInputStringForButtonCleared?.Invoke(); // WAIT 랙 비우면 입력 필드 초기화
+                        OnInputStringForBulletCleared?.Invoke(); // WAIT 랙 비우면 입력 필드 초기화
+                        OnInputStringForButtonCleared?.Invoke();
                         OnInputStringForBoxesCleared?.Invoke();
                         Debug.WriteLine($"[RobotMissionService] DB Update: WAIT rack {sourceRackVm.Title} cleared.");
                     }
@@ -1441,6 +1461,84 @@ namespace WPF_WMS01.Services
                 else
                 {
                     Debug.WriteLine($"[RobotMissionService] PerformDbUpdateForCompletedStepLogic: No specific rack handling logic for ProcessType '{processInfo.ProcessType}' with provided rack IDs. SourceRackId: {sourceRackId}, DestinationRackId: {destinationRackId}. No DB update performed.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[RobotMissionService] Error performing DB update for completed step: {ex.Message}");
+                OnShowAutoClosingMessage?.Invoke($"미션 완료 후 DB 업데이트 중 오류 발생: {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}");
+                throw; // 예외를 다시 던져 상위 호출자가 이를 인지하게 함
+            }
+        }
+
+        /// <summary>
+        /// DbUpdateRackState 서브 동작을 위한 실제 DB 업데이트 로직을 수행합니다.
+        /// </summary>
+        /// <param name="processInfo">현재 미션 프로세스 정보.</param>
+        /// <param name="sourceRackId">원본 랙 ID.</param>
+        /// <param name="destinationRackId">목적지 랙 ID.</param>
+        private async Task PerformDbUpdateForInboundStepLogic(RobotMissionInfo processInfo, int? destinationRackId)
+        {
+            Debug.WriteLine($"[RobotMissionService] Performing DB update for completed step. ProcessType: {processInfo.ProcessType}, DestinationRackId: {destinationRackId}");
+
+            RackViewModel destinationRackVm = null;
+            if (destinationRackId.HasValue)
+            {
+                destinationRackVm = _getRackViewModelByIdFunc(destinationRackId.Value);
+                if (destinationRackVm == null)
+                {
+                    Debug.WriteLine($"[RobotMissionService] Warning: DestinationRackViewModel not found for ID {destinationRackId.Value}.");
+                }
+            }
+
+            try
+            {
+                // 모든 이동 작업의 결과는 source rack에서 destination rack으로의 파레트 이동이며,
+                // 이 때, source rack의 파레트 정보 (RackType, BulletType, Lot No.)를 destination rack의 파레트 정보로 copy하고
+                // source rack의 파레트 정보를 초기화 (BulletType = 0, Lot No. = null)하는 것이다.
+                // 특별한 경우는 1) source rack이 WAIT rack일 경우는 BulletType과 Lot No.를 InputStringForButton으로 부터 얻는 것과,
+                // 2) ProcessType이 "FakeExecuteInboundProduct" 또는 "HandleHalfPalletExport" RackType이 바뀌는 경우 뿐이다.
+
+                if (destinationRackVm != null)
+                {
+                    // 1. Destination Rack에 Source Rack의 제품 정보 복사
+                    string sourceLotNumber = processInfo.ReadStringValue;
+                    int sourceBoxCount = processInfo.ReadIntValue.HasValue ? processInfo.ReadIntValue.Value : 0;
+                    int sourceBulletType = _mainViewModel.GetBulletTypeFromInputString(processInfo .ReadBulletTypeValue);
+                    int newDestinationRackType = destinationRackVm.RackType; // 기본적으로 목적지 랙의 현재 RackType 유지
+
+                    await _databaseService.UpdateRackStateAsync(
+                        destinationRackVm.Id,
+                        newDestinationRackType,
+                        sourceBulletType
+                    );
+                    await _databaseService.UpdateLotNumberAsync(
+                        destinationRackVm.Id,
+                        sourceLotNumber,
+                        sourceBoxCount
+                    );
+
+                    // 3. 랙 잠금 해제 (이동 완료된 랙만 해제)
+                    await _databaseService.UpdateIsLockedAsync(destinationRackVm.Id, false);
+                    Application.Current.Dispatcher.Invoke(() => OnRackLockStateChanged?.Invoke(destinationRackVm.Id, false));
+                    processInfo.RacksLockedByProcess.Remove(destinationRackVm.Id); // locked list에서 삭제
+                    //if (destinationRackVm.Title.Equals("OUT"))
+                    //{
+                    //    await _databaseService.UpdateIsLockedAsync(destinationRackVm.Id, true); // 재공풐 반출 시 click 안되게...
+                    //    Application.Current.Dispatcher.Invoke(() => OnRackLockStateChanged?.Invoke(destinationRackVm.Id, false));
+                    //}
+                    //else
+                    {
+                        await _databaseService.UpdateIsLockedAsync(destinationRackVm.Id, false);
+                        Application.Current.Dispatcher.Invoke(() => OnRackLockStateChanged?.Invoke(destinationRackVm.Id, false));
+                    }
+                    Debug.WriteLine($"[RobotMissionService] Rack {destinationRackVm.Title} unlocked.");
+
+                    OnShowAutoClosingMessage?.Invoke($"입고 팔레트를 랙{destinationRackVm.Title}에 적치 및 업데이트 성공.");
+                }
+                else
+                {
+                    Debug.WriteLine($"[RobotMissionService] PerformDbUpdateForCompletedStepLogic: No specific rack handling logic for ProcessType '{processInfo.ProcessType}' with provided rack IDs. DestinationRackId: {destinationRackId}. No DB update performed.");
                 }
             }
             catch (Exception ex)
@@ -1589,7 +1687,14 @@ namespace WPF_WMS01.Services
                     int newSourceRackType = sourceRackVm.RackType; // 기본적으로 현재 RackType 유지
 
                     // 특별한 경우 1): source rack이 WAIT rack일 경우
-                    if (sourceRackVm.Title.Equals(_waitRackTitle) && _getInputStringForButtonFunc != null && _getInputStringForBoxesFunc != null)
+                    /*if (sourceRackVm.Title.Equals(_waitRackTitle) && _getInputStringForButtonFunc != null && _getInputStringForBoxesFunc != null)
+                    {
+                        sourceLotNumber = _getInputStringForButtonFunc.Invoke().TrimStart().TrimEnd(_militaryCharacter);
+                        // BulletType은 이미 MainViewModel에서 WAIT 랙에 설정된 상태이므로 sourceRackVm.BulletType 사용
+                        sourceBoxCount = string.IsNullOrWhiteSpace(_getInputStringForBoxesFunc.Invoke()) ? 0 : Int32.Parse(_getInputStringForBoxesFunc.Invoke());
+                    }*/
+                    // 특별한 경우 1): source rack이 WRAP rack일 경우
+                    if (sourceRackVm.Title.Equals(_wrapRackTitle) && _getInputStringForBulletFunc != null && _getInputStringForButtonFunc != null && _getInputStringForBoxesFunc != null)
                     {
                         sourceLotNumber = _getInputStringForButtonFunc.Invoke().TrimStart().TrimEnd(_militaryCharacter);
                         // BulletType은 이미 MainViewModel에서 WAIT 랙에 설정된 상태이므로 sourceRackVm.BulletType 사용
@@ -1638,8 +1743,9 @@ namespace WPF_WMS01.Services
                         String.Empty, // LotNumber 비움
                         0
                     );
-                    if (sourceRackVm.Title.Equals(_waitRackTitle))
+                    if (sourceRackVm.Title.Equals("WRAP"))
                     {
+                        OnInputStringForBulletCleared?.Invoke();
                         OnInputStringForButtonCleared?.Invoke(); // WAIT 랙 비우면 입력 필드 초기화
                         OnInputStringForBoxesCleared?.Invoke();
                         Debug.WriteLine($"[RobotMissionService] DB Update: WAIT rack {sourceRackVm.Title} cleared.");

@@ -28,6 +28,7 @@ namespace WPF_WMS01.Services
         /// <summary>
         /// WAIT 랙 이동 완료 후 InputStringForButton을 초기화하도록 MainViewModel에 알리는 이벤트입니다.
         /// </summary>
+        event Action OnInputStringForBulletCleared;
         event Action OnInputStringForButtonCleared;
         event Action OnInputStringForBoxesCleared;
 

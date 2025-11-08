@@ -7,6 +7,7 @@ using WPF_WMS01.Services;
 using WPF_WMS01.ViewModels;
 using System.Globalization; // NumberStyles 및 CultureInfo를 위해 추가
 using System.Diagnostics; // Debug.WriteLine을 위해 추가
+using System.Threading;
 
 namespace WPF_WMS01
 {
@@ -17,8 +18,22 @@ namespace WPF_WMS01
     {
         public static IServiceProvider ServiceProvider { get; private set; }
 
+        private static Mutex _mutex;
+
         protected override void OnStartup(StartupEventArgs e)
         {
+            const string appName = "PSBulletApp"; // 앱마다 고유한 이름 사용 필요
+            bool createdNew;
+
+            _mutex = new Mutex(true, appName, out createdNew);
+
+            if (!createdNew)
+            {
+                MessageBox.Show("이미 실행 중인 프로그램이 있습니다.", "실행 중", MessageBoxButton.OK, MessageBoxImage.Information);
+                Application.Current.Shutdown(); // 중복 실행 차단
+                return;
+            }
+
             base.OnStartup(e);
             ConfigureServices();
 
@@ -101,7 +116,7 @@ namespace WPF_WMS01
                 var httpService = provider.GetRequiredService<HttpService>();
                 var databaseService = provider.GetRequiredService<DatabaseService>();
                 var mcProtocolService = provider.GetRequiredService<IMcProtocolService>(); // IMcProtocolService 주입
-                string waitRackTitle = ConfigurationManager.AppSettings["WaitRackTitle"] ?? "WAIT";
+                string wrapRackTitle = ConfigurationManager.AppSettings["WrapRackTitle"] ?? "WRAP";
                 char[] militaryCharacter = { 'a', 'b', 'c', ' ' }; // MainViewModel과 동일하게 정의
 
                 // MainViewModel의 인스턴스를 직접 가져와 델리게이트를 할당 (MainViewModel은 나중에 GetRequiredService로 가져오므로 직접 할당)
@@ -136,12 +151,14 @@ namespace WPF_WMS01
                     httpService,
                     databaseService,
                     mcProtocolService, // IMcProtocolService 전달
-                    waitRackTitle,
+                    wrapRackTitle,
                     militaryCharacter,
                     mainViewModelInstance.GetRackViewModelById, // MainViewModel의 델리게이트 전달
                     missionCheckModbusService, // Mission Check ModbusClientService 인스턴스 직접 전달
+                    () => mainViewModelInstance.InputStringForBullet, // InputStringForBullet 델리게이트 전달
                     () => mainViewModelInstance.InputStringForButton, // InputStringForButton 델리게이트 전달
                     () => mainViewModelInstance.InputStringForBoxes, // InputStringForBoxes 델리게이트 전달
+                    mainViewModelInstance.SetInputStringForBullet,
                     mainViewModelInstance.SetInputStringForButton,
                     mainViewModelInstance.SetInputStringForBoxes,
                     mainViewModelInstance
