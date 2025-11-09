@@ -47,9 +47,10 @@ namespace WPF_WMS01.ViewModels.Popups
                 : bulletType == 9 ? "308SP"
                 : bulletType == 10 ? "308XM"
                 : bulletType == 11 ? "7.62X"
-                : bulletType == 12 ? "M80" : "Unknown";
-            string rackName = sourceRackTitle.Equals("WAIT") ? "대기장소" : "랙 "+sourceRackTitle;
-            LotNoMessage = $"Lot No. :  {sourceLotNumber}";
+                : bulletType == 12 ? "M80"
+                : bulletType == 140 ? "?" : "Unknown";
+            string rackName = "랙 "+ sourceRackTitle;
+            LotNoMessage = $"Lot No. : {sourceLotNumber}";
             ConfirmMessage = $"{rackName}의 {product} 제품을 포장할까요?";
             ConfirmCommand = new RelayCommand(ExecuteConfirm);
             CancelCommand = new RelayCommand(ExecuteCancel);

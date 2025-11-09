@@ -331,8 +331,6 @@ namespace WPF_WMS01.ViewModels
             {
                 case 0:
                 case 13:
-                    if (clickedRackViewModel.Title.Equals("WAIT"))
-                        break;
                     // 랙 타입 변경 팝업
                     int currentRackType = clickedRackViewModel.RackModel.RackType; // 현재 모델의 타입 읽기
                     int newRackType = (currentRackType == 0) ? 1 : 0; // 0과 1 사이 토글
@@ -384,7 +382,7 @@ namespace WPF_WMS01.ViewModels
                         await HandleHalfPalletMove(clickedRackViewModel); // 반제품 팔레트를 반출 대기 장소로 옮기는 작업
                     break;
                 case 166:
-                    MessageBox.Show($"{Title} 입고 불가 : 탄종이 입력되지 않았습니다.", "입고 불가", MessageBoxButton.OK, MessageBoxImage.Information);
+                    MessageBox.Show($"{Title} 입고 불가 : 탄종이 입력되지 않았습니다.", "입고 불가", MessageBoxButton.OK, MessageBoxImage.Warning);
                     break;
                 default:
                     MessageBox.Show($"랙 {Title} (ImageIndex: {ImageIndex}): 기타 유형의 팝업!", "랙 상세", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -417,8 +415,7 @@ namespace WPF_WMS01.ViewModels
             // 사용자에게 이동 여부 확인 팝업
             var confirmViewModel = new ConfirmTransferPopupViewModel(
                 sourceRackViewModel.Title,
-                sourceRackViewModel.Title.Equals(_mainViewModel._waitRackTitle) ?
-                    _mainViewModel.InputStringForButton.TrimStart().TrimEnd(_mainViewModel._militaryCharacter) : sourceRackViewModel.LotNumber,
+                sourceRackViewModel.LotNumber,
                 "WRAP", sourceRackViewModel.BulletType
             );
             var confirmView = new ConfirmTransferPopupView { DataContext = confirmViewModel };
@@ -534,7 +531,7 @@ namespace WPF_WMS01.ViewModels
 
         private async Task HandleHalfPalletMove(RackViewModel sourceRackViewModel)
         {
-            // "WAIT", "OUT" 랙 찾기
+            // 라이트 팔레트 반출 전용 랙 찾기
             var outRackViewModel = _mainViewModel.RackList?.FirstOrDefault(r => r.Title.Equals("1-1"));
 
             if (outRackViewModel == null)
@@ -1380,6 +1377,24 @@ namespace WPF_WMS01.ViewModels
 
         private async Task HandleRackTransfer(RackViewModel sourceRackViewModel) // 기존 HandleRackTransfer (ImageIndex 27-38용)
         {
+            bool inputContainsValidLotNumber = !string.IsNullOrWhiteSpace(_mainViewModel.InputStringForButton) &&
+                                             (_mainViewModel.InputStringForButton.Contains("223A")
+                                             || _mainViewModel.InputStringForButton.Contains("223SP")
+                                              || _mainViewModel.InputStringForButton.Contains("223XM")
+                                               || _mainViewModel.InputStringForButton.Contains("5.56X")
+                                                || _mainViewModel.InputStringForButton.Contains("5.56K")
+                                                 || _mainViewModel.InputStringForButton.Contains("PSD")
+                                                  || _mainViewModel.InputStringForButton.Contains("308B")
+                                                   || _mainViewModel.InputStringForButton.Contains("308SP")
+                                                    || _mainViewModel.InputStringForButton.Contains("308XM")
+                                                     || _mainViewModel.InputStringForButton.Contains("7.62X")
+                                             );
+            if(!inputContainsValidLotNumber)
+            {
+                MessageBox.Show("WRAP 입고 불가 : Lot 번호를 확인해 주세요.", "입고 불가", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
             List<Rack> allRacks = await _databaseService.GetRackStatesAsync();
             // 🚨 수정할 부분: IsLocked가 false이면서 ImageIndex가 3인 랙만 필터링
             List<Rack> targetRacks = allRacks
@@ -1387,7 +1402,7 @@ namespace WPF_WMS01.ViewModels
                             && r.IsVisible
                             && !r.IsLocked                 // 잠겨있지 않은 랙만
                             && r.ImageIndex == 13          // ImageIndex가 13인 랙만 (RackType 1, BulletType 0)
-                            && !r.Title.Equals("AMR") && !r.Title.Equals("OUT"))
+                            && !r.Title.Equals("AMR"))
                 .ToList();
             if (!targetRacks.Any())
             {
@@ -1397,7 +1412,7 @@ namespace WPF_WMS01.ViewModels
 
             // 랙 선택 팝업 표시 (이름 변경)
             var selectPopupViewModel = new SelectStorageRackPopupViewModel(targetRacks,
-                    _rackModel.Title.Equals("WAIT") ? _mainViewModel.InputStringForBullet.TrimStart().TrimEnd(_mainViewModel._militaryCharacter) : _rackModel.LotNumber);
+                    _rackModel.Title.Equals("WRAP") ? _mainViewModel.InputStringForButton.TrimStart() ?? "" : _rackModel.LotNumber);
             var selectPopupView = new SelectStorageRackPopupView { DataContext = selectPopupViewModel };
             selectPopupView.Title = $"랙 {sourceRackViewModel.Title} 의 제품 이동";
 

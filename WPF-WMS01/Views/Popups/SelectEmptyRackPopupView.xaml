@@ -21,7 +21,7 @@
             <Run Text="Lot No. : "/>
             <Run Text="{Binding LotNo}"/> <Run Text="{Binding FirstMessage}"/>
             <LineBreak/> <LineBreak/> <Run Text="아래 리스트에서"/>
-            <LineBreak/> <Run Text="{Binding SecondMessage}"/> <Run Text="이 적재될 랙을 선택해 주세요."/>
+            <LineBreak/> <Run Text="{Binding SecondMessage}"/> <Run Text=" 가 적재될 랙을 선택해 주세요."/>
         </TextBlock>
 
         <ListView Grid.Row="1" ItemsSource="{Binding Racks}"

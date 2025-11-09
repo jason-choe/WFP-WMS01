@@ -20,7 +20,7 @@
                    FontSize="22" FontWeight="Bold" Margin="10,0,0,10"
                    HorizontalAlignment="Left" VerticalAlignment="Center">
             <Run Text="Lot No. : "/>
-            <Run Text="{Binding LotNo}"/><Run Text=" / 포장 및 적재"/>
+            <Run Text="{Binding LotNo}"/><Run Text=" / 포장 제품 적재"/>
             <LineBreak/> <LineBreak/> <Run Text="아래 리스트에서"/>
             <LineBreak/><Run Text="'포장된 제품'이 적재될 랙을 선택해 주세요."/>
         </TextBlock>

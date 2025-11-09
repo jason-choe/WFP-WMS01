@@ -79,7 +79,7 @@ namespace WPF_WMS01.Services
         /// <param name="httpService">HTTP 통신을 위한 서비스 인스턴스.</param>
         /// <param name="databaseService">데이터베이스 접근을 위한 서비스 인스턴스.</param>
         /// <param name="mcProtocolService">MC Protocol 통신을 위한 서비스 인스턴스.</param>
-        /// <param name="wrapRackTitle">WAIT 랙의 타이틀 문자열.</param>
+        /// <param name="wrapRackTitle">WRAP 랙의 타이틀 문자열.</param>
         /// <param name="militaryCharacter">군수품 문자 배열.</param>
         /// <param name="getRackViewModelByIdFunc">Rack ID로 RackViewModel을 가져오는 함수.</param>
         /// <param name="missionCheckModbusService">미션 실패 확인용으로 미리 설정된 ModbusClientService 인스턴스.</param>
@@ -1304,7 +1304,7 @@ namespace WPF_WMS01.Services
                 // 모든 이동 작업의 결과는 source rack에서 destination rack으로의 파레트 이동이며,
                 // 이 때, source rack의 파레트 정보 (RackType, BulletType, Lot No.)를 destination rack의 파레트 정보로 copy하고
                 // source rack의 파레트 정보를 초기화 (BulletType = 0, Lot No. = null)하는 것이다.
-                // 특별한 경우는 1) source rack이 WAIT rack일 경우는 BulletType과 Lot No.를 InputStringForButton으로 부터 얻는 것과,
+                // 특별한 경우는 1) source rack이 WRAP rack일 경우는 BulletType과 Lot No.를 InputStringForButton으로 부터 얻는 것과,
                 // 2) ProcessType이 "FakeExecuteInboundProduct" 또는 "HandleHalfPalletExport" RackType이 바뀌는 경우 뿐이다.
 
                 if (sourceRackVm != null && destinationRackVm != null)
@@ -1316,13 +1316,6 @@ namespace WPF_WMS01.Services
                     int newDestinationRackType = destinationRackVm.RackType; // 기본적으로 목적지 랙의 현재 RackType 유지
                     int newSourceRackType = sourceRackVm.RackType; // 기본적으로 현재 RackType 유지
 
-                    // 특별한 경우 1): source rack이 WAIT rack일 경우
-                    /*if (sourceRackVm.Title.Equals(_waitRackTitle) && _getInputStringForButtonFunc != null && _getInputStringForBoxesFunc != null)
-                    {
-                        sourceLotNumber = _getInputStringForButtonFunc.Invoke().TrimStart().TrimEnd(_militaryCharacter);
-                        // BulletType은 이미 MainViewModel에서 WAIT 랙에 설정된 상태이므로 sourceRackVm.BulletType 사용
-                        sourceBoxCount = string.IsNullOrWhiteSpace(_getInputStringForBoxesFunc.Invoke()) ? 0 : Int32.Parse(_getInputStringForBoxesFunc.Invoke());
-                    }*/
                     // 특별한 경우 1): source rack이 WRAP rack일 경우
                     if (sourceRackVm.Title.Equals(_wrapRackTitle) && _getInputStringForBulletFunc != null && _getInputStringForButtonFunc != null && _getInputStringForBoxesFunc != null)
                     {
@@ -1339,12 +1332,12 @@ namespace WPF_WMS01.Services
                     }
 
                     // 특별한 경우 2): ProcessType이 "라이트 입고 작업 = FakeExecuteInboundProduct"일 경우 RackType 변경
-                    if (processInfo.ProcessType == "라이트 입고 작업") // WAIT -> AMR -> Rack
+                    if (processInfo.ProcessType == "라이트 입고 작업") // WRAP -> AMR -> Rack
                     {
                         newDestinationRackType = 3; // 라이트 랙 타입으로 변경 (완제품 랙에서 라이트 랙으로)
                         if (sourceRackVm.Title.Equals("AMR")) newSourceRackType = 2;
                     }
-                    else if (processInfo.ProcessType == "라이트 반출 준비" || processInfo.ProcessType == "라이트 반출 작업") // Rack -> AMR -> OUT -> (NULL)
+                    else if (processInfo.ProcessType == "라이트 반출 준비" || processInfo.ProcessType == "라이트 반출 작업") // Rack -> AMR -> Rack 1-1 -> (NULL)
                     {
                         newDestinationRackType = 3;
                         if (sourceRackVm.Title.Equals("AMR")) newSourceRackType = 2; // AMR -> OUT
@@ -1394,10 +1387,10 @@ namespace WPF_WMS01.Services
                     );
                     if (sourceRackVm.Title.Equals(_wrapRackTitle))
                     {
-                        OnInputStringForBulletCleared?.Invoke(); // WAIT 랙 비우면 입력 필드 초기화
+                        OnInputStringForBulletCleared?.Invoke(); // WRAP 랙 비우면 입력 필드 초기화
                         OnInputStringForButtonCleared?.Invoke();
                         OnInputStringForBoxesCleared?.Invoke();
-                        Debug.WriteLine($"[RobotMissionService] DB Update: WAIT rack {sourceRackVm.Title} cleared.");
+                        Debug.WriteLine($"[RobotMissionService] DB Update: WRAP rack {sourceRackVm.Title} cleared.");
                     }
                     Debug.WriteLine($"[RobotMissionService] DB Update: Source Rack {sourceRackVm.Title} (ID: {sourceRackVm.Id}) cleared.");
 
@@ -1496,7 +1489,7 @@ namespace WPF_WMS01.Services
                 // 모든 이동 작업의 결과는 source rack에서 destination rack으로의 파레트 이동이며,
                 // 이 때, source rack의 파레트 정보 (RackType, BulletType, Lot No.)를 destination rack의 파레트 정보로 copy하고
                 // source rack의 파레트 정보를 초기화 (BulletType = 0, Lot No. = null)하는 것이다.
-                // 특별한 경우는 1) source rack이 WAIT rack일 경우는 BulletType과 Lot No.를 InputStringForButton으로 부터 얻는 것과,
+                // 특별한 경우는 1) source rack이 WRAP rack일 경우는 BulletType과 Lot No.를 InputStringForButton으로 부터 얻는 것과,
                 // 2) ProcessType이 "FakeExecuteInboundProduct" 또는 "HandleHalfPalletExport" RackType이 바뀌는 경우 뿐이다.
 
                 if (destinationRackVm != null)
@@ -1574,7 +1567,7 @@ namespace WPF_WMS01.Services
                 // 모든 이동 작업의 결과는 source rack에서 destination rack으로의 파레트 이동이며,
                 // 이 때, source rack의 파레트 정보 (RackType, BulletType, Lot No.)를 destination rack의 파레트 정보로 copy하고
                 // source rack의 파레트 정보를 초기화 (BulletType = 0, Lot No. = null)하는 것이다.
-                // 특별한 경우는 1) source rack이 WAIT rack일 경우는 BulletType과 Lot No.를 InputStringForButton으로 부터 얻는 것과,
+                // 특별한 경우는 1) source rack이 WRAP rack일 경우는 BulletType과 Lot No.를 InputStringForButton으로 부터 얻는 것과,
                 // 2) ProcessType이 "FakeExecuteInboundProduct" 또는 "HandleHalfPalletExport" RackType이 바뀌는 경우 뿐이다.
                 string rackName = destinationRackVm.Title;
                 int bulletType = destinationRackVm.BulletType;
@@ -1674,7 +1667,7 @@ namespace WPF_WMS01.Services
                 // 모든 이동 작업의 결과는 source rack에서 destination rack으로의 파레트 이동이며,
                 // 이 때, source rack의 파레트 정보 (RackType, BulletType, Lot No.)를 destination rack의 파레트 정보로 copy하고
                 // source rack의 파레트 정보를 초기화 (BulletType = 0, Lot No. = null)하는 것이다.
-                // 특별한 경우는 1) source rack이 WAIT rack일 경우는 BulletType과 Lot No.를 InputStringForButton으로 부터 얻는 것과,
+                // 특별한 경우는 1) source rack이 WRAP rack일 경우는 BulletType과 Lot No.를 InputStringForButton으로 부터 얻는 것과,
                 // 2) ProcessType이 "FakeExecuteInboundProduct" 또는 "HandleHalfPalletExport" RackType이 바뀌는 경우 뿐이다.
 
                 if (sourceRackVm != null && destinationRackVm != null)
@@ -1686,18 +1679,11 @@ namespace WPF_WMS01.Services
                     int newDestinationRackType = destinationRackVm.RackType; // 기본적으로 목적지 랙의 현재 RackType 유지
                     int newSourceRackType = sourceRackVm.RackType; // 기본적으로 현재 RackType 유지
 
-                    // 특별한 경우 1): source rack이 WAIT rack일 경우
-                    /*if (sourceRackVm.Title.Equals(_waitRackTitle) && _getInputStringForButtonFunc != null && _getInputStringForBoxesFunc != null)
-                    {
-                        sourceLotNumber = _getInputStringForButtonFunc.Invoke().TrimStart().TrimEnd(_militaryCharacter);
-                        // BulletType은 이미 MainViewModel에서 WAIT 랙에 설정된 상태이므로 sourceRackVm.BulletType 사용
-                        sourceBoxCount = string.IsNullOrWhiteSpace(_getInputStringForBoxesFunc.Invoke()) ? 0 : Int32.Parse(_getInputStringForBoxesFunc.Invoke());
-                    }*/
                     // 특별한 경우 1): source rack이 WRAP rack일 경우
                     if (sourceRackVm.Title.Equals(_wrapRackTitle) && _getInputStringForBulletFunc != null && _getInputStringForButtonFunc != null && _getInputStringForBoxesFunc != null)
                     {
                         sourceLotNumber = _getInputStringForButtonFunc.Invoke().TrimStart().TrimEnd(_militaryCharacter);
-                        // BulletType은 이미 MainViewModel에서 WAIT 랙에 설정된 상태이므로 sourceRackVm.BulletType 사용
+                        // BulletType은 이미 MainViewModel에서 WRAP 랙에 설정된 상태이므로 sourceRackVm.BulletType 사용
                         sourceBoxCount = string.IsNullOrWhiteSpace(_getInputStringForBoxesFunc.Invoke()) ? 0 : Int32.Parse(_getInputStringForBoxesFunc.Invoke());
                     }
                     else
@@ -1710,7 +1696,7 @@ namespace WPF_WMS01.Services
                     if (processInfo.ProcessType == "라이트 입고 작업")
                     {
                         newDestinationRackType = 3; // 라이트 랙 타입으로 변경 (완제품 랙에서 라이트 랙으로)
-                        if (sourceRackVm.Title.Equals("WAIT")) newSourceRackType = 2;
+                        if (sourceRackVm.Title.Equals("WRAP")) newSourceRackType = 2;
                         else if(sourceRackVm.Title.Equals("AMR")) newSourceRackType = 1;
                     }
                     else if (processInfo.ProcessType == "라이트 반출 작업")
@@ -1746,9 +1732,9 @@ namespace WPF_WMS01.Services
                     if (sourceRackVm.Title.Equals("WRAP"))
                     {
                         OnInputStringForBulletCleared?.Invoke();
-                        OnInputStringForButtonCleared?.Invoke(); // WAIT 랙 비우면 입력 필드 초기화
+                        OnInputStringForButtonCleared?.Invoke(); // WRAP 랙 비우면 입력 필드 초기화
                         OnInputStringForBoxesCleared?.Invoke();
-                        Debug.WriteLine($"[RobotMissionService] DB Update: WAIT rack {sourceRackVm.Title} cleared.");
+                        Debug.WriteLine($"[RobotMissionService] DB Update: WRAP rack {sourceRackVm.Title} cleared.");
                     }
                     Debug.WriteLine($"[RobotMissionService] DB Update: Source Rack {sourceRackVm.Title} (ID: {sourceRackVm.Id}) cleared.");
 

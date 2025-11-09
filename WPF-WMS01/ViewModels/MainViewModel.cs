@@ -166,7 +166,7 @@ namespace WPF_WMS01.ViewModels
         private DispatcherTimer _refreshTimer;
         private DispatcherTimer _modbusReadTimer; // Modbus Coil 상태 읽기용 타이머
 
-        public readonly string _waitRackTitle;
+        //public readonly string _waitRackTitle;
         public readonly string _wrapRackTitle;
         public readonly string _amrRackTitle;
         public readonly char[] _militaryCharacter = { 'a', 'b', 'c', ' ' };
@@ -312,7 +312,6 @@ namespace WPF_WMS01.ViewModels
             Debug.WriteLine("[MainViewModel] Constructor called.");
             WriteLog("\n[" + DateTimeOffset.Now.ToString() + "] ====== Logging Start ======");
             _databaseService = databaseService;
-            _waitRackTitle = ConfigurationManager.AppSettings["WaitRackTitle"] ?? "WAIT";
             _wrapRackTitle = ConfigurationManager.AppSettings["WrapRackTitle"] ?? "WRAP";
             _amrRackTitle = ConfigurationManager.AppSettings["AMRRackTitle"] ?? "AMR";
 
@@ -1276,19 +1275,6 @@ namespace WPF_WMS01.ViewModels
             string processType = "CallButtonMission"; // Default process type
             List<int> racksToLock = new List<int>(); // No racks locked for simple supply missions initially
 
-            /*var targetRackViewModel = RackList?.Where(r => r.IsVisible == true && r.RackType == 0 && r.BulletType == 0 && r.IsLocked == false && !r.Title.Equals("WAIT")) // 조건 필터
-                                        .OrderBy(r => r.RackedAt) // racked_at 오름차순 정렬 (가장 빠른 것이 첫 번째)
-                                        .FirstOrDefault();
-
-            if(targetRackViewModel == null)
-            {
-            }
-            else
-            {
-                await _databaseService.UpdateIsLockedAsync(targetRackViewModel.Id, true);
-                Application.Current.Dispatcher.Invoke(() => (RackList?.FirstOrDefault(r => r.Id == targetRackViewModel.Id)).IsLocked = true);
-                Debug.WriteLine($"Selected Rack = {targetRackViewModel.Title}");
-            }*/
             RackViewModel? destinationRackVm = null;
             string shelf = "";
 
@@ -2378,7 +2364,7 @@ namespace WPF_WMS01.ViewModels
                 return;
             }
 
-            var freeRacks = RackList?.Where(r => (r.RackType == 0 || r.RackType == 1) && r.IsVisible && !r.IsLocked && r.BulletType == 0 && !r.Title.Equals("WAIT")).Select(r => r.RackModel).ToList();
+            var freeRacks = RackList?.Where(r => (r.RackType == 0 || r.RackType == 1) && r.IsVisible && !r.IsLocked && r.BulletType == 0).Select(r => r.RackModel).ToList();
 
             if (freeRacks == null || !freeRacks.Any())
             {
@@ -2945,7 +2931,7 @@ namespace WPF_WMS01.ViewModels
             }
 
             var selectEmptyRackViewModel = new SelectEmptyRackPopupViewModel(emptyRacks.Select(r => r.RackModel).ToList(),
-                _inputStringForButton.TrimStart().TrimEnd(_militaryCharacter) ?? "", "라이트 적재", "라이트");
+                _inputStringForButton.TrimStart() ?? "", _inputStringForBullet.TrimStart() ?? "라이트 적재", "라이트 팔레트");
             var selectEmptyRackView = new SelectEmptyRackPopupView { DataContext = selectEmptyRackViewModel };
             selectEmptyRackView.Title = $"라이트 입고 랙 선택";
 
@@ -2961,7 +2947,7 @@ namespace WPF_WMS01.ViewModels
                     if (targetRackVm == null) return;
                     ShowAutoClosingMessage($"랙 {targetRackVm.Title}에 라이트 팔레트 {InputStringForButton.TrimStart().TrimEnd(_militaryCharacter)}의 입고 작업을 시작합니다.");
 
-                    // 🚨 ToDo : WAIT  Rack으로부터 이동 시에는 inputString의 입력을 disable해야 한다.아니면 이동 전에  Lot No.를 DB에 copy.
+                    // 🚨 ToDo : WRAP Rack으로부터 이동 시에는 inputString의 입력을 disable해야 한다.아니면 이동 전에  Lot No.를 DB에 copy.
                     int newBulletType = GetBulletTypeFromInputString(_inputStringForBullet); // Helper method
                     if (newBulletType == 0)
                     {
@@ -3116,8 +3102,6 @@ namespace WPF_WMS01.ViewModels
                                               || _inputStringForButton.Contains("223XM")
                                                || _inputStringForButton.Contains("5.56X")
                                                 || _inputStringForButton.Contains("5.56K")
-                                                 || _inputStringForButton.Contains("PSD")
-                                                 || _inputStringForButton.Contains("PSD")
                                                  || _inputStringForButton.Contains("PSD")
                                                   || _inputStringForButton.Contains("308B")
                                                    || _inputStringForButton.Contains("308SP")
@@ -3400,7 +3384,7 @@ namespace WPF_WMS01.ViewModels
 
         public async Task<RackViewModel> GetRackViewModelForInboundTemporary()
         {
-            var destinationRackVm = RackList?.Where(r => r.IsVisible == true && r.RackType == 0 && r.BulletType == 0 && r.IsLocked == false && !r.Title.Equals("WAIT")) // 조건 필터
+            var destinationRackVm = RackList?.Where(r => r.IsVisible == true && r.RackType == 0 && r.BulletType == 0 && r.IsLocked == false) // 조건 필터
                                     .OrderBy(r => r.RackedAt) // racked_at 오름차순 정렬 (가장 빠른 것이 첫 번째)
                                     .FirstOrDefault();
 
