@@ -157,8 +157,7 @@ namespace WPF_WMS01.ViewModels
         public readonly string ProductionLinePayload; // public으로 변경하여 RackViewModel에서 접근 가능하도록 함
 
         // 공 팔레트 더미 장소와 출고 장소 순번
-        public bool _isPalletDummyOdd = false; // RackViewModel에서 접근 가능
-        public bool _isOutletPositionOdd = false; // RackViewModel에서 접근 가능
+        public bool _isPalletDummyOdd = Settings.Default.IsPalletSupOdd; // RackViewModel에서 접근 가능
         public int outletPosition = 0;
         public readonly int MAXOUTLETS = 5; // 출고 장소 갯수
 
@@ -169,7 +168,6 @@ namespace WPF_WMS01.ViewModels
         //public readonly string _waitRackTitle;
         public readonly string _wrapRackTitle;
         public readonly string _amrRackTitle;
-        public readonly char[] _militaryCharacter = { 'a', 'b', 'c', ' ' };
         public readonly ushort _checkModbusDescreteInputAddr = 0; // from AMR 
 
         // Modbus Discrete Input/Coil 상태를 저장할 ObservableCollection
@@ -1310,14 +1308,17 @@ namespace WPF_WMS01.ViewModels
                         // 2. Move, Pickup
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = "자제 공급장으로 이동하여, 공 팔레트 더미 "+(_isPalletDummyOdd ? "2" : "1") +" 픽업",
+                            ProcessStepDescription = "자제 공급장으로 이동하여, 공 팔레트 더미 "+(_isPalletDummyOdd ? "1" : "2") +" 픽업",
                             MissionType = "8",
-                            ToNode = "Empty_Pallet_PickUP_" + (_isPalletDummyOdd?"2":"1"),   // Use both alternately
+                            ToNode = "Empty_Pallet_PickUP_" + (_isPalletDummyOdd?"1":"2"),   // Use both alternately
                             Payload = ProductionLinePayload,
                             IsLinkable = true,
-                            LinkWaitTimeout = 3600
+                            LinkWaitTimeout = 3600,
+                            PostMissionOperations = new List<MissionSubOperation> // 다음 공 팔레트 공급 위치 갱신
+                            {
+                                new MissionSubOperation { Type = SubOperationType.UpdatePalletSupOdd, Description = "다음 공 팔레트 공급 위치 갱신" }
+                            }
                         });
-                        _isPalletDummyOdd = !_isPalletDummyOdd; // for use both alternately
                         // 3. Move, Drop
                         missionSteps.Add(new MissionStepDefinition
                         {
@@ -2945,7 +2946,7 @@ namespace WPF_WMS01.ViewModels
                     var amrRackVm = RackList?.FirstOrDefault(r => r.Title == _amrRackTitle);
 
                     if (targetRackVm == null) return;
-                    ShowAutoClosingMessage($"랙 {targetRackVm.Title}에 라이트 팔레트 {InputStringForButton.TrimStart().TrimEnd(_militaryCharacter)}의 입고 작업을 시작합니다.");
+                    ShowAutoClosingMessage($"랙 {targetRackVm.Title}에 라이트 팔레트 {InputStringForButton.TrimStart()}의 입고 작업을 시작합니다.");
 
                     // 🚨 ToDo : WRAP Rack으로부터 이동 시에는 inputString의 입력을 disable해야 한다.아니면 이동 전에  Lot No.를 DB에 copy.
                     int newBulletType = GetBulletTypeFromInputString(_inputStringForBullet); // Helper method

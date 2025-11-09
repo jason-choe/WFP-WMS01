@@ -35,7 +35,6 @@ namespace WPF_WMS01.Services
 
         // MainViewModel로부터 주입받을 종속성 (UI 업데이트 및 특정 값 조회용)
         private readonly string _wrapRackTitle;
-        private readonly char[] _militaryCharacter;
         private Func<string> _getInputStringForBulletFunc; // MainViewModel의 InputStringForBullet 값을 가져오는 델리게이트
         private Func<string> _getInputStringForButtonFunc; // MainViewModel의 InputStringForButton 값을 가져오는 델리게이트
         private Func<string> _getInputStringForBoxesFunc;
@@ -94,7 +93,6 @@ namespace WPF_WMS01.Services
             DatabaseService databaseService,
             IMcProtocolService mcProtocolService, // MC Protocol Service 주입
             string wrapRackTitle,
-            char[] militaryCharacter,
             Func<int, RackViewModel> getRackViewModelByIdFunc,
             ModbusClientService missionCheckModbusService, // ModbusClientService 인스턴스를 직접 주입받도록 변경
             Func<string> getInputStringForBulletFunc, // 델리게이트 재추가
@@ -109,7 +107,6 @@ namespace WPF_WMS01.Services
             _databaseService = databaseService ?? throw new ArgumentNullException(nameof(databaseService));
             _mcProtocolService = mcProtocolService ?? throw new ArgumentNullException(nameof(mcProtocolService)); // MC Protocol 서비스 초기화
             _wrapRackTitle = wrapRackTitle;
-            _militaryCharacter = militaryCharacter;
             _getRackViewModelByIdFunc = getRackViewModelByIdFunc ?? throw new ArgumentNullException(nameof(getRackViewModelByIdFunc));
             _getInputStringForBulletFunc = getInputStringForBulletFunc ?? throw new ArgumentNullException(nameof(getInputStringForBulletFunc)); // 델리게이트 초기화
             _getInputStringForButtonFunc = getInputStringForButtonFunc ?? throw new ArgumentNullException(nameof(getInputStringForButtonFunc)); // 델리게이트 초기화
@@ -1103,6 +1100,12 @@ namespace WPF_WMS01.Services
                         await PerformDbUpdateForOutbound(processInfo, subOp.SourceRackIdForDbUpdate).ConfigureAwait(false);
                         break;
 
+                    case SubOperationType.UpdatePalletSupOdd:
+                        _mainViewModel._isPalletDummyOdd = !(_mainViewModel._isPalletDummyOdd); // for use both alternately
+                        Settings.Default.IsPalletSupOdd = _mainViewModel._isPalletDummyOdd;
+                        Settings.Default.Save();
+                        break;
+
                     case SubOperationType.None:
                         // 아무 작업 없음
                         break;
@@ -1682,7 +1685,7 @@ namespace WPF_WMS01.Services
                     // 특별한 경우 1): source rack이 WRAP rack일 경우
                     if (sourceRackVm.Title.Equals(_wrapRackTitle) && _getInputStringForBulletFunc != null && _getInputStringForButtonFunc != null && _getInputStringForBoxesFunc != null)
                     {
-                        sourceLotNumber = _getInputStringForButtonFunc.Invoke().TrimStart().TrimEnd(_militaryCharacter);
+                        sourceLotNumber = _getInputStringForButtonFunc.Invoke().TrimStart();
                         // BulletType은 이미 MainViewModel에서 WRAP 랙에 설정된 상태이므로 sourceRackVm.BulletType 사용
                         sourceBoxCount = string.IsNullOrWhiteSpace(_getInputStringForBoxesFunc.Invoke()) ? 0 : Int32.Parse(_getInputStringForBoxesFunc.Invoke());
                     }

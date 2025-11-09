@@ -152,7 +152,6 @@ namespace WPF_WMS01
                     databaseService,
                     mcProtocolService, // IMcProtocolService 전달
                     wrapRackTitle,
-                    militaryCharacter,
                     mainViewModelInstance.GetRackViewModelById, // MainViewModel의 델리게이트 전달
                     missionCheckModbusService, // Mission Check ModbusClientService 인스턴스 직접 전달
                     () => mainViewModelInstance.InputStringForBullet, // InputStringForBullet 델리게이트 전달

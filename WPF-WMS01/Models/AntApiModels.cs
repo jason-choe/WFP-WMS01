@@ -468,7 +468,10 @@ namespace WPF_WMS01.Models
         DbInsertInboundData,
 
         // update 출고 to DB
-        DbUpdateOutboundData
+        DbUpdateOutboundData,
+
+        // 공 팔레트 공급 위치 switching
+        UpdatePalletSupOdd
     }
 
     // 기존 McOperationType 열거형 유지 (이전 코드 호환성을 위해)
