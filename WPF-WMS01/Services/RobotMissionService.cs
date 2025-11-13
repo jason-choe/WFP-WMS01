@@ -27,7 +27,8 @@ namespace WPF_WMS01.Services
         private readonly DatabaseService _databaseService;
         private readonly IMcProtocolService _mcProtocolService; // MC Protocol 서비스 주입
         private DispatcherTimer _robotMissionPollingTimer;
-        private readonly ModbusClientService _missionCheckModbusService; // 미션 실패 확인용 ModbusClientService
+        private readonly ModbusClientService _missionCheckModbusServiceA; // 미션 실패 확인용 ModbusClientService for warehouse AMR
+        private readonly ModbusClientService _missionCheckModbusServiceB; // 미션 실패 확인용 ModbusClientService for production line AMR
         private readonly MainViewModel _mainViewModel; // MainViewModel 참조 추가
 
         // 현재 진행 중인 로봇 미션 프로세스들을 추적 (Key: ProcessId)
@@ -94,7 +95,8 @@ namespace WPF_WMS01.Services
             IMcProtocolService mcProtocolService, // MC Protocol Service 주입
             string wrapRackTitle,
             Func<int, RackViewModel> getRackViewModelByIdFunc,
-            ModbusClientService missionCheckModbusService, // ModbusClientService 인스턴스를 직접 주입받도록 변경
+            ModbusClientService missionCheckModbusServiceA, // ModbusClientService 인스턴스를 직접 주입받도록 변경
+            ModbusClientService missionCheckModbusServiceB, // ModbusClientService 인스턴스를 직접 주입받도록 변경
             Func<string> getInputStringForBulletFunc, // 델리게이트 재추가
             Func<string> getInputStringForButtonFunc, // 델리게이트 재추가
             Func<string> getInputStringForBoxesFunc, // 델리게이트 재추가
@@ -116,8 +118,10 @@ namespace WPF_WMS01.Services
             _setInputStringForBoxesFunc = setInputStringForBoxesFunc ?? throw new ArgumentNullException(nameof(setInputStringForBoxesFunc));
             _mainViewModel = mainViewModel;
             // 미션 실패 확인용 ModbusClientService 인스턴스 주입
-            _missionCheckModbusService = missionCheckModbusService ?? throw new ArgumentNullException(nameof(missionCheckModbusService));
-            Debug.WriteLine($"[RobotMissionService] Mission Check Modbus Service Injected. Current connection status: {_missionCheckModbusService.IsConnected}");
+            _missionCheckModbusServiceA = missionCheckModbusServiceA ?? throw new ArgumentNullException(nameof(missionCheckModbusServiceA));
+            Debug.WriteLine($"[RobotMissionService] Mission Check Modbus Service Injected. Current connection status: {_missionCheckModbusServiceA.IsConnected}");
+            _missionCheckModbusServiceB = missionCheckModbusServiceB ?? throw new ArgumentNullException(nameof(missionCheckModbusServiceB));
+            Debug.WriteLine($"[RobotMissionService] Mission Check Modbus Service Injected. Current connection status: {_missionCheckModbusServiceB.IsConnected}");
 
             SetupRobotMissionPollingTimer(); // 로봇 미션 폴링 타이머 설정 및 시작
             SetupModbusErrorMessageSuppressionTimer(); // Modbus 오류 메시지 억제 타이머 설정
@@ -757,7 +761,7 @@ namespace WPF_WMS01.Services
                     await UnlockAllRacksInProcess(missionInfo.RacksLockedByProcess);
 
                     // Extract vehicle
-                    var payload = new ExtractVehicleRequest
+                    /*var payload = new ExtractVehicleRequest
                     {
                         Command = new ExtractVehicleCommand
                         {
@@ -786,7 +790,7 @@ namespace WPF_WMS01.Services
                     await Application.Current.Dispatcher.Invoke(async () =>
                     {
                         MessageBox.Show(Application.Current.MainWindow, $"AMR {vehicleName}(이)가 추출(Extraction)되었습니다.\r\nAMR 운용 담당자의 후속 조치가 필요합니다.", "AMR 추출", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    });
+                    });*/
                 }
             }
             catch (Exception ex)
@@ -923,24 +927,34 @@ namespace WPF_WMS01.Services
                         {
                             throw new ArgumentException("McWaitSensorOff/On: IpAddress, WordAddress 또는 WriteValueInt가 지정되지 않았습니다.");
                         }
+                        if (!subOp.WaitTimeoutSeconds.HasValue || subOp.WaitTimeoutSeconds.Value <= 0)
+                        {
+                            subOp.WaitTimeoutSeconds = 60; // 기본 타임아웃 60초
+                        }
+                        DateTime startTime_A = DateTime.Now;
                         while (!processInfo.CancellationTokenSource.Token.IsCancellationRequested)
                         {
                             ushort? currentState = await _mcProtocolService.ReadWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value); //.ConfigureAwait(false);
-                            if (currentState == null)
+                            if (currentState == null) // mc protocol communication error
                             {
                                 // 이 시점에서 미션 프로세스를 실패 상태로 마크하고 완료 처리
-                                processInfo.CurrentStatus = MissionStatusEnum.FAILED;
-                                processInfo.HmiStatus.Status = "FAILED";
+                                //processInfo.CurrentStatus = MissionStatusEnum.FAILED;
+                                //processInfo.HmiStatus.Status = "FAILED";
                                 //processInfo.HmiStatus.ProgressPercentage = 100;
-                                processInfo.IsFailed = true; // 프로세스 실패 플래그 설정
-                                processInfo.CancellationTokenSource.Cancel(); // 미션 취소 요청
-                                await HandleRobotMissionCompletion(processInfo);
-                                break;
+                                //processInfo.IsFailed = true; // 프로세스 실패 플래그 설정
+                                //processInfo.CancellationTokenSource.Cancel(); // 미션 취소 요청
+                                //await HandleRobotMissionCompletion(processInfo);
+                                //break;
                             }
                             if (currentState == subOp.McWateValueInt)
                             {
                                 processInfo.HmiStatus.SubOpDescription = "";
                                 break;
+                            }
+                            if (DateTime.Now - startTime_A > TimeSpan.FromSeconds(subOp.WaitTimeoutSeconds.Value))
+                            {
+                                MessageBox.Show($"AMR 진입 요청에서 timeout이 발생했습니다.\n해당 PLC의 확인이 필요합니다.\n(IP: {subOp.McProtocolIpAddress}, Addr: {subOp.McWordAddress.Value})", "경고", MessageBoxButton.OK, MessageBoxImage.Warning);
+                                startTime_A = DateTime.Now;
                             }
                             await Task.Delay(500).ConfigureAwait(false); // 0.5초마다 체크
                         }
@@ -971,28 +985,33 @@ namespace WPF_WMS01.Services
                         bool targetState = (subOp.Type == SubOperationType.McWaitSensorOn); // ON을 기다리면 true, OFF를 기다리면 false
                         DateTime startTime = DateTime.Now;
                         bool sensorStateReached = false;
-                        subOp.McWordAddress = 0x1508;
+                        subOp.McWordAddress = (ushort)(subOp.McWordAddress + 0x500);  // read address = write address + 0x500
 
-                        while (DateTime.Now - startTime < TimeSpan.FromSeconds(subOp.WaitTimeoutSeconds.Value) && !processInfo.CancellationTokenSource.Token.IsCancellationRequested)
+                        while (/*DateTime.Now - startTime < TimeSpan.FromSeconds(subOp.WaitTimeoutSeconds.Value) &&*/ !processInfo.CancellationTokenSource.Token.IsCancellationRequested)
                         {
                             ushort? currentState = await _mcProtocolService.ReadWordAsync(subOp.McProtocolIpAddress, subOp.WordDeviceCode, subOp.McWordAddress.Value);//.ConfigureAwait(false);
                             //if ((currentState != 0) == targetState) // 0이 아니면 ON, 0이면 OFF로 간주
-                            if (currentState == null)
+                            if (currentState == null) // mc protocol communication error
                             {
                                 // 이 시점에서 미션 프로세스를 실패 상태로 마크하고 완료 처리
-                                processInfo.CurrentStatus = MissionStatusEnum.FAILED;
-                                processInfo.HmiStatus.Status = "FAILED";
+                                //processInfo.CurrentStatus = MissionStatusEnum.FAILED;
+                                //processInfo.HmiStatus.Status = "FAILED";
                                 //processInfo.HmiStatus.ProgressPercentage = 100;
-                                processInfo.IsFailed = true; // 프로세스 실패 플래그 설정
-                                processInfo.CancellationTokenSource.Cancel(); // 미션 취소 요청
-                                await HandleRobotMissionCompletion(processInfo);
-                                break;
+                                //processInfo.IsFailed = true; // 프로세스 실패 플래그 설정
+                                //processInfo.CancellationTokenSource.Cancel(); // 미션 취소 요청
+                                //await HandleRobotMissionCompletion(processInfo);
+                                //break;
                             }
                             if (currentState == subOp.McWriteValueInt.Value)
                             {
                                 sensorStateReached = true;
                                 processInfo.HmiStatus.SubOpDescription = "";
                                 break;
+                            }
+                            if(DateTime.Now - startTime > TimeSpan.FromSeconds(subOp.WaitTimeoutSeconds.Value))
+                            {
+                                MessageBox.Show($"로봇 정지 요청에서 timeout이 발생했습니다.\n해당 로봇 PLC의 확인이 필요합니다.\n({subOp.McProtocolIpAddress})", "경고", MessageBoxButton.OK, MessageBoxImage.Warning);
+                                startTime = DateTime.Now;
                             }
                             await Task.Delay(500).ConfigureAwait(false); // 0.5초마다 체크
                         }
@@ -1073,7 +1092,10 @@ namespace WPF_WMS01.Services
 
                     case SubOperationType.CheckModbusDiscreteInput:
                         if (!_mcProtocolInterface) break;
-                        await PerformModbusDiscreteInputCheck(processInfo, subOp.McDiscreteInputAddress).ConfigureAwait(false);
+                        if(processInfo.IsWarehouseMission)
+                            await PerformModbusDiscreteInputCheck(processInfo, subOp.McDiscreteInputAddress, _missionCheckModbusServiceA).ConfigureAwait(false); // Warehouse AMR
+                        else
+                            await PerformModbusDiscreteInputCheck(processInfo, subOp.McDiscreteInputAddress, _missionCheckModbusServiceB).ConfigureAwait(false); // Packaging Line AMR
                         break;
 
                     case SubOperationType.SetPlcStatusIsPaused:
@@ -1144,7 +1166,7 @@ namespace WPF_WMS01.Services
         /// <param name="processInfo">현재 미션 프로세스 정보.</param>
         /// <param name="discreteInputAddress">확인할 Discrete Input 주소.</param>
         /// <returns>비동기 작업.</returns>
-        private async Task PerformModbusDiscreteInputCheck(RobotMissionInfo processInfo, ushort? discreteInputAddress)
+        private async Task PerformModbusDiscreteInputCheck(RobotMissionInfo processInfo, ushort? discreteInputAddress, ModbusClientService _missionCheckModbusService)
         {
             if (!discreteInputAddress.HasValue)
             {
@@ -1631,7 +1653,8 @@ namespace WPF_WMS01.Services
             }
             _activeRobotProcesses.Clear(); // 딕셔너리 비우기
 
-            _missionCheckModbusService?.Dispose(); // 미션 체크용 Modbus 서비스도 해제
+            _missionCheckModbusServiceA?.Dispose(); // 미션 체크용 Modbus 서비스도 해제
+            _missionCheckModbusServiceB?.Dispose(); // 미션 체크용 Modbus 서비스도 해제
             _mcProtocolService?.Dispose(); // MC Protocol 서비스도 해제
             Debug.WriteLine("[RobotMissionService] Disposed.");
         }

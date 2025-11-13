@@ -61,6 +61,26 @@ namespace WPF_WMS01.ViewModels.Popups
         public ICommand ConfirmCommand { get; private set; }
         public ICommand CancelCommand { get; private set; }
 
+        public RackTypeChangePopupViewModel(bool isVehicleAMR1, bool isChargePoint)
+        {
+            MessageTitle = "AMR 이동";
+            string sentence1 = isVehicleAMR1 ? "Poongsan 1" : "Poongsan 2";
+            string sentence2 = isChargePoint ? "충전소" : "대기장소";
+            Message = $"AMR '{sentence1}'를 '{sentence2}'로 이동 시키겠습니까?";
+
+            ConfirmCommand = new RelayCommand(ExecuteConfirm); // <Window> 제거
+            CancelCommand = new RelayCommand(ExecuteCancel); // <Window> 제거
+        }
+
+        public RackTypeChangePopupViewModel(bool supplyOnOdd)
+        {
+            MessageTitle = "팔레트 팩 픽업 장소 변경";
+            Message = $"다음 번 팔레트 팩 픽업 장소를 \n {(supplyOnOdd ? 2 : 1)} 번으로 변경하시겠습니까?";
+
+            ConfirmCommand = new RelayCommand(ExecuteConfirm); // <Window> 제거
+            CancelCommand = new RelayCommand(ExecuteCancel); // <Window> 제거
+        }
+
         public RackTypeChangePopupViewModel(int type, int? currentRackType = null, int? newRackType = null)
         {
             if(type == 0)

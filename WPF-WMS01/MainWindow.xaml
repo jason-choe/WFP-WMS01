@@ -348,9 +348,14 @@
                     <Border Background="#455A64" CornerRadius="5" BorderThickness="1" BorderBrush="#263238" Padding="5"
                             Effect="{StaticResource DefaultShadow}">
                         <StackPanel>
-                            <Button Content="AMR_2 대기 지역으로" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding MoveAmr2ToBufferNode}"/>
-                            <Button Content="AMR_1 Pallet 재 입고" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding MoveAndUnloadCommand}"/>
-                            <Button Content="잠긴 랙 잠금 풀기" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding UnlockRackCommand}"/>
+                            <Button Content="1. 팔레트팩 픽업 장소 변경" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding ChangePalletSupPoint}"/>
+                            <Button Content="2. 잠긴 랙 잠금 풀기" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding UnlockRackCommand}"/>
+                            <Button Content="3. Poongsan 1 충전소로" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding Amr1MoveToCharger}"/>
+                            <Button Content="4. Poongsan 1 대기장소로" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding Amr1MoveToWait}"/>
+                            <Button Content="5. Poongsan 2 충전소로" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding Amr2MoveToCharger}"/>
+                            <Button Content="6. Poongsan 2 대기장소로" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding Amr2MoveToWait}"/>
+                            <!-- Button Content="AMR_2 대기 지역으로" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding MoveAmr2ToBufferNode}"/-->
+                            <!-- Button Content="AMR_1 Pallet 재 입고" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding MoveAndUnloadCommand}"/-->
                             <!-- Button Content="입출고 장부 열기" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding OpenInOutLedgerCommand}"/-->
                             <!-- 팝업이 닫힐 때 IsMenuOpen을 False로 설정하는 버튼 추가 -->
                             <Button Content="메뉴 닫기" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding CloseMenuCommand}" Margin="0,10,0,0"/>

@@ -459,7 +459,7 @@ namespace WPF_WMS01.Models
         UiDisplayLotNoBoxCount,     // 4-1: 임시 저장소의 LotNo, Box Count를 UI의 TextBox에 표시
 
         // Other Operations (Modbus Discrete Input Check)
-        CheckModbusDiscreteInput,    // 4-7: 기존 Modbus Discrete Input 체크 로직 (_missionCheckModbusService 사용)
+        CheckModbusDiscreteInput,    // 4-7: 기존 Modbus Discrete Input 체크 로직 (_missionCheckModbusService A or B 사용)
 
         // Modbus PLC option
         SetPlcStatusIsPaused,       // Buttpn call modebus enabled/disabled

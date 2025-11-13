@@ -51,7 +51,7 @@ namespace WPF_WMS01.ViewModels.Popups
                 : bulletType == 140 ? "?" : "Unknown";
             string rackName = "랙 "+ sourceRackTitle;
             LotNoMessage = $"Lot No. : {sourceLotNumber}";
-            ConfirmMessage = $"{rackName}의 {product} 제품을 포장할까요?";
+            ConfirmMessage = $"{rackName}의 {product} 제품을\n포장기로 옮길까요?";
             ConfirmCommand = new RelayCommand(ExecuteConfirm);
             CancelCommand = new RelayCommand(ExecuteCancel);
             // DialogResult = false; // 이제 Window.DialogResult를 직접 설정합니다.

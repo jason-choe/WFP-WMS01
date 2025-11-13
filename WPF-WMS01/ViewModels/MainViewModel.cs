@@ -168,7 +168,7 @@ namespace WPF_WMS01.ViewModels
         //public readonly string _waitRackTitle;
         public readonly string _wrapRackTitle;
         public readonly string _amrRackTitle;
-        public readonly ushort _checkModbusDescreteInputAddr = 0; // from AMR 
+        public readonly ushort _checkModbusDescreteInputAddr = 13; // from AMR 
 
         // Modbus Discrete Input/Coil 상태를 저장할 ObservableCollection
         public ObservableCollection<ModbusButtonViewModel> ModbusButtons { get; set; }
@@ -294,6 +294,11 @@ namespace WPF_WMS01.ViewModels
         public ICommand UnlockRackCommand { get; private set; } // UnlockRackCommand 선언 추가 (private set 추가)
         public ICommand MoveAndUnloadCommand { get; private set; } // MoveAndUnloadCommand 선언 추가 (private set 추가)
         public ICommand MoveAmr2ToBufferNode { get; private set; } // MoveAmr2ToBufferNode 선언 추가 (private set 추가)
+        public ICommand ChangePalletSupPoint { get; private set; }
+        public ICommand Amr1MoveToCharger { get; private set; }
+        public ICommand Amr1MoveToWait { get; private set; }
+        public ICommand Amr2MoveToCharger { get; private set; }
+        public ICommand Amr2MoveToWait { get; private set; }
         public ICommand OpenInOutLedgerCommand { get; }
 
         private string _popupDebugMessage;
@@ -371,6 +376,13 @@ namespace WPF_WMS01.ViewModels
             MoveAndUnloadCommand = new RelayCommand(async p => await ExecuteUnloadAmrPayload());
             // AMR_2 완충지역으로 이동 명령 초기화
             MoveAmr2ToBufferNode = new RelayCommand(async p => await ExecuteAmr2ToBufferNode());
+            //
+            ChangePalletSupPoint = new RelayCommand(async p => await ExecuteChangePalletSupPoint());
+            // 
+            Amr1MoveToCharger = new RelayCommand(async p => await ExecuteAmrMoveTo(true, true));
+            Amr1MoveToWait = new RelayCommand(async p => await ExecuteAmrMoveTo(true, false));
+            Amr2MoveToCharger = new RelayCommand(async p => await ExecuteAmrMoveTo(false, true));
+            Amr2MoveToWait = new RelayCommand(async p => await ExecuteAmrMoveTo(false, false));
 
             OpenInOutLedgerCommand = new AsyncRelayCommand(ExecuteOpenInOutLedger);
 
@@ -1289,7 +1301,7 @@ namespace WPF_WMS01.ViewModels
                 switch (buttonVm.Content)
                 {
                     case "팔레트 공급":
-                        processType = "공 팔레트 더미 공급 작업";
+                        processType = "팔레트 팩 공급 작업";
                         // 1. Move from Charger, Turn
                         missionSteps.Add(new MissionStepDefinition
                         {
@@ -1308,7 +1320,7 @@ namespace WPF_WMS01.ViewModels
                         // 2. Move, Pickup
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = "자제 공급장으로 이동하여, 공 팔레트 더미 "+(_isPalletDummyOdd ? "1" : "2") +" 픽업",
+                            ProcessStepDescription = "자제 공급장으로 이동하여, 팔레트 팩 "+(_isPalletDummyOdd ? "1" : "2") +" 픽업",
                             MissionType = "8",
                             ToNode = "Empty_Pallet_PickUP_" + (_isPalletDummyOdd?"1":"2"),   // Use both alternately
                             Payload = ProductionLinePayload,
@@ -1316,19 +1328,24 @@ namespace WPF_WMS01.ViewModels
                             LinkWaitTimeout = 3600,
                             PostMissionOperations = new List<MissionSubOperation> // 다음 공 팔레트 공급 위치 갱신
                             {
-                                new MissionSubOperation { Type = SubOperationType.UpdatePalletSupOdd, Description = "다음 공 팔레트 공급 위치 갱신" }
+                                new MissionSubOperation { Type = SubOperationType.UpdatePalletSupOdd, Description = "다음 팔레트 팩 공급 위치 갱신" }
                             }
                         });
                         // 3. Move, Drop
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = "매거진으로 이동하여, 공 팔레트 더미 투입",
+                            ProcessStepDescription = "매거진으로 이동하여, 팔레트 팩 투입",
                             MissionType = "7",
                             FromNode = "Pallet_BWD_Pos",
                             ToNode = "MZ_Empty_Pallet_Drop",
                             Payload = ProductionLinePayload,
                             IsLinkable = true,
-                            LinkWaitTimeout = 3600
+                            LinkWaitTimeout = 3600,
+                            PreMissionOperations = new List<MissionSubOperation> // 매거진에서 공 파레트 픽업 가능한가?
+                            {
+                                new MissionSubOperation {Type = SubOperationType.McWriteSingleWord, Description = "팔레트 팩 공급 준비 요청", WordDeviceCode = "W", McWordAddress = 0x102F, McWriteValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
+                                new MissionSubOperation {Type = SubOperationType.McWaitAvailable, Description = "팔레트 팩 공급 준비 완료 체크", WordDeviceCode = "W", McWordAddress = 0x152F, McWateValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
+                            }
                         });
                         // 4. Move and Quit
                         missionSteps.Add(new MissionStepDefinition
@@ -1341,13 +1358,14 @@ namespace WPF_WMS01.ViewModels
                             LinkWaitTimeout = 3600,
                             PreMissionOperations = new List<MissionSubOperation> // 경광등 끄기
                             {
-                                new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "경광등 켜기", WordDeviceCode = "W", McWordAddress = 0x102D, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"}
+                                new MissionSubOperation {Type = SubOperationType.McWriteSingleWord, Description = "팔레트 팩 공급 완료 신호", WordDeviceCode = "W", McWordAddress = 0x102F, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"},
+                                new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "경광등 끄기", WordDeviceCode = "W", McWordAddress = 0x102D, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"}
                             }
                         });
                         break;
 
                     case "단프라 공급":
-                        processType = "단프라 시트 더미 공급 작업";
+                        processType = "충전 패드 트레이 공급 작업";
                         // 1. Move from charger, Turn
                         missionSteps.Add(new MissionStepDefinition
                         {
@@ -1365,27 +1383,36 @@ namespace WPF_WMS01.ViewModels
                         // 2. Move, Pickup
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = "매거진에서 소진 단프라 크레들 픽업",
+                            ProcessStepDescription = "매거진에서 소진 패드 트레이 픽업",
                             MissionType = "8",
                             ToNode = "MZ_DanPra_Sheet_PickUP",
                             Payload = ProductionLinePayload,
                             IsLinkable = true,
-                            LinkWaitTimeout = 3600
+                            LinkWaitTimeout = 3600,
+                            PreMissionOperations = new List<MissionSubOperation> // 매거진에서 패드 드레이 픽업 가능한가?
+                            {
+                                new MissionSubOperation {Type = SubOperationType.McWriteSingleWord, Description = "패드 트레이 배출 준비 요청", WordDeviceCode = "W", McWordAddress = 0x103C, McWriteValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
+                                new MissionSubOperation {Type = SubOperationType.McWaitAvailable, Description = "패드 트레이 배출 준비 완료 체크", WordDeviceCode = "W", McWordAddress = 0x153C, McWateValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
+                            }
                         });
                         // 3. Move, Drop
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = "임시 장소 1로 이동하여, 소진 단프라 크레들 드롭",
+                            ProcessStepDescription = "임시 장소 1로 이동하여, 소진 패드 트레이 드롭",
                             MissionType = "8",
                             ToNode = "Empty_DanPra_Sheet_Drop",
                             Payload = ProductionLinePayload,
                             IsLinkable = true,
-                            LinkWaitTimeout = 3600
+                            LinkWaitTimeout = 3600,
+                            PreMissionOperations = new List<MissionSubOperation> // 패드 드레이 배출 완료
+                            {
+                                new MissionSubOperation {Type = SubOperationType.McWriteSingleWord, Description = "패드 트레이 배출 완료 신호", WordDeviceCode = "W", McWordAddress = 0x103C, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"},
+                            }
                         });
                         // 4. Move, Pickup
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = "단프라 시트 준비 장소로 이동하여, 충전 단프라 크레들 픽업",
+                            ProcessStepDescription = "패드 트레이 준비 장소로 이동하여, 충전 패드 트레이 픽업",
                             MissionType = "8",
                             ToNode = "DanPra_Sheet_PickUP",
                             Payload = ProductionLinePayload,
@@ -1395,7 +1422,7 @@ namespace WPF_WMS01.ViewModels
                         // 5. Move, Drop
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = "임시 장소 2로 이동하여, 충전 단프라 크레들 드롭",
+                            ProcessStepDescription = "임시 장소 2로 이동하여, 충전 패드 트레이  드롭",
                             MissionType = "8",
                             ToNode = "Full_DanPra_Sheet_Drop",
                             Payload = ProductionLinePayload,
@@ -1405,7 +1432,7 @@ namespace WPF_WMS01.ViewModels
                         // 6. Move, Pickup
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = "임시 장소 1로 이동하여, 소진 단프라 크레들 픽업",
+                            ProcessStepDescription = "임시 장소 1로 이동하여, 소진 패드 트레이 픽업",
                             MissionType = "8",
                             ToNode = "Empty_DanPra_Sheet_PickUP",
                             Payload = ProductionLinePayload,
@@ -1415,7 +1442,7 @@ namespace WPF_WMS01.ViewModels
                         // 7. Move, Drop
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = "단프라 시트 준비 장소로 이동하여, 소진 단프라 크레들 드롭",
+                            ProcessStepDescription = "패드 트레이 준비 장소로 이동하여, 소진 패드 트레이  드롭",
                             MissionType = "8",
                             ToNode = "DanPra_Sheet_Drop",
                             Payload = ProductionLinePayload,
@@ -1425,7 +1452,7 @@ namespace WPF_WMS01.ViewModels
                         // 8. Move, Pickup
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = "임시 장소 2로 이동하여, 충전 단프라 크레들 픽업",
+                            ProcessStepDescription = "임시 장소 2로 이동하여, 충전 패드 트레이 픽업",
                             MissionType = "8",
                             ToNode = "Full_DanPra_Sheet_PickUP",
                             Payload = ProductionLinePayload,
@@ -1445,12 +1472,17 @@ namespace WPF_WMS01.ViewModels
                         // 10. Move, Drop
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = "매거진으로 이동하여, 충전 단프라 크레들 투입",
+                            ProcessStepDescription = "매거진으로 이동하여, 충전 패드 트레이 투입",
                             MissionType = "8",
                             ToNode = "MZ_DanPra_Sheet_Drop",
                             Payload = ProductionLinePayload,
                             IsLinkable = true,
-                            LinkWaitTimeout = 3600
+                            LinkWaitTimeout = 3600,
+                            PreMissionOperations = new List<MissionSubOperation> // 매거진에 패드 드레이 공급 가능한가?
+                            {
+                                new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "패드 트레이 투입 준비 요청", WordDeviceCode = "W", McWordAddress = 0x103F, McWriteValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
+                                new MissionSubOperation { Type = SubOperationType.McWaitAvailable, Description = "패드 트레이 투입 준비 완료 체크", WordDeviceCode = "W", McWordAddress = 0x153F, McWateValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
+                            }
                         });
                         // 11. Move & Quit
                         missionSteps.Add(new MissionStepDefinition
@@ -1461,8 +1493,9 @@ namespace WPF_WMS01.ViewModels
                             Payload = ProductionLinePayload,
                             IsLinkable = false,
                             LinkWaitTimeout = 3600,
-                            PreMissionOperations = new List<MissionSubOperation> // 경광등 끄기
+                            PreMissionOperations = new List<MissionSubOperation> // 패드 드레이 공급 완료, 경광등 끄기
                             {
+                                new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "패드 트레이 투입 완료 신호", WordDeviceCode = "W", McWordAddress = 0x103F, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"},
                                 new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "경광등 켜기", WordDeviceCode = "W", McWordAddress = 0x103D, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"}
                             }
                         });
@@ -1524,7 +1557,7 @@ namespace WPF_WMS01.ViewModels
                                 new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "경광등 켜기", WordDeviceCode = "W", McWordAddress = (ushort)(mcWordAddress -0x500 + 13), McWriteValueInt = 1, McProtocolIpAddress = mcProtocolIpAddress }
                             }
                         });
-                        // Step 2 : Move from chatger, Turn
+                        // Step 2 : Move, Sensor Off
                         missionSteps.Add(new MissionStepDefinition
                         {
                             ProcessStepDescription = $"{buttonVm.Title} 제품 팔레트 픽업 준비, 안전 센서 끄기",
@@ -1538,7 +1571,7 @@ namespace WPF_WMS01.ViewModels
                                 new MissionSubOperation { Type = SubOperationType.McWaitSensorOff, Description = "안전 센서 끄기", WordDeviceCode = "W", McWordAddress = 0x1008, McWriteValueInt = 1, McProtocolIpAddress = mcProtocolIpAddress }
                             }
                         });
-                        // Step 3 : Sensor OFF, Move, Pickup
+                        // Step 3 : Move, Pickup, Read Lot Info
                         missionSteps.Add(new MissionStepDefinition
                         {
                             ProcessStepDescription = $"{buttonVm.Title} 제품 팔레트 픽업, Lot 정보 읽기",
@@ -1549,9 +1582,10 @@ namespace WPF_WMS01.ViewModels
                             LinkWaitTimeout = 3600,
                             PostMissionOperations = new List<MissionSubOperation> // Read LotNo. BoxCount 
                             {
-                                new MissionSubOperation { Type = SubOperationType.McReadLotNoBoxCount, Description = "LotNo., BoxCount 읽기", WordDeviceCode = "W", McWordAddress = mcWordAddress, McStringLengthWords = 8, McProtocolIpAddress = mcProtocolIpAddress }
+                                new MissionSubOperation { Type = SubOperationType.McReadLotNoBoxCount, Description = "탄종, LotNo., BoxCount 읽기", WordDeviceCode = "W", McWordAddress = mcWordAddress, McStringLengthWords = 8, McProtocolIpAddress = mcProtocolIpAddress }
                             }
                         });
+                        // Step 4 : Move, Sensor On
                         missionSteps.Add(new MissionStepDefinition
                         {
                             ProcessStepDescription = $"{buttonVm.Title}(으)로부터 나와서 안전 센서 켜기",
@@ -1565,8 +1599,7 @@ namespace WPF_WMS01.ViewModels
                                 new MissionSubOperation { Type = SubOperationType.McWaitSensorOn, Description = "안전 센서 켜기", WordDeviceCode = "W", McWordAddress = 0x1008, McWriteValueInt = 0, McProtocolIpAddress = mcProtocolIpAddress }
                             }
                         });
-
-                        // Rack에 적치하기 위한 이동 및 적치
+                        // Step 5 : Move, Unload
                         if (destinationRackVm.LocationArea == 2 || destinationRackVm.LocationArea == 4) // 랙 2 ~ 8 번 1단 드롭 만 적용
                         {
                             missionSteps.Add(new MissionStepDefinition
@@ -1589,12 +1622,11 @@ namespace WPF_WMS01.ViewModels
                             IsLinkable = true,
                             LinkWaitTimeout = 3600,
                             PostMissionOperations = new List<MissionSubOperation> {
-                                    //new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "팔레트 랙에 안착 여부 확인", McDiscreteInputAddress = _checkModbusDescreteInputAddr },
-                                    new MissionSubOperation { Type = SubOperationType.DbWriteRackData, Description = "입고 팔레트 정보 업데이트", DestRackIdForDbUpdate = destinationRackVm.Id }
-                                }
+                                new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "팔레트 랙에 안착 여부 확인", McDiscreteInputAddress = _checkModbusDescreteInputAddr },
+                                new MissionSubOperation { Type = SubOperationType.DbWriteRackData, Description = "입고 팔레트 정보 업데이트", DestRackIdForDbUpdate = destinationRackVm.Id }
+                            }
                         });
-
-                        // Step 5 : Move from chatger, Turn
+                        // Step 6 : Move
                         missionSteps.Add(new MissionStepDefinition
                         {
                             ProcessStepDescription = "대기 장소로 이동",
@@ -1602,9 +1634,13 @@ namespace WPF_WMS01.ViewModels
                             ToNode = "Pallet_BWD_Pos",
                             Payload = ProductionLinePayload,
                             IsLinkable = true,
-                            LinkWaitTimeout = 3600
+                            LinkWaitTimeout = 3600,
+                            PostMissionOperations = new List<MissionSubOperation> // 공 파렛트 공급 준비 완료뙤었나?
+                            {
+                                new MissionSubOperation {Type = SubOperationType.McWaitAvailable, Description = "공 파렛트 공급 준비 완료 체크", WordDeviceCode = "W", McWordAddress = 0x151E, McWateValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
+                            }
                         });
-                        // Step 6 : Check, Move, Pickup
+                        // Step 7 : Check, Move, Pickup
                         missionSteps.Add(new MissionStepDefinition
                         {
                             ProcessStepDescription = $"매거진으로 이동하여, 공 파레트 픽업",
@@ -1615,11 +1651,11 @@ namespace WPF_WMS01.ViewModels
                             LinkWaitTimeout = 3600,
                             PreMissionOperations = new List<MissionSubOperation> // 매거진에서 공 파레트 픽업 가능한가?
                             {
-                                new MissionSubOperation { Type = SubOperationType.McWaitAvailable, Description = "공 파렛트 배출 준비 완료 체크", WordDeviceCode = "W", McWordAddress = 0x151E, McWateValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
-                                new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "공 파렛트 배출 시작 신호", WordDeviceCode = "W", McWordAddress = 0x101E, McWriteValueInt = 1, McProtocolIpAddress = "192.168.200.111"}
+                                new MissionSubOperation {Type = SubOperationType.McWriteSingleWord, Description = "공 파렛트 배출 준비 요청", WordDeviceCode = "W", McWordAddress = 0x101F, McWriteValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
+                                new MissionSubOperation {Type = SubOperationType.McWaitAvailable, Description = "공 파렛트 배출 준비 완료 체크", WordDeviceCode = "W", McWordAddress = 0x151F, McWateValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
                             }
                         });
-                        // Step 7 : Move from chatger, Turn
+                        // Step 8 : Move, Sensor Off
                         missionSteps.Add(new MissionStepDefinition
                         {
                             ProcessStepDescription = "공 파렛트 배출 완료 신호, 공 파레트 드롭 준비, 안전 센서 끄기",
@@ -1630,11 +1666,11 @@ namespace WPF_WMS01.ViewModels
                             LinkWaitTimeout = 3600,
                             PostMissionOperations = new List<MissionSubOperation> // 공 파렛트 배출 완료 신호
                             {
-                                new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "공 파렛트 배출 완료 신호", WordDeviceCode = "W", McWordAddress = 0x101E, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"},
+                                new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "공 파렛트 배출 완료 신호", WordDeviceCode = "W", McWordAddress = 0x101F, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"},
                                 new MissionSubOperation { Type = SubOperationType.McWaitSensorOff, Description = "안전 센서 끄기", WordDeviceCode = "W", McWordAddress = 0x1008, McWriteValueInt = 1, McProtocolIpAddress = mcProtocolIpAddress }
                             }
                         });
-                        // Step 8 : Move, Drop
+                        // Step 9 : Move, Drop
                         missionSteps.Add(new MissionStepDefinition
                         {
                             ProcessStepDescription = $"{buttonVm.Title}(으)로 이동하여, 공 파레트 투입",
@@ -1644,6 +1680,7 @@ namespace WPF_WMS01.ViewModels
                             IsLinkable = true,
                             LinkWaitTimeout = 3600,
                         });
+                        // Step 10 : Move, Sensor On
                         missionSteps.Add(new MissionStepDefinition
                         {
                             ProcessStepDescription = $"{buttonVm.Title}(으)로부터 나와서 안전센서 켜기",
@@ -1657,7 +1694,7 @@ namespace WPF_WMS01.ViewModels
                                 new MissionSubOperation { Type = SubOperationType.McWaitSensorOn, Description = "안전 센서 켜기", WordDeviceCode = "W", McWordAddress = 0x1008, McWriteValueInt = 0, McProtocolIpAddress = mcProtocolIpAddress }
                             },
                         });
-                        // Step 9 : Move, Charge
+                        // Step 11 : Move, Ready
                         missionSteps.Add(new MissionStepDefinition
                         {
                             ProcessStepDescription = "작업 대기 장소로 이동 후 경광등 끄기",
@@ -1731,7 +1768,7 @@ namespace WPF_WMS01.ViewModels
                                 new MissionSubOperation { Type = SubOperationType.McReadLotNoBoxCount, Description = "LotNo., BoxCount 읽기", WordDeviceCode = "W", McWordAddress = mcWordAddress, McStringLengthWords = 8, McProtocolIpAddress = mcProtocolIpAddress }
                             }
                         });
-                        // Rack에 적치하기 위한 이동 및 적치
+                        // Step 4 : Move, Turn, Drop
                         if (destinationRackVm.LocationArea == 2 || destinationRackVm.LocationArea == 4) // 랙 2 ~ 8 번 1단 드롭 만 적용
                         {
                             missionSteps.Add(new MissionStepDefinition
@@ -1754,11 +1791,11 @@ namespace WPF_WMS01.ViewModels
                             IsLinkable = true,
                             LinkWaitTimeout = 3600,
                             PostMissionOperations = new List<MissionSubOperation> {
-                                //new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "팔레트 랙에 안착 여부 확인", McDiscreteInputAddress = _checkModbusDescreteInputAddr },
+                                new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "팔레트 랙에 안착 여부 확인", McDiscreteInputAddress = _checkModbusDescreteInputAddr },
                                 new MissionSubOperation { Type = SubOperationType.DbWriteRackData, Description = "입고 팔레트 정보 업데이트", DestRackIdForDbUpdate = destinationRackVm.Id }
                             }
                         });
-
+                        // Step 5 : Move
                         missionSteps.Add(new MissionStepDefinition
                         {
                             ProcessStepDescription = "대기 장소로 이동",
@@ -1767,8 +1804,13 @@ namespace WPF_WMS01.ViewModels
                             Payload = ProductionLinePayload,
                             Priority = buttonVm.Content.Equals("7.62mm") ? 3 : 1,
                             IsLinkable = true,
-                            LinkWaitTimeout = 3600
+                            LinkWaitTimeout = 3600,
+                            PostMissionOperations = new List<MissionSubOperation> // 공 파렛트 공급 준비 완료뙤었나?
+                            {
+                                new MissionSubOperation {Type = SubOperationType.McWaitAvailable, Description = "공 파렛트 공급 준비 완료 체크", WordDeviceCode = "W", McWordAddress = 0x151E, McWateValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
+                            }
                         });
+                        // Step 6 : Move, Pickup
                         missionSteps.Add(new MissionStepDefinition
                         {
                             ProcessStepDescription = $"매거진으로 이동하여, 공 파레트 픽업",
@@ -1779,11 +1821,11 @@ namespace WPF_WMS01.ViewModels
                             LinkWaitTimeout = 3600,
                             PreMissionOperations = new List<MissionSubOperation> // 매거진에서 공 파레트 픽업 가능한가?
                             {
-                                new MissionSubOperation { Type = SubOperationType.McWaitAvailable, Description = "공 파렛트 배출 준비 완료 체크", WordDeviceCode = "W", McWordAddress = 0x151E, McWateValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
-                                new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "공 파렛트 배출 시작 신호", WordDeviceCode = "W", McWordAddress = 0x101E, McWriteValueInt = 1, McProtocolIpAddress = "192.168.200.111"}
+                                new MissionSubOperation {Type = SubOperationType.McWriteSingleWord, Description = "공 파렛트 배출 준비 요청", WordDeviceCode = "W", McWordAddress = 0x101F, McWriteValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
+                                new MissionSubOperation {Type = SubOperationType.McWaitAvailable, Description = "공 파렛트 배출 준비 완료 체크", WordDeviceCode = "W", McWordAddress = 0x151F, McWateValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
                             }
                         });
-                        // Step 6 : Move from chatger, Turn
+                        // Step 7 : Move, Turn
                         missionSteps.Add(new MissionStepDefinition
                         {
                             ProcessStepDescription = "공 파레트 드롭 준비, 공 파렛트 배출 완료 신호",
@@ -1794,10 +1836,11 @@ namespace WPF_WMS01.ViewModels
                             LinkWaitTimeout = 3600,
                             PostMissionOperations = new List<MissionSubOperation> // 공 파렛트 배출 완료 신호
                             {
-                                new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "공 파렛트 배출 완료 신호", WordDeviceCode = "W", McWordAddress = 0x101E, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"}
+                                //new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "공 파렛트 배출 완료 신호", WordDeviceCode = "W", McWordAddress = 0x101E, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"}
+                                new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "공 파렛트 배출 완료 신호", WordDeviceCode = "W", McWordAddress = 0x101F, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"}
                             }
                         });
-                        // Step 7 : Move, Drop
+                        // Step 8 : Move, Drop
                         missionSteps.Add(new MissionStepDefinition
                         {
                             ProcessStepDescription = $"{buttonVm.Title}(으)로 이동하여, 공 파레트 투입",
@@ -1807,6 +1850,7 @@ namespace WPF_WMS01.ViewModels
                             IsLinkable = true,
                             LinkWaitTimeout = 3600,
                         });
+                        // Step 9 : Move, Sensor On
                         missionSteps.Add(new MissionStepDefinition
                         {
                             ProcessStepDescription = $"{buttonVm.Title}(으)로부터 나와서 안전 센서 켜기",
@@ -1820,7 +1864,7 @@ namespace WPF_WMS01.ViewModels
                                 new MissionSubOperation { Type = SubOperationType.McWaitSensorOn, Description = "안전 센서 켜기", WordDeviceCode = "W", McWordAddress = 0x1008, McWriteValueInt = 0, McProtocolIpAddress = mcProtocolIpAddress }
                             },
                         });
-                        // Step 10 : Move, Charge
+                        // Step 10 : Move, Ready
                         missionSteps.Add(new MissionStepDefinition
                         {
                             ProcessStepDescription = "작업 대기 장소로 이동한 후 경광등 끄기",
@@ -2027,7 +2071,7 @@ namespace WPF_WMS01.ViewModels
                             IsLinkable = true,
                             LinkWaitTimeout = 3600,
                             PostMissionOperations = new List<MissionSubOperation> {
-                                //new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "팔레트 랙에 안착 여부 확인", McDiscreteInputAddress = _checkModbusDescreteInputAddr },
+                                new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "팔레트 랙에 안착 여부 확인", McDiscreteInputAddress = _checkModbusDescreteInputAddr },
                                 new MissionSubOperation { Type = SubOperationType.DbWriteRackData, Description = "입고 팔레트 정보 업데이트", DestRackIdForDbUpdate = destinationRackVm.Id }
                             }
                         });
@@ -2040,7 +2084,11 @@ namespace WPF_WMS01.ViewModels
                             ToNode = "Pallet_BWD_Pos",
                             Payload = ProductionLinePayload,
                             IsLinkable = true,
-                            LinkWaitTimeout = 3600
+                            LinkWaitTimeout = 3600,
+                            PostMissionOperations = new List<MissionSubOperation> // 공 파렛트 공급 준비 완료뙤었나?
+                            {
+                                new MissionSubOperation {Type = SubOperationType.McWaitAvailable, Description = "공 파렛트 공급 준비 완료 체크", WordDeviceCode = "W", McWordAddress = 0x151E, McWateValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
+                            }
                         });
                         // Step 7 : Check, Move, Pickup
                         missionSteps.Add(new MissionStepDefinition
@@ -2053,8 +2101,8 @@ namespace WPF_WMS01.ViewModels
                             LinkWaitTimeout = 3600,
                             PreMissionOperations = new List<MissionSubOperation> // 매거진에서 공 파레트 픽업 가능한가?
                             {
-                                new MissionSubOperation { Type = SubOperationType.McWaitAvailable, Description = "공 파렛트 배출 준비 완료 체크", WordDeviceCode = "W", McWordAddress = 0x151e, McWateValueInt = 1, McProtocolIpAddress = "192.168.200.111" },
-                                new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "공 파렛트 배출 시작 신호", WordDeviceCode = "W", McWordAddress = 0x101E, McWriteValueInt = 1, McProtocolIpAddress = "192.168.200.111"}
+                                new MissionSubOperation {Type = SubOperationType.McWriteSingleWord, Description = "공 파렛트 배출 준비 요청", WordDeviceCode = "W", McWordAddress = 0x101F, McWriteValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
+                                new MissionSubOperation {Type = SubOperationType.McWaitAvailable, Description = "공 파렛트 배출 준비 완료 체크", WordDeviceCode = "W", McWordAddress = 0x151F, McWateValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
                             }
                         });
                         // Step 8 : Move, Sensor OFF
@@ -2068,7 +2116,7 @@ namespace WPF_WMS01.ViewModels
                             LinkWaitTimeout = 3600,
                             PostMissionOperations = new List<MissionSubOperation> // 공 파렛트 배출 완료 신호, 안전 센서 OFF (1=OFF, 0=ON, 2=Quit)
                             {
-                                new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "공 파렛트 배출 완료 신호", WordDeviceCode = "W", McWordAddress = 0x101E, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"},
+                                new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "공 파렛트 배출 완료 신호", WordDeviceCode = "W", McWordAddress = 0x101F, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"},
                                 new MissionSubOperation { Type = SubOperationType.McWaitSensorOff, Description = "안전 센서 끄기", WordDeviceCode = "W", McWordAddress = 0x1008, McWriteValueInt = 1, McProtocolIpAddress = mcProtocolIpAddress }
                             }
                         });
@@ -2173,9 +2221,9 @@ namespace WPF_WMS01.ViewModels
                             IsLinkable = true,
                             LinkWaitTimeout = 3600,
                             PostMissionOperations = new List<MissionSubOperation> {
-                                    new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "팔레트 랙에 안착 여부 확인", McDiscreteInputAddress = _checkModbusDescreteInputAddr },
-                                    new MissionSubOperation { Type = SubOperationType.DbWriteRackData, Description = "입고 팔레트 정보 업데이트", DestRackIdForDbUpdate = destinationRackVm.Id }
-                                }
+                                new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "팔레트 랙에 안착 여부 확인", McDiscreteInputAddress = _checkModbusDescreteInputAddr },
+                                new MissionSubOperation { Type = SubOperationType.DbWriteRackData, Description = "입고 팔레트 정보 업데이트", DestRackIdForDbUpdate = destinationRackVm.Id }
+                            }
                         });
                         // Move, Charge
                         missionSteps.Add(new MissionStepDefinition
@@ -2206,11 +2254,6 @@ namespace WPF_WMS01.ViewModels
                 );
                 Debug.WriteLine($"[MainViewModel] Initialized MissionStatusPopupVm for {buttonVm.Content} (Coil: {buttonVm.CoilOutputAddress}).");
 
-                /*if(readStringValue == null)
-                {
-                    readStringValue = "Lot번호를 입력하세요";
-                    readIntvalue = 0;
-                }*/
                 // Initiate the robot mission
                 string processId = await InitiateRobotMissionProcess(
                     processType,
@@ -2537,6 +2580,129 @@ namespace WPF_WMS01.ViewModels
             }
         }
 
+        private async Task ExecuteChangePalletSupPoint()
+        {
+            Debug.WriteLine("[MainViewModel] ExecuteChangePalletSupPoint command executed..");
+            IsMenuOpen = false; // 메뉴 닫기
+
+            var popupViewModel = new RackTypeChangePopupViewModel(_isPalletDummyOdd);
+            var popupView = new RackTypeChangePopupView { DataContext = popupViewModel };
+            popupView.Title = "팔레트 팩 픽업 장소 변경";
+            bool? result = popupView.ShowDialog();
+
+            if (result == true)
+            {
+                _isPalletDummyOdd = !_isPalletDummyOdd;
+                Settings.Default.IsPalletSupOdd = _isPalletDummyOdd;
+                Settings.Default.Save();
+            }
+            else
+            {
+                ShowAutoClosingMessage("팔레트 팩 픽업 장소 변경이 취소되었습니다.");
+            }
+        }
+
+        private async Task ExecuteAmrMoveTo(bool isVehicleAMR1, bool isChargePoint)
+        {
+            Debug.WriteLine("[MainViewModel] ExecuteAmrMoveTo command executed..");
+            IsMenuOpen = false; // 메뉴 닫기
+
+            //var popupViewModel = new RackTypeChangePopupViewModel(_isPalletDummyOdd);
+            var popupViewModel = new RackTypeChangePopupViewModel(isVehicleAMR1, isChargePoint);
+            var popupView = new RackTypeChangePopupView { DataContext = popupViewModel };
+            popupView.Title = "AMR 이동";
+            bool? result = popupView.ShowDialog();
+
+            if (result == true) // 사용자가 '확인'을 눌렀을 경우
+            {
+                string amrId;
+                string amrName;
+                string targetId;
+
+                if (isVehicleAMR1 && isChargePoint)
+                {
+                    amrId = "AMR_1"; targetId = "Charge1"; amrName = "Poongsan_1";
+                }
+                else if (isVehicleAMR1 && !isChargePoint)
+                {
+                    amrId = "AMR_1"; targetId = "AMR1_WAIT"; amrName = "Poongsan_1";
+                }
+                else if (!isVehicleAMR1 && isChargePoint)
+                {
+                    amrId = "AMR_2"; targetId = "Charge2"; amrName = "Poongsan_2";
+                }
+                else //if (!isVehicleAMR1 && !isChargePoint)
+                {
+                    amrId = "AMR_2"; targetId = "Pallet_BWD_Pos"; amrName = "Poongsan_2";
+                }
+
+                List<MissionStepDefinition> missionSteps = new List<MissionStepDefinition>();
+
+                // 로봇 미션 단계 정의 (사용자 요청에 따라 4단계로 복원 및 IsLinkable, LinkedMission 조정)
+                if(!isVehicleAMR1 && isChargePoint) // Charge2로 가려면 항상 Pallet_BWD_Pos를 거쳐서
+                {
+                    missionSteps.Add(new MissionStepDefinition
+                    {
+                        ProcessStepDescription = $"AMR {amrName}를 {targetId} 노드로 이동",
+                        MissionType = "7",
+                        FromNode = "Pallet_BWD_Pos",
+                        ToNode = $"{targetId}",
+                        Payload = $"{amrId}",
+                        IsLinkable = false,
+                        LinkWaitTimeout = 3600
+                    });
+                }
+                /*else if(isVehicleAMR1 && isChargePoint) // Charge1으로 가려면 항상 AMR1_WAIT를 거쳐서
+                {
+                    missionSteps.Add(new MissionStepDefinition
+                    {
+                        ProcessStepDescription = $"AMR {amrName}를 {targetId} 노드로 이동",
+                        MissionType = "7",
+                        FromNode = "AMR1_WAIT",
+                        ToNode = $"{targetId}",
+                        Payload = $"{amrId}",
+                        IsLinkable = false,
+                        LinkWaitTimeout = 3600
+                    });
+                }*/
+                else
+                {
+                    missionSteps.Add(new MissionStepDefinition
+                    {
+                        ProcessStepDescription = $"AMR {amrName}를 {targetId} 노드로 이동",
+                        MissionType = "8",
+                        ToNode = $"{targetId}",
+                        Payload = $"{amrId}",
+                        IsLinkable = false,
+                        LinkWaitTimeout = 3600
+                    });
+                }
+
+                try
+                {
+                    // 로봇 미션 프로세스 시작
+                    string processId = await InitiateRobotMissionProcess(
+                        $"{amrName}, {targetId} 노드로 이동", // 미션 프로세스 유형
+                        missionSteps,
+                        null, // 잠긴 랙 ID 목록 전달
+                        null, // racksToProcess
+                        null, // initiatingCoilAddress
+                        true // isWarehouseMission = true로 전달
+                    );
+                    ShowAutoClosingMessage($"{amrName}, {targetId} 노드로 이동: {processId}");
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"{amrName} AMR 이동 미션 시작 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+            else
+            {
+                ShowAutoClosingMessage("AMR 이동이 취소되었습니다.");
+            }
+
+        }
+
         /// <summary>
         /// 입출고 장부 뷰 모델을 CurrentView에 설정하여 창을 엽니다.
         /// </summary>
@@ -2545,7 +2711,7 @@ namespace WPF_WMS01.ViewModels
             Debug.WriteLine("[MainViewModel] ExecuteOpenInOutLedger command executed..");
             IsMenuOpen = false; // 메뉴 닫기
 
-/*            if (CurrentView is InOutLedgerViewModel)
+            /*if (CurrentView is InOutLedgerViewModel)
             {
                 // 이미 입출고 장부 뷰가 열려있다면 아무것도 하지 않거나,
                 // 사용자에게 메시지를 표시할 수 있습니다.

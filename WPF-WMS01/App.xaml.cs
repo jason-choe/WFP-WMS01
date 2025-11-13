@@ -19,6 +19,7 @@ namespace WPF_WMS01
         public static IServiceProvider ServiceProvider { get; private set; }
 
         private static Mutex _mutex;
+        private Process consoleProcess;
 
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -35,6 +36,13 @@ namespace WPF_WMS01
             }
 
             base.OnStartup(e);
+
+            /*string wpfAppFolder = AppDomain.CurrentDomain.BaseDirectory;
+            string consoleAppPath = System.IO.Path.Combine(wpfAppFolder, "..\\..\\..\\..\\..\\PoongsansPLCMon\\PoongsansPLCMon\\bin\\Release\\net6.0", "PoongsansPLCMon.exe");
+            consoleProcess = Process.Start(consoleAppPath);
+            // WPF 앱 종료시 콘솔 프로세스 종료 등록
+            this.Exit += App_Exit;*/
+
             ConfigureServices();
 
             var mainWindow = ServiceProvider.GetRequiredService<MainWindow>();
@@ -43,6 +51,16 @@ namespace WPF_WMS01
             mainViewModel.SetRobotMissionService(ServiceProvider.GetRequiredService<IRobotMissionService>());
             mainWindow.DataContext = mainViewModel;
             mainWindow.Show();
+        }
+
+        private void App_Exit(object sender, ExitEventArgs e)
+        {
+            if (consoleProcess != null && !consoleProcess.HasExited)
+            {
+                // 콘솔 앱 종료 요청
+                consoleProcess.Kill();
+                consoleProcess.Dispose();
+            }
         }
 
         private void ConfigureServices()
@@ -62,7 +80,7 @@ namespace WPF_WMS01
 
             // App.config에서 미션 체크용 Modbus 설정 읽기
             string missionModbusMode = ConfigurationManager.AppSettings["MissionModbusMode"] ?? "TCP";
-            string missionModbusIp = ConfigurationManager.AppSettings["MissionModbusIpAddress"] ?? "192.168.200.202";
+            //string missionModbusIp = ConfigurationManager.AppSettings["MissionModbusIpAddress"] ?? "192.168.200.202";
             int missionModbusPort = int.Parse(ConfigurationManager.AppSettings["MissionModbusPort"] ?? "503");
             byte missionModbusSlaveId = ParseByteConfig(ConfigurationManager.AppSettings["MissionModbusSlaveId"], 1, false); // Modbus Slave ID는 보통 10진수
             string missionModbusComPort = ConfigurationManager.AppSettings["MissionModbusComPort"] ?? "COM4";
@@ -123,28 +141,28 @@ namespace WPF_WMS01
                 var mainViewModelInstance = provider.GetRequiredService<MainViewModel>();
 
                 // Mission Check Modbus Service 인스턴스를 팩토리 메서드 내부에서 직접 생성
-                ModbusClientService missionCheckModbusService;
+                ModbusClientService missionCheckModbusServiceA;
                 if (missionModbusMode.Equals("TCP", StringComparison.OrdinalIgnoreCase))
                 {
-                    missionCheckModbusService = new ModbusClientService(
-                        ConfigurationManager.AppSettings["WarehouseAMR"].Equals("AMR_1") ? "192.168.200.202" : "192.168.200.222", // missionModbusIp, 
+                    missionCheckModbusServiceA = new ModbusClientService( // for Warehouse AMR
+                        ConfigurationManager.AppSettings["WarehouseAMRPlcIp"] ?? "192.168.200.202", // missionModbusIp, 
                         missionModbusPort, missionModbusSlaveId);
                 }
                 else // RTU
                 {
-                    missionCheckModbusService = new ModbusClientService(missionModbusComPort, missionModbusBaudRate, missionModbusParity, missionModbusStopBits, missionModbusDataBits, missionModbusSlaveId);
+                    missionCheckModbusServiceA = new ModbusClientService(missionModbusComPort, missionModbusBaudRate, missionModbusParity, missionModbusStopBits, missionModbusDataBits, missionModbusSlaveId);
                 }
 
-                ModbusClientService missionCheckModbusService2; // for AMR_2
+                ModbusClientService missionCheckModbusServiceB; // for Production line AMR
                 if (missionModbusMode.Equals("TCP", StringComparison.OrdinalIgnoreCase))
                 {
-                    missionCheckModbusService2 = new ModbusClientService(
-                        ConfigurationManager.AppSettings["PackagingLineAMR"].Equals("AMR_2") ? "192.168.200.222" : "192.168.200.202", // missionModbusIp, 
+                    missionCheckModbusServiceB = new ModbusClientService(
+                        ConfigurationManager.AppSettings["PackagingLineAMRPlcIp"] ??  "192.168.200.222", // missionModbusIp, 
                         missionModbusPort, missionModbusSlaveId);
                 }
                 else // RTU
                 {
-                    missionCheckModbusService = new ModbusClientService(missionModbusComPort, missionModbusBaudRate, missionModbusParity, missionModbusStopBits, missionModbusDataBits, missionModbusSlaveId);
+                    missionCheckModbusServiceB = new ModbusClientService(missionModbusComPort, missionModbusBaudRate, missionModbusParity, missionModbusStopBits, missionModbusDataBits, missionModbusSlaveId);
                 }
 
                 return new RobotMissionService(
@@ -153,7 +171,8 @@ namespace WPF_WMS01
                     mcProtocolService, // IMcProtocolService 전달
                     wrapRackTitle,
                     mainViewModelInstance.GetRackViewModelById, // MainViewModel의 델리게이트 전달
-                    missionCheckModbusService, // Mission Check ModbusClientService 인스턴스 직접 전달
+                    missionCheckModbusServiceA, // Mission Check ModbusClientService 인스턴스 직접 전달
+                    missionCheckModbusServiceB, // Mission Check ModbusClientService 인스턴스 직접 전달
                     () => mainViewModelInstance.InputStringForBullet, // InputStringForBullet 델리게이트 전달
                     () => mainViewModelInstance.InputStringForButton, // InputStringForButton 델리게이트 전달
                     () => mainViewModelInstance.InputStringForBoxes, // InputStringForBoxes 델리게이트 전달
