@@ -165,6 +165,8 @@ namespace WPF_WMS01.ViewModels
         private DispatcherTimer _refreshTimer;
         private DispatcherTimer _modbusReadTimer; // Modbus Coil 상태 읽기용 타이머
 
+        private DispatcherTimer _vehicleStateReadTimer; // Modbus Coil 상태 읽기용 타이머
+
         //public readonly string _waitRackTitle;
         public readonly string _wrapRackTitle;
         public readonly string _amrRackTitle;
@@ -266,6 +268,14 @@ namespace WPF_WMS01.ViewModels
         {
             get => _currentMessagePopupViewModel;
             set => SetProperty(ref _currentMessagePopupViewModel, value);
+        }
+
+        // Vehicle state 표시를 위한 속성 추가
+        private VehicleInformationPopupViewModel _vehicleInfoViewModel;
+        public VehicleInformationPopupViewModel VehicleInfoViewModel
+        {
+            get => _vehicleInfoViewModel;
+            set => SetProperty(ref _vehicleInfoViewModel, value);
         }
 
         private bool _isMessagePopupVisible;
@@ -398,6 +408,7 @@ namespace WPF_WMS01.ViewModels
             // 팝업 메시지 초기화
             // CurrentMessagePopupViewModel을 생성자에서 초기화하도록 보장
             CurrentMessagePopupViewModel = new AutoClosingMessagePopupViewModel(string.Empty);
+            VehicleInfoViewModel = new VehicleInformationPopupViewModel(string.Empty);
             IsMessagePopupVisible = false;
             SetupMessagePopupTimer(); // 메시지 팝업 타이머 설정
 
@@ -405,6 +416,7 @@ namespace WPF_WMS01.ViewModels
 
             SetupRefreshTimer(); // RackList 갱신 타이머
             SetupModbusReadTimer(); // Modbus Coil 상태 읽기 타이머 설정
+            SetupVehicleStatesReadTimer(); // Vehicle 상태 읽기 타이머 설정
             _ = LoadRacksAsync();
             _ = AutoLoginOnStartup();
             Debug.WriteLine("[MainViewModel] Constructor finished.");
@@ -941,6 +953,88 @@ namespace WPF_WMS01.ViewModels
             }
         }
 
+        // Vehicle 상태 읽기 타이머 설정
+        private void SetupVehicleStatesReadTimer()
+        {
+            _vehicleStateReadTimer = new DispatcherTimer();
+            _vehicleStateReadTimer.Interval = TimeSpan.FromMilliseconds(2000); // 2초마다 읽기 (조정 가능)
+            _vehicleStateReadTimer.Tick += VehicleStateReadTimer_Tick;
+            _vehicleStateReadTimer.Start();
+            Debug.WriteLine("[ModbusService] Vehicle State Read Timer Started.");
+        }
+
+        public string ConvertCamelCaseWithSpaces(string input)
+        {
+            if (string.IsNullOrEmpty(input))
+                return input;
+
+            var result = new System.Text.StringBuilder();
+            result.Append(char.ToUpper(input[0]));
+
+            for (int i = 1; i < input.Length; i++)
+            {
+                char c = input[i];
+                if (char.IsUpper(c))
+                {
+                    result.Append(' ');
+                    result.Append(char.ToLower(c));
+                }
+                else
+                {
+                    result.Append(c);
+                }
+            }
+
+            return result.ToString();
+        }
+
+        private async void VehicleStateReadTimer_Tick(object sender, EventArgs e)
+        {
+            if (IsLoggedIn)
+            {
+                try
+                {
+                    // AntApiModels.GetMissionInfoResponse 사용
+                    var vehicleInfoResponse = await _httpService.GetAsync<GetVehicleInfoResponse>($"wms/rest/v{_httpService.CurrentApiVersionMajor}.{_httpService.CurrentApiVersionMinor}/vehicles").ConfigureAwait(false);
+                    string[] message = new string[2];
+                    if (vehicleInfoResponse?.Payload?.Vehicles != null && vehicleInfoResponse.Payload.Vehicles.Any())
+                    {
+                        foreach (VehicleDetails item in vehicleInfoResponse.Payload.Vehicles)
+                        {
+                            string vehicleName = item.Name;
+                            string baterryPercentage = item.State.BatteryInfo[0] ?? "__";
+                            string batteryVoltage = item.State.BatteryInfo[1] ?? "__";
+                            string state = item.State.VehicleState[0] ?? "__";
+                            if (vehicleName.Equals("Poongsan_1"))
+                                message[0] = $"{vehicleName} :  {baterryPercentage}%  {batteryVoltage}V\t{ConvertCamelCaseWithSpaces(state)}";
+                            else
+                                message[1] = $"{vehicleName} :  {baterryPercentage}%  {batteryVoltage}V\t{ConvertCamelCaseWithSpaces(state)}";
+                        }
+                        VehicleInfoViewModel.Message = $"{message[0]}\n{message[1]}";
+                    }
+                }
+                catch (HttpRequestException ex)
+                {
+                    Debug.WriteLine($"HTTP 요청 에러: {ex.Message}");
+                    // 필요 시 재시도, 로깅 등 추가 처리
+                    return;
+                }
+                catch (TaskCanceledException ex)
+                {
+                    Debug.WriteLine($"요청 타임아웃: {ex.Message}");
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"예상치 못한 에러: {ex.Message}");
+                    return;
+                }
+            }
+            else
+            {
+
+            }
+        }
 
         // Modbus Coil 상태 읽기 타이머 설정
         private void SetupModbusReadTimer()
@@ -951,7 +1045,6 @@ namespace WPF_WMS01.ViewModels
             _modbusReadTimer.Start();
             Debug.WriteLine("[ModbusService] Modbus Read Timer Started.");
         }
-
         // Modbus Discrete Input/Coil 상태 주기적 읽기
         private async void ModbusReadTimer_Tick(object sender, EventArgs e)
         {
@@ -2025,12 +2118,16 @@ namespace WPF_WMS01.ViewModels
                         // Step 3 : Sensor OFF, Move, Pickup
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = $"{buttonVm.Title} 제품 팔레트 픽업",
+                            ProcessStepDescription = $"{buttonVm.Title} 제품 팔레트 픽업, Lot 정보 읽기",
                             MissionType = "8",
                             ToNode = $"Work_{workPoint}_PickUP",
                             Payload = ProductionLinePayload,
                             IsLinkable = true,
-                            LinkWaitTimeout = 3600
+                            LinkWaitTimeout = 3600,
+                            PostMissionOperations = new List<MissionSubOperation> // Lot 정보 읽기
+                            {
+                                new MissionSubOperation { Type = SubOperationType.McReadLotNoBoxCount, Description = "LotNo., BoxCount 읽기", WordDeviceCode = "W", McWordAddress = mcWordAddress, McStringLengthWords = 6, McProtocolIpAddress = mcProtocolIpAddress }
+                            }
                         });
                         // Step 4 : Move, Sensor ON
                         missionSteps.Add(new MissionStepDefinition
@@ -2041,10 +2138,9 @@ namespace WPF_WMS01.ViewModels
                             Payload = ProductionLinePayload,
                             IsLinkable = true,
                             LinkWaitTimeout = 3600,
-                            PostMissionOperations = new List<MissionSubOperation> // 안전 센서 ON (1=OFF, 0=ON, 2=Quit), Lot 정보 읽기
+                            PostMissionOperations = new List<MissionSubOperation> // 안전 센서 ON (1=OFF, 0=ON, 2=Quit)
                             {
-                                new MissionSubOperation { Type = SubOperationType.McWaitSensorOn, Description = "안전 센서 켜기", WordDeviceCode = "W", McWordAddress = 0x1008, McWriteValueInt = 0, McProtocolIpAddress = mcProtocolIpAddress },
-                                new MissionSubOperation { Type = SubOperationType.McReadLotNoBoxCount, Description = "LotNo., BoxCount 읽기", WordDeviceCode = "W", McWordAddress = mcWordAddress, McStringLengthWords = 6, McProtocolIpAddress = mcProtocolIpAddress }
+                                new MissionSubOperation { Type = SubOperationType.McWaitSensorOn, Description = "안전 센서 켜기", WordDeviceCode = "W", McWordAddress = 0x1008, McWriteValueInt = 0, McProtocolIpAddress = mcProtocolIpAddress }
                             }
                         });
 

@@ -1128,25 +1128,28 @@ namespace WPF_WMS01.ViewModels
                             });
                             missionSteps.Add(new MissionStepDefinition
                             {
-                                ProcessStepDescription = $"{selectedLine.Name} 제품 팔레트 픽업",
+                                ProcessStepDescription = $"{selectedLine.Name} 제품 팔레트 픽업, Lot 정보 읽기",
                                 MissionType = "8",
                                 ToNode = $"Work_{workPoint}_PickUP",
                                 Payload = _mainViewModel.ProductionLinePayload,
                                 IsLinkable = true,
-                                LinkWaitTimeout = 3600
+                                LinkWaitTimeout = 3600,
+                                PostMissionOperations = new List<MissionSubOperation> // Lot 정보 읽기
+                                {
+                                    new MissionSubOperation { Type = SubOperationType.McReadLotNoBoxCount, Description = "LotNo., BoxCount 읽기", WordDeviceCode = "W", McWordAddress = lotInfoReadAddress, McStringLengthWords = 6, McProtocolIpAddress = mcProtocolIpAddress }
+                                }
                             });
                             missionSteps.Add(new MissionStepDefinition
                             {
-                                ProcessStepDescription = $"{selectedLine.Name}(으)로부터 나와서 안전 센서 켜기, Lot 정보 읽기",
+                                ProcessStepDescription = $"{selectedLine.Name}(으)로부터 나와서 안전 센서 켜기",
                                 MissionType = "8",
                                 ToNode = $"{swapPoint}_SENSOR",
                                 Payload = _mainViewModel.ProductionLinePayload,
                                 IsLinkable = true,
                                 LinkWaitTimeout = 3600,
-                                PostMissionOperations = new List<MissionSubOperation> // 안전 센서 ON (1=OFF, 0=ON, 2=Quit), Lot 정보 읽기
+                                PostMissionOperations = new List<MissionSubOperation> // 안전 센서 ON (1=OFF, 0=ON, 2=Quit)
                                 {
                                     new MissionSubOperation { Type = SubOperationType.McWaitSensorOn, Description = "안전 센서 켜기", WordDeviceCode = "W", McWordAddress = 0x1008, McWriteValueInt = 0, McProtocolIpAddress = mcProtocolIpAddress },
-                                    new MissionSubOperation { Type = SubOperationType.McReadLotNoBoxCount, Description = "LotNo., BoxCount 읽기", WordDeviceCode = "W", McWordAddress = lotInfoReadAddress, McStringLengthWords = 6, McProtocolIpAddress = mcProtocolIpAddress }
                                 }
                             });
                             // Rack에 적치하기 위한 이동 및 적치

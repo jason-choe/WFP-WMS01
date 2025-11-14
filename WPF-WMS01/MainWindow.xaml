@@ -722,7 +722,11 @@
                 Visibility="{Binding IsMessagePopupVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
             <popups:AutoClosingMessagePopupView DataContext="{Binding CurrentMessagePopupViewModel}" />
         </Border>
+        <Border Grid.Row="2" Margin="35,35,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Panel.ZIndex="999">
+            <popups:VehicleInformationPopupView DataContext="{Binding VehicleInfoViewModel}"/>
+        </Border>
         
+
         <Grid Grid.Row="3" Margin="40,0,40,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>

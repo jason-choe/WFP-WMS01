@@ -290,6 +290,53 @@ namespace WPF_WMS01.Models
         public int ReturnCode { get; set; }
     }
 
+    // ====== 4. Get information about all vehicles (GET) - Appendix G1.1.21 ======
+
+    public class VehicleStateDetails
+    {
+        [JsonProperty("battery.info")]
+        public List<string> BatteryInfo { get; set; } // Percentage, Voltage
+
+        [JsonProperty("vehicle.state")]
+        public List<string> VehicleState { get; set; } // State, Blocked
+    }
+
+    public class VehicleDetails
+    {
+        /// <summary>
+        /// 차량 이름 (예: Poongsan_1, Poongsan_2)
+        /// </summary>
+        [JsonProperty("name")]
+        public string Name { get; set; }
+
+        /// <summary>
+        /// 차량의 현재 상태 (예: "IDLE", "CHARGING")
+        /// </summary>
+        [JsonProperty("state")]
+        public VehicleStateDetails State { get; set; }
+    }
+
+    public class GetVecleInfoResponsePayload
+    {
+        [JsonProperty("antServerPause")]
+        public bool AntServerPause { get; set; }
+
+        [JsonProperty("resultinfo")]
+        public List<int> ResultInfo { get; set; }
+
+        [JsonProperty("vehicles")]
+        public List<VehicleDetails> Vehicles { get; set; }
+    }
+
+    public class GetVehicleInfoResponse
+    {
+        [JsonProperty("payload")]
+        public GetVecleInfoResponsePayload Payload { get; set; }
+
+        [JsonProperty("retcode")]
+        public int ReturnCode { get; set; }
+    }
+
     // RobotMissionInfo 클래스는 이제 Models/RobotMissionInfo.cs에 정의됩니다.
     // 여기서는 해당 클래스 정의를 제거합니다.
 
