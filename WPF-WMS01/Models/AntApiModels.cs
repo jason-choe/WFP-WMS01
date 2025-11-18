@@ -299,6 +299,9 @@ namespace WPF_WMS01.Models
 
         [JsonProperty("vehicle.state")]
         public List<string> VehicleState { get; set; } // State, Blocked
+
+        [JsonProperty("errors")]
+        public List<string> Errors { get; set; } // List of current vehicle errors if any.
     }
 
     public class VehicleDetails

@@ -37,11 +37,11 @@ namespace WPF_WMS01
 
             base.OnStartup(e);
 
-            /*string wpfAppFolder = AppDomain.CurrentDomain.BaseDirectory;
-            string consoleAppPath = System.IO.Path.Combine(wpfAppFolder, "..\\..\\..\\..\\..\\PoongsansPLCMon\\PoongsansPLCMon\\bin\\Release\\net6.0", "PoongsansPLCMon.exe");
+            string wpfAppFolder = AppDomain.CurrentDomain.BaseDirectory;
+            string consoleAppPath = System.IO.Path.Combine(wpfAppFolder, "SubApps", "PoongsansPLCMon.exe");
             consoleProcess = Process.Start(consoleAppPath);
             // WPF 앱 종료시 콘솔 프로세스 종료 등록
-            this.Exit += App_Exit;*/
+            this.Exit += App_Exit;
 
             ConfigureServices();
 

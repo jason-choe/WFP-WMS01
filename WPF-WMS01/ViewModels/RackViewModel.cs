@@ -384,6 +384,8 @@ namespace WPF_WMS01.ViewModels
                 case 166:
                     MessageBox.Show($"{Title} 입고 불가 : 탄종이 입력되지 않았습니다.", "입고 불가", MessageBoxButton.OK, MessageBoxImage.Warning);
                     break;
+                case 39:
+                    break;
                 default:
                     MessageBox.Show($"랙 {Title} (ImageIndex: {ImageIndex}): 기타 유형의 팝업!", "랙 상세", MessageBoxButton.OK, MessageBoxImage.Information);
                     break;
@@ -777,18 +779,18 @@ namespace WPF_WMS01.ViewModels
                     {
                         workPoint = "Manual_1";
                         swapPoint = "Manual";
-                        mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddress762mm"] ?? "127.168.200.120";
-                        lotInfoReadAddress = 0x1510;
-                        lightAddress = 0x101D;
+                        mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddressQatar"] ?? "127.168.200.120";
+                        lotInfoReadAddress = 0x1520;
+                        lightAddress = 0x102D;
                         coilAddress = 9;
                     }
                     else if (selectedLine.Id == 7)
                     {
                         workPoint = "Manual_2";
                         swapPoint = "Manual";
-                        mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddress762mm"] ?? "127.168.200.120";
-                        lotInfoReadAddress = 0x1520;
-                        lightAddress = 0x102D;
+                        mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddressQatar"] ?? "127.168.200.120";
+                        lotInfoReadAddress = 0x1510;
+                        lightAddress = 0x101D;
                         coilAddress = 10;
                     }
                     else //if (selectedLine.Id == 8)
@@ -809,7 +811,7 @@ namespace WPF_WMS01.ViewModels
                     racksToLock.Add(outRackVm.Id);
 
                     var inShelf = $"{int.Parse(inRackVm.Title.Split('-')[0]):D2}_{inRackVm.Title.Split('-')[1]}";
-                    var outShelf = $"{int.Parse(outRackVm.Title.Split('-')[0]):D2}_{inRackVm.Title.Split('-')[1]}";
+                    var outShelf = $"{int.Parse(outRackVm.Title.Split('-')[0]):D2}_{outRackVm.Title.Split('-')[1]}";
 
 
                     missionSteps = new List<MissionStepDefinition>
@@ -914,7 +916,7 @@ namespace WPF_WMS01.ViewModels
                             // 반출할 라이트 팔레트 픽업
                             missionSteps.Add(new MissionStepDefinition
                             {
-                                ProcessStepDescription = "라이트 반출 장소로 이동하여, 라이트 팔레트 픽업",
+                                ProcessStepDescription = $"라이트 반출 장소({outRackVm.Title})로 이동하여, 라이트 팔레트 픽업",
                                 MissionType = "8",
                                 ToNode = $"Rack_{outShelf}_PickUP",
                                 Payload = _mainViewModel.ProductionLinePayload,
@@ -1045,7 +1047,7 @@ namespace WPF_WMS01.ViewModels
                             // 반출할 라이트 팔레트 픽업
                             missionSteps.Add(new MissionStepDefinition
                             {
-                                ProcessStepDescription = "라이트 반출 장소로 이동하여, 라이트 팔레트 픽업",
+                                ProcessStepDescription = $"라이트 반출 장소({outRackVm.Title})로 이동하여, 라이트 팔레트 픽업",
                                 MissionType = "8",
                                 ToNode = $"Rack_{outShelf}_PickUP",
                                 Payload = _mainViewModel.ProductionLinePayload,
@@ -1181,7 +1183,7 @@ namespace WPF_WMS01.ViewModels
                             });
                             missionSteps.Add(new MissionStepDefinition
                             {
-                                ProcessStepDescription = $"라이트 반출 장소로 이동하여, 라이트 팔레트 픽업",
+                                ProcessStepDescription = $"라이트 반출 장소({outRackVm.Title})로 이동하여, 라이트 팔레트 픽업",
                                 MissionType = "8",
                                 ToNode = $"Rack_{outShelf}_PickUP",
                                 Payload = _mainViewModel.ProductionLinePayload,
@@ -1300,7 +1302,7 @@ namespace WPF_WMS01.ViewModels
 
                             missionSteps.Add(new MissionStepDefinition
                             {
-                                ProcessStepDescription = $"라이트 반출 장소로 이동하여, 라이트 팔레트 픽업",
+                                ProcessStepDescription = $"라이트 반출 장소({outRackVm.Title})로 이동하여, 라이트 팔레트 픽업",
                                 MissionType = "8",
                                 ToNode = $"Rack_{outShelf}_PickUP",
                                 Payload = _mainViewModel.ProductionLinePayload,

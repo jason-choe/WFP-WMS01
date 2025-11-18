@@ -1002,13 +1002,18 @@ namespace WPF_WMS01.ViewModels
                         foreach (VehicleDetails item in vehicleInfoResponse.Payload.Vehicles)
                         {
                             string vehicleName = item.Name;
-                            string baterryPercentage = item.State.BatteryInfo[0] ?? "__";
-                            string batteryVoltage = item.State.BatteryInfo[1] ?? "__";
+                            string baterryPercentage = item.State.BatteryInfo[0] ?? "??";
+                            string batteryVoltage = item.State.BatteryInfo[1] ?? "??.???";
                             string state = item.State.VehicleState[0] ?? "__";
+
+                            float f2 = 0.0000f;
+                            if (state.Equals("charging") && float.TryParse(batteryVoltage, out f2) && f2 < 50.0f)
+                                state = "Charging Station";
+
                             if (vehicleName.Equals("Poongsan_1"))
-                                message[0] = $"{vehicleName} :  {baterryPercentage}%  {batteryVoltage}V\t{ConvertCamelCaseWithSpaces(state)}";
+                                message[0] = $"{vehicleName} :  {baterryPercentage}%  {batteryVoltage.Substring(0, 6)}V\t{ConvertCamelCaseWithSpaces(state)}";
                             else
-                                message[1] = $"{vehicleName} :  {baterryPercentage}%  {batteryVoltage}V\t{ConvertCamelCaseWithSpaces(state)}";
+                                message[1] = $"{vehicleName} :  {baterryPercentage}%  {batteryVoltage.Substring(0, 6)}V\t{ConvertCamelCaseWithSpaces(state)}";
                         }
                         VehicleInfoViewModel.Message = $"{message[0]}\n{message[1]}";
                     }
@@ -1434,11 +1439,11 @@ namespace WPF_WMS01.ViewModels
                             Payload = ProductionLinePayload,
                             IsLinkable = true,
                             LinkWaitTimeout = 3600,
-                            PreMissionOperations = new List<MissionSubOperation> // 매거진에서 공 파레트 픽업 가능한가?
-                            {
-                                new MissionSubOperation {Type = SubOperationType.McWriteSingleWord, Description = "팔레트 팩 공급 준비 요청", WordDeviceCode = "W", McWordAddress = 0x102F, McWriteValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
-                                new MissionSubOperation {Type = SubOperationType.McWaitAvailable, Description = "팔레트 팩 공급 준비 완료 체크", WordDeviceCode = "W", McWordAddress = 0x152F, McWateValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
-                            }
+                            //PreMissionOperations = new List<MissionSubOperation> // 매거진에서 공 파레트 픽업 가능한가?
+                            //{
+                            //    new MissionSubOperation {Type = SubOperationType.McWriteSingleWord, Description = "팔레트 팩 공급 준비 요청", WordDeviceCode = "W", McWordAddress = 0x102F, McWriteValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
+                            //    new MissionSubOperation {Type = SubOperationType.McWaitAvailable, Description = "팔레트 팩 공급 준비 완료 체크", WordDeviceCode = "W", McWordAddress = 0x152F, McWateValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
+                            //}
                         });
                         // 4. Move and Quit
                         missionSteps.Add(new MissionStepDefinition
@@ -1451,7 +1456,7 @@ namespace WPF_WMS01.ViewModels
                             LinkWaitTimeout = 3600,
                             PreMissionOperations = new List<MissionSubOperation> // 경광등 끄기
                             {
-                                new MissionSubOperation {Type = SubOperationType.McWriteSingleWord, Description = "팔레트 팩 공급 완료 신호", WordDeviceCode = "W", McWordAddress = 0x102F, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"},
+                                //new MissionSubOperation {Type = SubOperationType.McWriteSingleWord, Description = "팔레트 팩 공급 완료 신호", WordDeviceCode = "W", McWordAddress = 0x102F, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"},
                                 new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "경광등 끄기", WordDeviceCode = "W", McWordAddress = 0x102D, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"}
                             }
                         });
@@ -1482,11 +1487,11 @@ namespace WPF_WMS01.ViewModels
                             Payload = ProductionLinePayload,
                             IsLinkable = true,
                             LinkWaitTimeout = 3600,
-                            PreMissionOperations = new List<MissionSubOperation> // 매거진에서 패드 드레이 픽업 가능한가?
-                            {
-                                new MissionSubOperation {Type = SubOperationType.McWriteSingleWord, Description = "패드 트레이 배출 준비 요청", WordDeviceCode = "W", McWordAddress = 0x103C, McWriteValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
-                                new MissionSubOperation {Type = SubOperationType.McWaitAvailable, Description = "패드 트레이 배출 준비 완료 체크", WordDeviceCode = "W", McWordAddress = 0x153C, McWateValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
-                            }
+                            //PreMissionOperations = new List<MissionSubOperation> // 매거진에서 패드 드레이 픽업 가능한가?
+                            //{
+                            //    new MissionSubOperation {Type = SubOperationType.McWriteSingleWord, Description = "패드 트레이 배출 준비 요청", WordDeviceCode = "W", McWordAddress = 0x103C, McWriteValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
+                            //    new MissionSubOperation {Type = SubOperationType.McWaitAvailable, Description = "패드 트레이 배출 준비 완료 체크", WordDeviceCode = "W", McWordAddress = 0x153C, McWateValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
+                            //}
                         });
                         // 3. Move, Drop
                         missionSteps.Add(new MissionStepDefinition
@@ -1497,10 +1502,10 @@ namespace WPF_WMS01.ViewModels
                             Payload = ProductionLinePayload,
                             IsLinkable = true,
                             LinkWaitTimeout = 3600,
-                            PreMissionOperations = new List<MissionSubOperation> // 패드 드레이 배출 완료
-                            {
-                                new MissionSubOperation {Type = SubOperationType.McWriteSingleWord, Description = "패드 트레이 배출 완료 신호", WordDeviceCode = "W", McWordAddress = 0x103C, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"},
-                            }
+                            //PreMissionOperations = new List<MissionSubOperation> // 패드 드레이 배출 완료
+                            //{
+                            //    new MissionSubOperation {Type = SubOperationType.McWriteSingleWord, Description = "패드 트레이 배출 완료 신호", WordDeviceCode = "W", McWordAddress = 0x103C, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"},
+                            //}
                         });
                         // 4. Move, Pickup
                         missionSteps.Add(new MissionStepDefinition
@@ -1571,11 +1576,11 @@ namespace WPF_WMS01.ViewModels
                             Payload = ProductionLinePayload,
                             IsLinkable = true,
                             LinkWaitTimeout = 3600,
-                            PreMissionOperations = new List<MissionSubOperation> // 매거진에 패드 드레이 공급 가능한가?
-                            {
-                                new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "패드 트레이 투입 준비 요청", WordDeviceCode = "W", McWordAddress = 0x103F, McWriteValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
-                                new MissionSubOperation { Type = SubOperationType.McWaitAvailable, Description = "패드 트레이 투입 준비 완료 체크", WordDeviceCode = "W", McWordAddress = 0x153F, McWateValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
-                            }
+                            //PreMissionOperations = new List<MissionSubOperation> // 매거진에 패드 드레이 공급 가능한가?
+                            //{
+                            //    new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "패드 트레이 투입 준비 요청", WordDeviceCode = "W", McWordAddress = 0x103F, McWriteValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
+                            //    new MissionSubOperation { Type = SubOperationType.McWaitAvailable, Description = "패드 트레이 투입 준비 완료 체크", WordDeviceCode = "W", McWordAddress = 0x153F, McWateValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
+                            //}
                         });
                         // 11. Move & Quit
                         missionSteps.Add(new MissionStepDefinition
@@ -1588,8 +1593,8 @@ namespace WPF_WMS01.ViewModels
                             LinkWaitTimeout = 3600,
                             PreMissionOperations = new List<MissionSubOperation> // 패드 드레이 공급 완료, 경광등 끄기
                             {
-                                new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "패드 트레이 투입 완료 신호", WordDeviceCode = "W", McWordAddress = 0x103F, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"},
-                                new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "경광등 켜기", WordDeviceCode = "W", McWordAddress = 0x103D, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"}
+                                //new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "패드 트레이 투입 완료 신호", WordDeviceCode = "W", McWordAddress = 0x103F, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"},
+                                new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "경광등 끄기", WordDeviceCode = "W", McWordAddress = 0x103D, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"}
                             }
                         });
                         break;
@@ -1742,11 +1747,11 @@ namespace WPF_WMS01.ViewModels
                             Payload = ProductionLinePayload,
                             IsLinkable = true,
                             LinkWaitTimeout = 3600,
-                            PreMissionOperations = new List<MissionSubOperation> // 매거진에서 공 파레트 픽업 가능한가?
-                            {
-                                new MissionSubOperation {Type = SubOperationType.McWriteSingleWord, Description = "공 파렛트 배출 준비 요청", WordDeviceCode = "W", McWordAddress = 0x101F, McWriteValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
-                                new MissionSubOperation {Type = SubOperationType.McWaitAvailable, Description = "공 파렛트 배출 준비 완료 체크", WordDeviceCode = "W", McWordAddress = 0x151F, McWateValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
-                            }
+                            //PreMissionOperations = new List<MissionSubOperation> // 매거진에서 공 파레트 픽업 가능한가?
+                            //{
+                            //    new MissionSubOperation {Type = SubOperationType.McWriteSingleWord, Description = "공 파렛트 배출 준비 요청", WordDeviceCode = "W", McWordAddress = 0x101F, McWriteValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
+                            //    new MissionSubOperation {Type = SubOperationType.McWaitAvailable, Description = "공 파렛트 배출 준비 완료 체크", WordDeviceCode = "W", McWordAddress = 0x151F, McWateValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
+                            //}
                         });
                         // Step 8 : Move, Sensor Off
                         missionSteps.Add(new MissionStepDefinition
@@ -1759,7 +1764,7 @@ namespace WPF_WMS01.ViewModels
                             LinkWaitTimeout = 3600,
                             PostMissionOperations = new List<MissionSubOperation> // 공 파렛트 배출 완료 신호
                             {
-                                new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "공 파렛트 배출 완료 신호", WordDeviceCode = "W", McWordAddress = 0x101F, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"},
+                                //new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "공 파렛트 배출 완료 신호", WordDeviceCode = "W", McWordAddress = 0x101F, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"},
                                 new MissionSubOperation { Type = SubOperationType.McWaitSensorOff, Description = "안전 센서 끄기", WordDeviceCode = "W", McWordAddress = 0x1008, McWriteValueInt = 1, McProtocolIpAddress = mcProtocolIpAddress }
                             }
                         });
@@ -1912,11 +1917,11 @@ namespace WPF_WMS01.ViewModels
                             Payload = ProductionLinePayload,
                             IsLinkable = true,
                             LinkWaitTimeout = 3600,
-                            PreMissionOperations = new List<MissionSubOperation> // 매거진에서 공 파레트 픽업 가능한가?
-                            {
-                                new MissionSubOperation {Type = SubOperationType.McWriteSingleWord, Description = "공 파렛트 배출 준비 요청", WordDeviceCode = "W", McWordAddress = 0x101F, McWriteValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
-                                new MissionSubOperation {Type = SubOperationType.McWaitAvailable, Description = "공 파렛트 배출 준비 완료 체크", WordDeviceCode = "W", McWordAddress = 0x151F, McWateValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
-                            }
+                            //PreMissionOperations = new List<MissionSubOperation> // 매거진에서 공 파레트 픽업 가능한가?
+                            //{
+                            //    new MissionSubOperation {Type = SubOperationType.McWriteSingleWord, Description = "공 파렛트 배출 준비 요청", WordDeviceCode = "W", McWordAddress = 0x101F, McWriteValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
+                            //    new MissionSubOperation {Type = SubOperationType.McWaitAvailable, Description = "공 파렛트 배출 준비 완료 체크", WordDeviceCode = "W", McWordAddress = 0x151F, McWateValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
+                            //}
                         });
                         // Step 7 : Move, Turn
                         missionSteps.Add(new MissionStepDefinition
@@ -1927,11 +1932,10 @@ namespace WPF_WMS01.ViewModels
                             Payload = ProductionLinePayload,
                             IsLinkable = true,
                             LinkWaitTimeout = 3600,
-                            PostMissionOperations = new List<MissionSubOperation> // 공 파렛트 배출 완료 신호
-                            {
-                                //new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "공 파렛트 배출 완료 신호", WordDeviceCode = "W", McWordAddress = 0x101E, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"}
-                                new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "공 파렛트 배출 완료 신호", WordDeviceCode = "W", McWordAddress = 0x101F, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"}
-                            }
+                            //PostMissionOperations = new List<MissionSubOperation> // 공 파렛트 배출 완료 신호
+                            //{
+                            //    new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "공 파렛트 배출 완료 신호", WordDeviceCode = "W", McWordAddress = 0x101F, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"}
+                            //}
                         });
                         // Step 8 : Move, Drop
                         missionSteps.Add(new MissionStepDefinition
@@ -2064,14 +2068,14 @@ namespace WPF_WMS01.ViewModels
                             workPoint = "Manual_1";
                             swapPoint = "Manual";
                             mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddressQatar"] ?? "192.168.200.120";
-                            mcWordAddress = 0x1510;
+                            mcWordAddress = 0x1520;
                         }
                         else if (buttonVm.Content.Equals("카타르 2"))
                         {
                             workPoint = "Manual_2";
                             swapPoint = "Manual";
                             mcProtocolIpAddress = ConfigurationManager.AppSettings["McProtocolIpAddressQatar"] ?? "192.168.200.120";
-                            mcWordAddress = 0x1520;
+                            mcWordAddress = 0x1510;
                         }
 
                         readStringValue = "PSD25L501-066";
@@ -2132,7 +2136,7 @@ namespace WPF_WMS01.ViewModels
                         // Step 4 : Move, Sensor ON
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = $"{buttonVm.Title}(으)로부터 나와서 안전 센서 켜기, Lot 정보 읽기",
+                            ProcessStepDescription = $"{buttonVm.Title}(으)로부터 나와서 안전 센서 켜기",
                             MissionType = "8",
                             ToNode = $"{swapPoint}_SENSOR",
                             Payload = ProductionLinePayload,
@@ -2191,15 +2195,15 @@ namespace WPF_WMS01.ViewModels
                         {
                             ProcessStepDescription = $"매거진으로 이동하여, 공 파레트 픽업",
                             MissionType = "8",
-                            ToNode = $"MZ_DanPra_Pallet_PickUP",
+                            ToNode = "MZ_DanPra_Pallet_PickUP",
                             Payload = ProductionLinePayload,
                             IsLinkable = true,
                             LinkWaitTimeout = 3600,
-                            PreMissionOperations = new List<MissionSubOperation> // 매거진에서 공 파레트 픽업 가능한가?
-                            {
-                                new MissionSubOperation {Type = SubOperationType.McWriteSingleWord, Description = "공 파렛트 배출 준비 요청", WordDeviceCode = "W", McWordAddress = 0x101F, McWriteValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
-                                new MissionSubOperation {Type = SubOperationType.McWaitAvailable, Description = "공 파렛트 배출 준비 완료 체크", WordDeviceCode = "W", McWordAddress = 0x151F, McWateValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
-                            }
+                            //PreMissionOperations = new List<MissionSubOperation> // 매거진에서 공 파레트 픽업 가능한가?
+                            //{
+                            //    new MissionSubOperation {Type = SubOperationType.McWriteSingleWord, Description = "공 파렛트 배출 준비 요청", WordDeviceCode = "W", McWordAddress = 0x101F, McWriteValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
+                            //    new MissionSubOperation {Type = SubOperationType.McWaitAvailable, Description = "공 파렛트 배출 준비 완료 체크", WordDeviceCode = "W", McWordAddress = 0x151F, McWateValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
+                            //}
                         });
                         // Step 8 : Move, Sensor OFF
                         missionSteps.Add(new MissionStepDefinition
@@ -2212,7 +2216,7 @@ namespace WPF_WMS01.ViewModels
                             LinkWaitTimeout = 3600,
                             PostMissionOperations = new List<MissionSubOperation> // 공 파렛트 배출 완료 신호, 안전 센서 OFF (1=OFF, 0=ON, 2=Quit)
                             {
-                                new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "공 파렛트 배출 완료 신호", WordDeviceCode = "W", McWordAddress = 0x101F, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"},
+                                //new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "공 파렛트 배출 완료 신호", WordDeviceCode = "W", McWordAddress = 0x101F, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"},
                                 new MissionSubOperation { Type = SubOperationType.McWaitSensorOff, Description = "안전 센서 끄기", WordDeviceCode = "W", McWordAddress = 0x1008, McWriteValueInt = 1, McProtocolIpAddress = mcProtocolIpAddress }
                             }
                         });
