@@ -286,6 +286,137 @@ namespace WPF_WMS01.Services
                                 Debug.WriteLine($"  AssignedTo: {latestMissionDetail.AssignedTo}");
                                 Debug.WriteLine($"  ParametersJson: {latestMissionDetail.ParametersJson}");
 
+                                if (processInfo.LastRackDropMissionId.HasValue && processInfo.LastRackDropMissionId == processInfo.LastSentMissionId && latestMissionDetail.NavigationState == (int)MissionStatusEnum.CANCELLED)
+                                {
+                                    processInfo.LastRackDropMissionId = null;
+                                    processInfo.MissionSteps[processInfo.CurrentStepIndex].PostMissionOperations.Clear();
+
+                                    RackViewModel? destinationRackVm;
+                                    List<int> racksToLock = new List<int>(); // No racks locked for simple supply missions initially
+                                    if (processInfo.IsWarehouseMission)
+                                    {
+                                        destinationRackVm = await _mainViewModel.GetRackViewModelForWarehouseTemporary();
+                                    }
+                                    else
+                                    {
+                                        destinationRackVm = await _mainViewModel.GetRackViewModelForInboundTemporary();    // 라인 입고 팔레트를 적치할 Rack
+                                    }
+
+                                    if (destinationRackVm == null)
+                                    {
+                                        _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] 창고 랙에 적치 중 에러 발생, 빈 랙이 없어서 로봇 추출함");
+                                        await ExtractVehicle(processInfo.IsWarehouseMission ? _warehouseAmrName : _packagingLineAmrName);
+                                    }
+                                    else
+                                    {
+                                        _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] 창고 랙에 적치 중 에러 발생, {destinationRackVm.Title}(으)로 이동 적치");
+                                        int index = processInfo.CurrentStepIndex + 1;
+                                        processInfo.MissionSteps[processInfo.CurrentStepIndex].IsLinkable = false;
+
+                                        var amrRackViewModel = _mainViewModel.RackList?.FirstOrDefault(r => r.Title.Equals("AMR"));
+                                        await _databaseService.UpdateIsLockedAsync(destinationRackVm.Id, true);
+                                        Application.Current.Dispatcher.Invoke(() => (_mainViewModel.RackList?.FirstOrDefault(r => r.Id == destinationRackVm.Id)).IsLocked = true);
+                                        processInfo.RacksLockedByProcess.Add(destinationRackVm.Id);
+
+                                        string shelf = $"{int.Parse(destinationRackVm.Title.Split('-')[0]):D2}_{destinationRackVm.Title.Split('-')[1]}";
+
+                                        if (destinationRackVm.LocationArea == 2 || destinationRackVm.LocationArea == 4) // 랙 2 ~ 8 번 1단 드롭 만 적용
+                                        {
+                                            processInfo.MissionSteps.Insert(index, new MissionStepDefinition
+                                            {
+                                                ProcessStepDescription = "팔레트 적재를 위한 이동 및 회전 2",
+                                                MissionType = "7",
+                                                FromNode = $"RACK_{shelf}_STEP1",
+                                                ToNode = $"RACK_{shelf}_STEP2",
+                                                Payload = processInfo.LastRackDropPayload,
+                                                Priority = 3,
+                                                IsLinkable = true,
+                                                LinkWaitTimeout = 3600
+                                            });
+                                            index++;
+                                        }
+
+                                        if (processInfo.IsWarehouseMission)
+                                        {
+                                            if (processInfo.ProcessType.Equals("완제품 입고 작업"))
+                                            {
+                                                processInfo.MissionSteps.Insert(index, new MissionStepDefinition
+                                                {
+                                                    ProcessStepDescription = $"{destinationRackVm.Title}(으)로 이동 & 팔레트 드롭",
+                                                    MissionType = "8",
+                                                    ToNode = $"Rack_{shelf}_Drop",
+                                                    Payload = processInfo.LastRackDropPayload,
+                                                    Priority = 3,
+                                                    IsLinkable = true,
+                                                    LinkWaitTimeout = 3600,
+                                                    PostMissionOperations = new List<MissionSubOperation> {
+                                                        //new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "팔레트 랙에 안착 여부 확인", McDiscreteInputAddress = _mainViewModel._checkModbusDescreteInputAddr },
+                                                        new MissionSubOperation { Type = SubOperationType.DbUpdateRackState, Description = "랙 상태 업데이트", SourceRackIdForDbUpdate = amrRackViewModel.Id, DestRackIdForDbUpdate =destinationRackVm.Id },
+                                                        new MissionSubOperation { Type = SubOperationType.DbInsertInboundData, Description = "입고 장부 기입", DestRackIdForDbUpdate = destinationRackVm.Id }
+                                                    }
+                                                });
+                                            }
+                                            /*else if (processInfo.ProcessType.Equals("단일 출고 작업") || processInfo.ProcessType.Equals("다중 출고 작업"))
+                                            {
+                                                processInfo.MissionSteps.Insert(index, new MissionStepDefinition
+                                                {
+                                                    ProcessStepDescription = $"{destinationRackVm.Title}(으)로 이동 & 팔레트 드롭",
+                                                    MissionType = "8",
+                                                    ToNode = $"Rack_{shelf}_Drop",
+                                                    Payload = processInfo.LastRackDropPayload,
+                                                    Priority = 3,
+                                                    IsLinkable = true,
+                                                    LinkWaitTimeout = 3600,
+                                                    PostMissionOperations = new List<MissionSubOperation> {
+                                                        //new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "팔레트 랙에 안착 여부 확인", McDiscreteInputAddress = _mainViewModel._checkModbusDescreteInputAddr },
+                                                        new MissionSubOperation { Type = SubOperationType.DbUpdateRackState, Description = "랙 상태 업데이트", SourceRackIdForDbUpdate = amrRackViewModel.Id, DestRackIdForDbUpdate =destinationRackVm.Id },
+                                                        new MissionSubOperation { Type = SubOperationType.DbInsertInboundData, Description = "출고 에러 장부 기입", DestRackIdForDbUpdate = destinationRackVm.Id }
+                                                    }
+                                                });
+                                            }*/
+                                            else
+                                            {
+                                                processInfo.MissionSteps.Insert(index, new MissionStepDefinition
+                                                {
+                                                    ProcessStepDescription = $"{destinationRackVm.Title}(으)로 이동 & 팔레트 드롭",
+                                                    MissionType = "8",
+                                                    ToNode = $"Rack_{shelf}_Drop",
+                                                    Payload = processInfo.LastRackDropPayload,
+                                                    Priority = 3,
+                                                    IsLinkable = true,
+                                                    LinkWaitTimeout = 3600,
+                                                    PostMissionOperations = new List<MissionSubOperation> {
+                                                        //new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "팔레트 랙에 안착 여부 확인", McDiscreteInputAddress = _mainViewModel._checkModbusDescreteInputAddr },
+                                                        new MissionSubOperation { Type = SubOperationType.DbUpdateRackState, Description = "랙 상태 업데이트", SourceRackIdForDbUpdate = amrRackViewModel.Id, DestRackIdForDbUpdate =destinationRackVm.Id },
+                                                    }
+                                                });
+                                            }
+
+                                            index++;
+                                        }
+                                        else // processInfo.IsWarehouseMission == false
+                                        {
+                                            processInfo.MissionSteps.Insert(index, new MissionStepDefinition
+                                            {
+                                                ProcessStepDescription = $"{destinationRackVm.Title}(으)로 이동 & 팔레트 드롭",
+                                                MissionType = "8",
+                                                ToNode = $"Rack_{shelf}_Drop",
+                                                Payload = processInfo.LastRackDropPayload,
+                                                Priority = 3,
+                                                IsLinkable = true,
+                                                LinkWaitTimeout = 3600,
+                                                PostMissionOperations = new List<MissionSubOperation> {
+                                                    //new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "팔레트 랙에 안착 여부 확인", McDiscreteInputAddress = _mainViewModel._checkModbusDescreteInputAddr },
+                                                    new MissionSubOperation { Type = SubOperationType.DbWriteRackData, Description = "입고 팔레트 정보 업데이트", DestRackIdForDbUpdate = destinationRackVm.Id },
+                                                    new MissionSubOperation { Type = SubOperationType.ClearLotInformation, Description = "Lot 정보 표시 지우기" }
+                                                }
+                                            });
+                                            index++;
+                                        }
+                                    }
+                                    latestMissionDetail.NavigationState = (int)MissionStatusEnum.COMPLETED;
+                                }
+
                                 // 현재 폴링 중인 미션이 완료되면, 다음 미션을 전송하거나 전체 프로세스 완료 처리
                                 if (latestMissionDetail.NavigationState == (int)MissionStatusEnum.COMPLETED) // 4로 정의된 COMPLETED 사용
                                 {
@@ -340,123 +471,6 @@ namespace WPF_WMS01.Services
                                 }
                                 else if (latestMissionDetail.NavigationState == (int)MissionStatusEnum.FAILED || latestMissionDetail.NavigationState == (int)MissionStatusEnum.REJECTED || latestMissionDetail.NavigationState == (int)MissionStatusEnum.CANCELLED)
                                 {
-                                    if (processInfo.LastRackDropMissionId.HasValue && processInfo.LastRackDropMissionId == processInfo.LastSentMissionId)
-                                    {
-                                        processInfo.LastRackDropMissionId = null;
-
-                                        RackViewModel? destinationRackVm;
-                                        List<int> racksToLock = new List<int>(); // No racks locked for simple supply missions initially
-                                        if (processInfo.IsWarehouseMission)
-                                        {
-                                            destinationRackVm = await _mainViewModel.GetRackViewModelForWarehouseTemporary();    
-                                        }
-                                        else
-                                        {
-                                            destinationRackVm = await _mainViewModel.GetRackViewModelForInboundTemporary();    // 라인 입고 팔레트를 적치할 Rack
-                                        }
-
-                                        if (destinationRackVm == null)
-                                        {
-                                            _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] 창고 랙에 적치 중 에러 발생, 빈 랙이 없어서 로봇 추출함");
-                                            ExtractVehicle(processInfo.IsWarehouseMission ? _warehouseAmrName : _packagingLineAmrName);
-                                        }
-                                        else
-                                        {
-                                            _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] 창고 랙에 적치 중 에러 발생, {destinationRackVm.Title}(으)로 이동 적치");
-
-                                            var amrRackViewModel = _mainViewModel.RackList?.FirstOrDefault(r => r.Title.Equals("AMR"));
-                                            await _databaseService.UpdateIsLockedAsync(destinationRackVm.Id, true);
-                                            Application.Current.Dispatcher.Invoke(() => (_mainViewModel.RackList?.FirstOrDefault(r => r.Id == destinationRackVm.Id)).IsLocked = true);
-                                            racksToLock.Add(destinationRackVm.Id);
-
-                                            string shelf = $"{int.Parse(destinationRackVm.Title.Split('-')[0]):D2}_{destinationRackVm.Title.Split('-')[1]}";
-                                            //string processType = $"다른 랙 {destinationRackVm.Title}에 제품 재 적치 작업";
-                                            List<MissionStepDefinition> missionSteps = new List<MissionStepDefinition>();
-
-                                            // 로봇 미션 단계 정의 (사용자 요청에 따라 4단계로 복원 및 IsLinkable, LinkedMission 조정)
-                                            // Step 5 : Move, Unload
-                                            if (destinationRackVm.LocationArea == 2 || destinationRackVm.LocationArea == 4) // 랙 2 ~ 8 번 1단 드롭 만 적용
-                                            {
-                                                missionSteps.Add(new MissionStepDefinition
-                                                {
-                                                    ProcessStepDescription = "팔레트 적재를 위한 이동 및 회전 2",
-                                                    MissionType = "7",
-                                                    FromNode = $"RACK_{shelf}_STEP1",
-                                                    ToNode = $"RACK_{shelf}_STEP2",
-                                                    Payload = processInfo.LastRackDropPayload,
-                                                    Priority = 3,
-                                                    IsLinkable = true,
-                                                    LinkWaitTimeout = 3600
-                                                });
-                                            }
-
-                                            if (processInfo.IsWarehouseMission)
-                                            {
-                                                missionSteps.Add(new MissionStepDefinition
-                                                {
-                                                    ProcessStepDescription = $"{destinationRackVm.Title}(으)로 이동 & 팔레트 드롭",
-                                                    MissionType = "8",
-                                                    ToNode = $"Rack_{shelf}_Drop",
-                                                    Payload = processInfo.LastRackDropPayload,
-                                                    Priority = 3,
-                                                    IsLinkable = true,
-                                                    LinkWaitTimeout = 3600,
-                                                    PostMissionOperations = new List<MissionSubOperation> {
-                                                    //new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "팔레트 랙에 안착 여부 확인", McDiscreteInputAddress = _mainViewModel._checkModbusDescreteInputAddr },
-                                                    new MissionSubOperation { Type = SubOperationType.DbUpdateRackState, Description = "랙 상태 업데이트", SourceRackIdForDbUpdate = amrRackViewModel.Id, DestRackIdForDbUpdate =destinationRackVm.Id }
-                                                }
-                                                });
-                                                missionSteps.Add(new MissionStepDefinition
-                                                {
-                                                    ProcessStepDescription = "대기장소로 이동",
-                                                    MissionType = "8",
-                                                    ToNode = $"AMR1_WAIT",
-                                                    Payload = processInfo.LastRackDropPayload,
-                                                    Priority = 3,
-                                                    IsLinkable = false,
-                                                    LinkWaitTimeout = 3600
-                                                });
-                                            }
-                                            else
-                                            {
-                                                missionSteps.Add(new MissionStepDefinition
-                                                {
-                                                    ProcessStepDescription = $"{destinationRackVm.Title}(으)로 이동 & 팔레트 드롭",
-                                                    MissionType = "8",
-                                                    ToNode = $"Rack_{shelf}_Drop",
-                                                    Payload = processInfo.LastRackDropPayload,
-                                                    Priority = 3,
-                                                    IsLinkable = true,
-                                                    LinkWaitTimeout = 3600,
-                                                    PostMissionOperations = new List<MissionSubOperation> {
-                                                    //new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "팔레트 랙에 안착 여부 확인", McDiscreteInputAddress = _mainViewModel._checkModbusDescreteInputAddr },
-                                                    new MissionSubOperation { Type = SubOperationType.DbWriteRackData, Description = "입고 팔레트 정보 업데이트", DestRackIdForDbUpdate = destinationRackVm.Id },
-                                                    new MissionSubOperation { Type = SubOperationType.ClearLotInformation, Description = "Lot 정보 표시 지우기" }
-                                                }
-                                                });
-                                                missionSteps.Add(new MissionStepDefinition
-                                                {
-                                                    ProcessStepDescription = "대기장소로 이동",
-                                                    MissionType = "8",
-                                                    ToNode = "Pallet_BWD_Pos",
-                                                    Payload = processInfo.LastRackDropPayload,
-                                                    Priority = 3,
-                                                    IsLinkable = false,
-                                                    LinkWaitTimeout = 3600
-                                                });
-                                            }
-
-                                            // 로봇 미션 프로세스 시작
-                                            string processId = await _mainViewModel.InitiateRobotMissionProcess(
-                                                processInfo.ProcessType,
-                                                missionSteps,
-                                                racksToLock, // 잠긴 랙 ID 목록 전달
-                                                null, // racksToProcess
-                                                null, // initiatingCoilAddress
-                                                processInfo.IsWarehouseMission
-                                            );
-                                        }
-                                    }
 
                                     Debug.WriteLine($"[RobotMissionService] Mission {latestMissionDetail.MissionId} FAILED/REJECTED/CANCELLED. Process {processInfo.ProcessId} marked as FAILED.");
                                     processInfo.HmiStatus.Status = latestMissionDetail.NavigationState == (int)MissionStatusEnum.REJECTED ? MissionStatusEnum.REJECTED.ToString() :
@@ -696,6 +710,11 @@ namespace WPF_WMS01.Services
                         // CurrentStepIndex는 이 미션이 완료될 때 (폴링 로직에서) 증가시킴
 
                         if (currentStep.ToNode.Contains("Rack_") && currentStep.ToNode.Contains("_Drop"))
+                        {
+                            processInfo.LastRackDropMissionId = processInfo.LastSentMissionId;
+                            processInfo.LastRackDropPayload = currentStep.Payload;
+                        }
+                        else if (currentStep.ToNode.Contains("test_drop_Rack"))
                         {
                             processInfo.LastRackDropMissionId = processInfo.LastSentMissionId;
                             processInfo.LastRackDropPayload = currentStep.Payload;

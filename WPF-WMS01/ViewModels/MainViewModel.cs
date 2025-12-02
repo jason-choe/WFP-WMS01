@@ -3596,9 +3596,10 @@ namespace WPF_WMS01.ViewModels
                         // 3. Move, Drop, Check, Update DB
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = $"출고 위치 {outletPosition + 1} 로 이동하여, 팔레트 드롭",
+                            ProcessStepDescription = $"출고 위치 {outletPosition / 5 + 1}_{outletPosition % 5 + 1} 로 이동하여, 팔레트 드롭",
                             MissionType = "8",
-                            ToNode = $"WaitProduct_{outletPosition + 1}_Drop",
+                            //ToNode = $"WaitProduct_{outletPosition + 1}_Drop",
+                            ToNode = $"test_drop_Rack_{outletPosition / 5 + 1}_{outletPosition % 5 + 1}",
                             Payload = WarehousePayload,
                             IsLinkable = true,
                             LinkedMission = null,
@@ -3608,7 +3609,7 @@ namespace WPF_WMS01.ViewModels
                                 new MissionSubOperation { Type = SubOperationType.DbUpdateOutboundData, Description = "출고 장부 기입", SourceRackIdForDbUpdate = insertedInID} // SourceRackIdForDbUpdate를 int 전달을 위해 차용
                             }
                         });
-                        missionSteps.Add(new MissionStepDefinition
+                        /*missionSteps.Add(new MissionStepDefinition
                         {
                             ProcessStepDescription = "창고 진입을 위한 이동, 회전",
                             MissionType = "7",
@@ -3618,14 +3619,14 @@ namespace WPF_WMS01.ViewModels
                             IsLinkable = true,
                             LinkedMission = null,
                             LinkWaitTimeout = 3600
-                        });
+                        });*/
                         outletPosition++;
                         if (outletPosition >= MAXOUTLETS) outletPosition = 0;
                     }
                     // Last. Move, Charge
                     missionSteps.Add(new MissionStepDefinition
                     {
-                        ProcessStepDescription = "충전소로 복귀",
+                        ProcessStepDescription = "대기 장소로 복귀",
                         MissionType = "8",
                         ToNode = "AMR1_WAIT",
                         Payload = WarehousePayload,

@@ -1709,15 +1709,17 @@ namespace WPF_WMS01.ViewModels
                     LinkedMission = null,
                     LinkWaitTimeout = 3600,
                     PostMissionOperations = new List<MissionSubOperation> {
-                                new MissionSubOperation { Type = SubOperationType.DbUpdateRackState, Description = "랙 상태 업데이트", SourceRackIdForDbUpdate = targetRackViewModel.Id, DestRackIdForDbUpdate = amrRackViewModel.Id }
-                            }
+                        new MissionSubOperation { Type = SubOperationType.DbUpdateRackState, Description = "랙 상태 업데이트", SourceRackIdForDbUpdate = targetRackViewModel.Id, DestRackIdForDbUpdate = amrRackViewModel.Id }
+                    }
                 });
                 // 3. Move, Drop, Check, Update DB
+
                 missionSteps.Add(new MissionStepDefinition
                 {
-                    ProcessStepDescription = $"출고 위치 {_mainViewModel.outletPosition + 1} 로 이동하여, 팔레트 드롭",
+                    ProcessStepDescription = $"출고 위치 {_mainViewModel.outletPosition / 5 + 1}_{_mainViewModel.outletPosition % 5 + 1} 로 이동하여, 팔레트 드롭",
                     MissionType = "8",
-                    ToNode = $"WaitProduct_{_mainViewModel.outletPosition + 1}_Drop",
+                    //ToNode = $"WaitProduct_{_mainViewModel.outletPosition + 1}_Drop",
+                    ToNode = $"test_drop_Rack_{_mainViewModel.outletPosition / 5 + 1}_{_mainViewModel.outletPosition % 5 + 1}",
                     Payload = _mainViewModel.WarehousePayload,
                     IsLinkable = true,
                     LinkedMission = null,
@@ -1727,7 +1729,7 @@ namespace WPF_WMS01.ViewModels
                         new MissionSubOperation { Type = SubOperationType.DbUpdateOutboundData, Description = "출고 장부 기입", SourceRackIdForDbUpdate = insertedInID} // SourceRackIdForDbUpdate를 int 전달을 위해 차용
                     }
                 });
-                missionSteps.Add(new MissionStepDefinition
+                /*missionSteps.Add(new MissionStepDefinition
                 {
                     ProcessStepDescription = "창고 진입을 위한 이동, 회전",
                     MissionType = "7",
@@ -1737,7 +1739,7 @@ namespace WPF_WMS01.ViewModels
                     IsLinkable = true,
                     LinkedMission = null,
                     LinkWaitTimeout = 3600
-                });
+                });*/
                 missionSteps.Add(new MissionStepDefinition {
                         ProcessStepDescription = $"대기 장소로 복귀",
                         MissionType = "8",
