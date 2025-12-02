@@ -340,6 +340,124 @@ namespace WPF_WMS01.Services
                                 }
                                 else if (latestMissionDetail.NavigationState == (int)MissionStatusEnum.FAILED || latestMissionDetail.NavigationState == (int)MissionStatusEnum.REJECTED || latestMissionDetail.NavigationState == (int)MissionStatusEnum.CANCELLED)
                                 {
+                                    if (processInfo.LastRackDropMissionId.HasValue && processInfo.LastRackDropMissionId == processInfo.LastSentMissionId)
+                                    {
+                                        processInfo.LastRackDropMissionId = null;
+
+                                        RackViewModel? destinationRackVm;
+                                        List<int> racksToLock = new List<int>(); // No racks locked for simple supply missions initially
+                                        if (processInfo.IsWarehouseMission)
+                                        {
+                                            destinationRackVm = await _mainViewModel.GetRackViewModelForWarehouseTemporary();    
+                                        }
+                                        else
+                                        {
+                                            destinationRackVm = await _mainViewModel.GetRackViewModelForInboundTemporary();    // 라인 입고 팔레트를 적치할 Rack
+                                        }
+
+                                        if (destinationRackVm == null)
+                                        {
+                                            _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] 창고 랙에 적치 중 에러 발생, 빈 랙이 없어서 로봇 추출함");
+                                            ExtractVehicle(processInfo.IsWarehouseMission ? _warehouseAmrName : _packagingLineAmrName);
+                                        }
+                                        else
+                                        {
+                                            _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] 창고 랙에 적치 중 에러 발생, {destinationRackVm.Title}(으)로 이동 적치");
+
+                                            var amrRackViewModel = _mainViewModel.RackList?.FirstOrDefault(r => r.Title.Equals("AMR"));
+                                            await _databaseService.UpdateIsLockedAsync(destinationRackVm.Id, true);
+                                            Application.Current.Dispatcher.Invoke(() => (_mainViewModel.RackList?.FirstOrDefault(r => r.Id == destinationRackVm.Id)).IsLocked = true);
+                                            racksToLock.Add(destinationRackVm.Id);
+
+                                            string shelf = $"{int.Parse(destinationRackVm.Title.Split('-')[0]):D2}_{destinationRackVm.Title.Split('-')[1]}";
+                                            //string processType = $"다른 랙 {destinationRackVm.Title}에 제품 재 적치 작업";
+                                            List<MissionStepDefinition> missionSteps = new List<MissionStepDefinition>();
+
+                                            // 로봇 미션 단계 정의 (사용자 요청에 따라 4단계로 복원 및 IsLinkable, LinkedMission 조정)
+                                            // Step 5 : Move, Unload
+                                            if (destinationRackVm.LocationArea == 2 || destinationRackVm.LocationArea == 4) // 랙 2 ~ 8 번 1단 드롭 만 적용
+                                            {
+                                                missionSteps.Add(new MissionStepDefinition
+                                                {
+                                                    ProcessStepDescription = "팔레트 적재를 위한 이동 및 회전 2",
+                                                    MissionType = "7",
+                                                    FromNode = $"RACK_{shelf}_STEP1",
+                                                    ToNode = $"RACK_{shelf}_STEP2",
+                                                    Payload = processInfo.LastRackDropPayload,
+                                                    Priority = 3,
+                                                    IsLinkable = true,
+                                                    LinkWaitTimeout = 3600
+                                                });
+                                            }
+
+                                            if (processInfo.IsWarehouseMission)
+                                            {
+                                                missionSteps.Add(new MissionStepDefinition
+                                                {
+                                                    ProcessStepDescription = $"{destinationRackVm.Title}(으)로 이동 & 팔레트 드롭",
+                                                    MissionType = "8",
+                                                    ToNode = $"Rack_{shelf}_Drop",
+                                                    Payload = processInfo.LastRackDropPayload,
+                                                    Priority = 3,
+                                                    IsLinkable = true,
+                                                    LinkWaitTimeout = 3600,
+                                                    PostMissionOperations = new List<MissionSubOperation> {
+                                                    //new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "팔레트 랙에 안착 여부 확인", McDiscreteInputAddress = _mainViewModel._checkModbusDescreteInputAddr },
+                                                    new MissionSubOperation { Type = SubOperationType.DbUpdateRackState, Description = "랙 상태 업데이트", SourceRackIdForDbUpdate = amrRackViewModel.Id, DestRackIdForDbUpdate =destinationRackVm.Id }
+                                                }
+                                                });
+                                                missionSteps.Add(new MissionStepDefinition
+                                                {
+                                                    ProcessStepDescription = "대기장소로 이동",
+                                                    MissionType = "8",
+                                                    ToNode = $"AMR1_WAIT",
+                                                    Payload = processInfo.LastRackDropPayload,
+                                                    Priority = 3,
+                                                    IsLinkable = false,
+                                                    LinkWaitTimeout = 3600
+                                                });
+                                            }
+                                            else
+                                            {
+                                                missionSteps.Add(new MissionStepDefinition
+                                                {
+                                                    ProcessStepDescription = $"{destinationRackVm.Title}(으)로 이동 & 팔레트 드롭",
+                                                    MissionType = "8",
+                                                    ToNode = $"Rack_{shelf}_Drop",
+                                                    Payload = processInfo.LastRackDropPayload,
+                                                    Priority = 3,
+                                                    IsLinkable = true,
+                                                    LinkWaitTimeout = 3600,
+                                                    PostMissionOperations = new List<MissionSubOperation> {
+                                                    //new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "팔레트 랙에 안착 여부 확인", McDiscreteInputAddress = _mainViewModel._checkModbusDescreteInputAddr },
+                                                    new MissionSubOperation { Type = SubOperationType.DbWriteRackData, Description = "입고 팔레트 정보 업데이트", DestRackIdForDbUpdate = destinationRackVm.Id },
+                                                    new MissionSubOperation { Type = SubOperationType.ClearLotInformation, Description = "Lot 정보 표시 지우기" }
+                                                }
+                                                });
+                                                missionSteps.Add(new MissionStepDefinition
+                                                {
+                                                    ProcessStepDescription = "대기장소로 이동",
+                                                    MissionType = "8",
+                                                    ToNode = "Pallet_BWD_Pos",
+                                                    Payload = processInfo.LastRackDropPayload,
+                                                    Priority = 3,
+                                                    IsLinkable = false,
+                                                    LinkWaitTimeout = 3600
+                                                });
+                                            }
+
+                                            // 로봇 미션 프로세스 시작
+                                            string processId = await _mainViewModel.InitiateRobotMissionProcess(
+                                                processInfo.ProcessType,
+                                                missionSteps,
+                                                racksToLock, // 잠긴 랙 ID 목록 전달
+                                                null, // racksToProcess
+                                                null, // initiatingCoilAddress
+                                                processInfo.IsWarehouseMission
+                                            );
+                                        }
+                                    }
+
                                     Debug.WriteLine($"[RobotMissionService] Mission {latestMissionDetail.MissionId} FAILED/REJECTED/CANCELLED. Process {processInfo.ProcessId} marked as FAILED.");
                                     processInfo.HmiStatus.Status = latestMissionDetail.NavigationState == (int)MissionStatusEnum.REJECTED ? MissionStatusEnum.REJECTED.ToString() :
                                                                        latestMissionDetail.NavigationState == (int)MissionStatusEnum.CANCELLED ? MissionStatusEnum.CANCELLED.ToString() :
@@ -350,6 +468,7 @@ namespace WPF_WMS01.Services
                                     OnShowAutoClosingMessage?.Invoke($"로봇 미션 {processInfo.ProcessType} (ID: {processInfo.ProcessId}) 실패: {latestMissionDetail.MissionId}. 남은 미션 취소.");
                                     processInfo.IsFailed = true; // 프로세스를 실패로 마크
                                     await HandleRobotMissionCompletion(processInfo); // 실패 처리도 완료 처리로 간주
+
                                 }
                             }
                             else
@@ -439,7 +558,7 @@ namespace WPF_WMS01.Services
             bool isWarehouseMission = false, // isWarehouseMission 파라미터 추가
             string readStringValue = null,
             ushort? readIntValue = null
-        ) 
+        )
         {
             // 새로운 미션이 시작될 때 Modbus 오류 플래그를 리셋합니다.
             _hasMissionCriticalModbusErrorBeenDisplayed = false;
@@ -462,7 +581,7 @@ namespace WPF_WMS01.Services
 
             // 첫 번째 미션 단계를 전송하고 추적을 시작합니다.
             await SendAndTrackMissionStepsForProcess(newMissionProcess);
-            if(initiatingCoilAddress.HasValue)
+            if (initiatingCoilAddress.HasValue)
                 _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] 포장실 미션 started by call button {initiatingCoilAddress + 1}.");
 
             return processId;
@@ -537,7 +656,7 @@ namespace WPF_WMS01.Services
                     FromNode = currentStep.FromNode,
                     ToNode = currentStep.ToNode,
                     Cardinality = 1, // 기본값
-                    Priority = (currentStep.Priority == 3) ? 3 : 1,
+                    Priority = (currentStep.Priority == 3) ? 3 : (currentStep.Priority == 2) ? 2 : 1,
                     Deadline = DateTime.UtcNow.AddHours(1).ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
                     DispatchTime = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
                     Parameters = new MissionRequestParameters
@@ -556,74 +675,96 @@ namespace WPF_WMS01.Services
                 }
             };
 
-            try
+            while(true)
             {
-                // === 중단점: 미션 요청 엔드포인트 및 페이로드 ===
-                string requestEndpoint = $"wms/rest/v{_httpService.CurrentApiVersionMajor}.{_httpService.CurrentApiVersionMinor}/missions";
-                string requestPayloadJson = JsonConvert.SerializeObject(missionRequest, Formatting.Indented); // 가독성을 위해 Indented 포맷 사용
-                Debug.WriteLine($"[RobotMissionService - BREAKPOINT] Sending Mission Request for Process {processInfo.ProcessId}, Step {processInfo.CurrentStepIndex + 1}:");
-                Debug.WriteLine($"  Endpoint: {requestEndpoint}");
-                Debug.WriteLine($"  Payload: {requestPayloadJson}");
-
-                // AntApiModels.MissionRequest, AntApiModels.MissionResponse 사용
-                var missionResponse = await _httpService.PostAsync<MissionRequest, MissionResponse>(requestEndpoint, missionRequest, processInfo.CancellationTokenSource.Token).ConfigureAwait(false);
-
-                if (missionResponse?.ReturnCode == 0 && missionResponse.Payload?.AcceptedMissions != null && missionResponse.Payload.AcceptedMissions.Any())
+                try
                 {
-                    int acceptedMissionId = missionResponse.Payload.AcceptedMissions.First();
-                    processInfo.LastSentMissionId = acceptedMissionId; // 전송된 미션 ID 저장
-                    // CurrentStepIndex는 이 미션이 완료될 때 (폴링 로직에서) 증가시킴
+                    // === 중단점: 미션 요청 엔드포인트 및 페이로드 ===
+                    string requestEndpoint = $"wms/rest/v{_httpService.CurrentApiVersionMajor}.{_httpService.CurrentApiVersionMinor}/missions";
+                    string requestPayloadJson = JsonConvert.SerializeObject(missionRequest, Formatting.Indented); // 가독성을 위해 Indented 포맷 사용
+                    Debug.WriteLine($"[RobotMissionService - BREAKPOINT] Sending Mission Request for Process {processInfo.ProcessId}, Step {processInfo.CurrentStepIndex + 1}:");
+                    Debug.WriteLine($"  Endpoint: {requestEndpoint}");
+                    Debug.WriteLine($"  Payload: {requestPayloadJson}");
 
-                    processInfo.HmiStatus.Status = MissionStatusEnum.ACCEPTED.ToString();
-                    processInfo.CurrentStatus = MissionStatusEnum.ACCEPTED; // RobotMissionInfo 내부 상태 업데이트
-                    processInfo.HmiStatus.CurrentStepDescription = currentStep.ProcessStepDescription;
-                    // 현재 전송된 단계까지의 진행률 (CurrentStepIndex는 다음 보낼 인덱스이므로 +1)
-                    //processInfo.HmiStatus.ProgressPercentage = (int)(((double)(processInfo.CurrentStepIndex + 1) / processInfo.TotalSteps) * 100);
-                    OnShowAutoClosingMessage?.Invoke($"로봇 미션 단계 전송 성공: {currentStep.ProcessStepDescription} (미션 ID: {acceptedMissionId})");
+                    // AntApiModels.MissionRequest, AntApiModels.MissionResponse 사용
+                    var missionResponse = await _httpService.PostAsync<MissionRequest, MissionResponse>(requestEndpoint, missionRequest, processInfo.CancellationTokenSource.Token).ConfigureAwait(false);
 
-                    // 미션 프로세스 업데이트 이벤트 발생
-                    OnMissionProcessUpdated?.Invoke(processInfo);
+                    if (missionResponse?.ReturnCode == 0 && missionResponse.Payload?.AcceptedMissions != null && missionResponse.Payload.AcceptedMissions.Any())
+                    {
+                        int acceptedMissionId = missionResponse.Payload.AcceptedMissions.First();
+                        processInfo.LastSentMissionId = acceptedMissionId; // 전송된 미션 ID 저장
+                        // CurrentStepIndex는 이 미션이 완료될 때 (폴링 로직에서) 증가시킴
 
-                    Debug.WriteLine($"[RobotMissionService] Process {processInfo.ProcessId}: Mission {acceptedMissionId} for step {processInfo.CurrentStepIndex + 1}/{processInfo.TotalSteps} sent successfully.");
+                        if (currentStep.ToNode.Contains("Rack_") && currentStep.ToNode.Contains("_Drop"))
+                        {
+                            processInfo.LastRackDropMissionId = processInfo.LastSentMissionId;
+                            processInfo.LastRackDropPayload = currentStep.Payload;
+                        }
+                        else
+                        {
+                            processInfo.LastRackDropMissionId = null;
+                        }
+
+                        processInfo.HmiStatus.Status = MissionStatusEnum.ACCEPTED.ToString();
+                        processInfo.CurrentStatus = MissionStatusEnum.ACCEPTED; // RobotMissionInfo 내부 상태 업데이트
+                        processInfo.HmiStatus.CurrentStepDescription = currentStep.ProcessStepDescription;
+                        // 현재 전송된 단계까지의 진행률 (CurrentStepIndex는 다음 보낼 인덱스이므로 +1)
+                        //processInfo.HmiStatus.ProgressPercentage = (int)(((double)(processInfo.CurrentStepIndex + 1) / processInfo.TotalSteps) * 100);
+                        OnShowAutoClosingMessage?.Invoke($"로봇 미션 단계 전송 성공: {currentStep.ProcessStepDescription} (미션 ID: {acceptedMissionId})");
+
+                        // 미션 프로세스 업데이트 이벤트 발생
+                        OnMissionProcessUpdated?.Invoke(processInfo);
+
+                        Debug.WriteLine($"[RobotMissionService] Process {processInfo.ProcessId}: Mission {acceptedMissionId} for step {processInfo.CurrentStepIndex + 1}/{processInfo.TotalSteps} sent successfully.");
+                        break;
+                    }
+                    else
+                    {
+                        processInfo.HmiStatus.Status = MissionStatusEnum.FAILED.ToString();
+                        processInfo.CurrentStatus = MissionStatusEnum.FAILED; // RobotMissionInfo 내부 상태 업데이트
+                        OnShowAutoClosingMessage?.Invoke($"로봇 미션 단계 전송 실패: {currentStep.ProcessStepDescription}");
+                        Debug.WriteLine($"[RobotMissionService] Process {processInfo.ProcessId}: Mission step {currentStep.ProcessStepDescription} failed to be accepted. Return Code: {missionResponse?.ReturnCode}. " +
+                                        $"Rejected: {string.Join(",", missionResponse?.Payload?.RejectedMissions ?? new List<int>())}");
+                        processInfo.IsFailed = true; // 프로세스 실패로 마크
+                        await HandleRobotMissionCompletion(processInfo); // 실패 처리
+                        break;
+                    }
+
                 }
-                else
+                catch (OperationCanceledException) // 취소 예외 처리
+                {
+                    Debug.WriteLine($"[RobotMissionService] Process {processInfo.ProcessId} cancelled during mission step send.");
+                    processInfo.CurrentStatus = MissionStatusEnum.CANCELLED;
+                    processInfo.HmiStatus.Status = MissionStatusEnum.CANCELLED.ToString();
+                    //processInfo.HmiStatus.ProgressPercentage = (int)(((double)(processInfo.CurrentStepIndex + 1) / processInfo.TotalSteps) * 100);
+                    OnShowAutoClosingMessage?.Invoke($"로봇 미션 프로세스 취소됨: {currentStep.ProcessStepDescription}");
+                    processInfo.IsFailed = true; // 취소도 실패로 간주하여 처리
+                    await HandleRobotMissionCompletion(processInfo);
+                }
+                catch (HttpRequestException httpEx)
+                {
+                    var result = MessageBox.Show($"로봇 미션 단계 전송 HTTP 오류: {httpEx.Message.Substring(0, Math.Min(100, httpEx.Message.Length))}\n계속 시도하시겠습니까?",
+                        "미션생성 오류", MessageBoxButton.YesNo, MessageBoxImage.Error, MessageBoxResult.Yes, MessageBoxOptions.DefaultDesktopOnly);
+                    if (result == MessageBoxResult.No)
+                    {
+                        processInfo.HmiStatus.Status = MissionStatusEnum.FAILED.ToString();
+                        processInfo.CurrentStatus = MissionStatusEnum.FAILED; // RobotMissionInfo 내부 상태 업데이트
+                        OnShowAutoClosingMessage?.Invoke($"로봇 미션 단계 전송 HTTP 오류: {httpEx.Message.Substring(0, Math.Min(100, httpEx.Message.Length))}");
+                        Debug.WriteLine($"[RobotMissionService] Process {processInfo.ProcessId}: HTTP Request Error sending mission step {currentStep.ProcessStepDescription}: {httpEx.Message}");
+                        processInfo.IsFailed = true; // 프로세스 실패로 간주
+                        await HandleRobotMissionCompletion(processInfo); // 실패 처리
+                        break;
+                    }
+                }
+                catch (Exception ex)
                 {
                     processInfo.HmiStatus.Status = MissionStatusEnum.FAILED.ToString();
                     processInfo.CurrentStatus = MissionStatusEnum.FAILED; // RobotMissionInfo 내부 상태 업데이트
-                    OnShowAutoClosingMessage?.Invoke($"로봇 미션 단계 전송 실패: {currentStep.ProcessStepDescription}");
-                    Debug.WriteLine($"[RobotMissionService] Process {processInfo.ProcessId}: Mission step {currentStep.ProcessStepDescription} failed to be accepted. Return Code: {missionResponse?.ReturnCode}. " +
-                                    $"Rejected: {string.Join(",", missionResponse?.Payload?.RejectedMissions ?? new List<int>())}");
-                    processInfo.IsFailed = true; // 프로세스 실패로 마크
+                    OnShowAutoClosingMessage?.Invoke($"로봇 미션 단계 전송 중 예상치 못한 오류: {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}");
+                    Debug.WriteLine($"[RobotMissionService] Process {processInfo.ProcessId}: Unexpected Error sending mission step {currentStep.ProcessStepDescription}: {ex.Message}");
+                    processInfo.IsFailed = true; // 예상치 못한 오류도 프로세스 실패로 간주
                     await HandleRobotMissionCompletion(processInfo); // 실패 처리
                 }
-            }
-            catch (OperationCanceledException) // 취소 예외 처리
-            {
-                Debug.WriteLine($"[RobotMissionService] Process {processInfo.ProcessId} cancelled during mission step send.");
-                processInfo.CurrentStatus = MissionStatusEnum.CANCELLED;
-                processInfo.HmiStatus.Status = MissionStatusEnum.CANCELLED.ToString();
-                //processInfo.HmiStatus.ProgressPercentage = (int)(((double)(processInfo.CurrentStepIndex + 1) / processInfo.TotalSteps) * 100);
-                OnShowAutoClosingMessage?.Invoke($"로봇 미션 프로세스 취소됨: {currentStep.ProcessStepDescription}");
-                processInfo.IsFailed = true; // 취소도 실패로 간주하여 처리
-                await HandleRobotMissionCompletion(processInfo);
-            }
-            catch (HttpRequestException httpEx)
-            {
-                processInfo.HmiStatus.Status = MissionStatusEnum.FAILED.ToString();
-                processInfo.CurrentStatus = MissionStatusEnum.FAILED; // RobotMissionInfo 내부 상태 업데이트
-                OnShowAutoClosingMessage?.Invoke($"로봇 미션 단계 전송 HTTP 오류: {httpEx.Message.Substring(0, Math.Min(100, httpEx.Message.Length))}");
-                Debug.WriteLine($"[RobotMissionService] Process {processInfo.ProcessId}: HTTP Request Error sending mission step {currentStep.ProcessStepDescription}: {httpEx.Message}");
-                processInfo.IsFailed = true; // 프로세스 실패로 간주
-                await HandleRobotMissionCompletion(processInfo); // 실패 처리
-            }
-            catch (Exception ex)
-            {
-                processInfo.HmiStatus.Status = MissionStatusEnum.FAILED.ToString();
-                processInfo.CurrentStatus = MissionStatusEnum.FAILED; // RobotMissionInfo 내부 상태 업데이트
-                OnShowAutoClosingMessage?.Invoke($"로봇 미션 단계 전송 중 예상치 못한 오류: {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}");
-                Debug.WriteLine($"[RobotMissionService] Process {processInfo.ProcessId}: Unexpected Error sending mission step {currentStep.ProcessStepDescription}: {ex.Message}");
-                processInfo.IsFailed = true; // 예상치 못한 오류도 프로세스 실패로 간주
-                await HandleRobotMissionCompletion(processInfo); // 실패 처리
             }
         }
 
@@ -689,10 +830,17 @@ namespace WPF_WMS01.Services
         /// (동시에 하나의 미션만 실행된다는 가정 하에 유효)
         /// </summary>
         /// <returns>STARTED 상태의 창고 미션 RobotMissionInfo 객체 또는 null.</returns>
-        public RobotMissionInfo GetFirstStartedWarehouseMission()
+        public RobotMissionInfo? GetFirstStartedWarehouseMission()
         {
             return _activeRobotProcesses.Values.FirstOrDefault(
                 p => p.CurrentStatus == MissionStatusEnum.STARTED && p.IsWarehouseMission
+            );
+        }
+
+        public RobotMissionInfo? GetFirstWaitingWarehouseMission()
+        {
+            return _activeRobotProcesses.Values.FirstOrDefault(
+                p => p.CurrentStatus == MissionStatusEnum.ACCEPTED && p.IsWarehouseMission
             );
         }
 
@@ -869,6 +1017,7 @@ namespace WPF_WMS01.Services
 
                         Debug.WriteLine($"[RobotMissionService] McReadLotNoBoxCount: Addr {subOp.McWordAddress.Value}, BulletType '{bulletType}', LotNo '{processInfo.ReadStringValue}', BoxCount {processInfo.ReadIntValue}");
                         _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] BulletType = '{bulletType}', Lot No. = '{processInfo.ReadStringValue}', Box Count = {boxCount}");
+                        _mainViewModel.LotInfoViewModel.Message = $"Lot Info. : '{bulletType}' / '{processInfo.ReadStringValue}' / {boxCount}";
                         processInfo.HmiStatus.SubOpDescription = "";
                         break;
 
@@ -885,7 +1034,6 @@ namespace WPF_WMS01.Services
                         break;
 
                     case SubOperationType.McWriteLotNoBoxCount:
-                        //break;
                         if (!_mcProtocolInterface) break;
                         if (subOp.McProtocolIpAddress == null || !subOp.McWordAddress.HasValue || !subOp.McStringLengthWords.HasValue || string.IsNullOrEmpty(processInfo.ReadStringValue) || !processInfo.ReadIntValue.HasValue)
                         {
@@ -910,7 +1058,6 @@ namespace WPF_WMS01.Services
                         break;
 
                     case SubOperationType.McWriteSingleWord:
-                        //break;
                         if (!_mcProtocolInterface) break;
                         if (subOp.McProtocolIpAddress == null || !subOp.McWordAddress.HasValue || !subOp.McWriteValueInt.HasValue)
                         {
@@ -953,8 +1100,23 @@ namespace WPF_WMS01.Services
                             }
                             if (DateTime.Now - startTime_A > TimeSpan.FromSeconds(subOp.WaitTimeoutSeconds.Value))
                             {
-                                MessageBox.Show($"AMR 진입 요청에서 timeout이 발생했습니다.\n해당 PLC의 확인이 필요합니다.\n(IP: {subOp.McProtocolIpAddress}, Addr: {subOp.McWordAddress.Value})", "경고", MessageBoxButton.OK, MessageBoxImage.Warning);
-                                startTime_A = DateTime.Now;
+                                var result = MessageBox.Show($"AMR 진입 요청에서 timeout이 발생했습니다.\n해당 PLC의 확인이 필요합니다.\n(IP: {subOp.McProtocolIpAddress}, Addr: {subOp.McWordAddress.Value})\n계속 시도하시겠습니까?",
+                                    "AMR 진입 요청", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.Yes, MessageBoxOptions.DefaultDesktopOnly);
+                                if (result == MessageBoxResult.Yes)
+                                {
+                                    startTime_A = DateTime.Now;
+                                }
+                                else if (result == MessageBoxResult.No)
+                                {
+                                    // 이 시점에서 미션 프로세스를 실패 상태로 마크하고 완료 처리
+                                    processInfo.CurrentStatus = MissionStatusEnum.FAILED;
+                                    processInfo.HmiStatus.Status = "FAILED";
+                                    processInfo.HmiStatus.ProgressPercentage = 100;
+                                    processInfo.IsFailed = true; // 프로세스 실패 플래그 설정
+                                    processInfo.CancellationTokenSource.Cancel(); // 미션 취소 요청
+                                    await HandleRobotMissionCompletion(processInfo);
+                                    break;
+                                }
                             }
                             await Task.Delay(500).ConfigureAwait(false); // 0.5초마다 체크
                         }
@@ -962,7 +1124,6 @@ namespace WPF_WMS01.Services
 
                     case SubOperationType.McWaitSensorOff:
                     case SubOperationType.McWaitSensorOn:
-                        //break;
                         if (!_mcProtocolInterface) break;
                         if (subOp.McProtocolIpAddress == null || !subOp.McWordAddress.HasValue || !subOp.McWriteValueInt.HasValue)
                         {
@@ -971,7 +1132,7 @@ namespace WPF_WMS01.Services
                         }
                         if (!subOp.WaitTimeoutSeconds.HasValue || subOp.WaitTimeoutSeconds.Value <= 0)
                         {
-                            subOp.WaitTimeoutSeconds = 120; // 기본 타임아웃 30초
+                            subOp.WaitTimeoutSeconds = 60; // 기본 타임아웃 30초
                             Debug.WriteLine($"[RobotMissionService] McWaitSensor: WaitTimeoutSeconds가 지정되지 않아 기본값 30초 사용.");
                         }
 
@@ -1008,10 +1169,25 @@ namespace WPF_WMS01.Services
                                 processInfo.HmiStatus.SubOpDescription = "";
                                 break;
                             }
-                            if(DateTime.Now - startTime > TimeSpan.FromSeconds(subOp.WaitTimeoutSeconds.Value))
+                            if (DateTime.Now - startTime > TimeSpan.FromSeconds(subOp.WaitTimeoutSeconds.Value))
                             {
-                                MessageBox.Show($"로봇 정지 요청에서 timeout이 발생했습니다.\n해당 로봇 PLC의 확인이 필요합니다.\n({subOp.McProtocolIpAddress})", "경고", MessageBoxButton.OK, MessageBoxImage.Warning);
-                                startTime = DateTime.Now;
+                                var result = MessageBox.Show($"패킹로봇 정지 요청에서 timeout이 발생했습니다.\n해당 PLC의 확인이 필요합니다.\n(IP: {subOp.McProtocolIpAddress}, Addr: {subOp.McWordAddress.Value})\n계속 시도하시겠습니까?",
+                                    "패킹로봇 정지 요청", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.Yes, MessageBoxOptions.DefaultDesktopOnly);
+                                if (result == MessageBoxResult.Yes)
+                                {
+                                    startTime_A = DateTime.Now;
+                                }
+                                else if (result == MessageBoxResult.No)
+                                {
+                                    // 이 시점에서 미션 프로세스를 실패 상태로 마크하고 완료 처리
+                                    processInfo.CurrentStatus = MissionStatusEnum.FAILED;
+                                    processInfo.HmiStatus.Status = "FAILED";
+                                    processInfo.HmiStatus.ProgressPercentage = 100;
+                                    processInfo.IsFailed = true; // 프로세스 실패 플래그 설정
+                                    processInfo.CancellationTokenSource.Cancel(); // 미션 취소 요청
+                                    await HandleRobotMissionCompletion(processInfo);
+                                    break;
+                                }
                             }
                             await Task.Delay(500).ConfigureAwait(false); // 0.5초마다 체크
                         }
@@ -1040,7 +1216,7 @@ namespace WPF_WMS01.Services
                         var rack = await _databaseService.GetRackByIdAsync(subOp.TargetRackId.Value).ConfigureAwait(false);
                         if (rack != null)
                         {
-                            processInfo.ReadBulletTypeValue = _mainViewModel.GetBulletTypeNameFromNumber(rack.BulletType);  
+                            processInfo.ReadBulletTypeValue = _mainViewModel.GetBulletTypeNameFromNumber(rack.BulletType);
                             processInfo.ReadStringValue = rack.LotNumber;
                             processInfo.ReadIntValue = (ushort)rack.BoxCount;
                             Debug.WriteLine($"[RobotMissionService] DbReadRackData: Rack {rack.Title} (ID: {rack.Id}) - LotNo '{processInfo.ReadStringValue}', BoxCount {processInfo.ReadIntValue}");
@@ -1073,6 +1249,10 @@ namespace WPF_WMS01.Services
                         processInfo.HmiStatus.SubOpDescription = "";
                         break;
 
+                    case SubOperationType.DbBackupRackState:
+                        await PerformDbUpdateForCompletedStepLogic(processInfo, subOp.SourceRackIdForDbUpdate, subOp.DestRackIdForDbUpdate).ConfigureAwait(false);
+                        break;
+
                     case SubOperationType.UiDisplayLotNoBoxCount:
                         if (string.IsNullOrEmpty(processInfo.ReadStringValue) || !processInfo.ReadIntValue.HasValue)
                         {
@@ -1092,7 +1272,7 @@ namespace WPF_WMS01.Services
 
                     case SubOperationType.CheckModbusDiscreteInput:
                         if (!_mcProtocolInterface) break;
-                        if(processInfo.IsWarehouseMission)
+                        if (processInfo.IsWarehouseMission)
                             await PerformModbusDiscreteInputCheck(processInfo, subOp.McDiscreteInputAddress, _missionCheckModbusServiceA).ConfigureAwait(false); // Warehouse AMR
                         else
                             await PerformModbusDiscreteInputCheck(processInfo, subOp.McDiscreteInputAddress, _missionCheckModbusServiceB).ConfigureAwait(false); // Packaging Line AMR
@@ -1126,6 +1306,10 @@ namespace WPF_WMS01.Services
                         _mainViewModel._isPalletDummyOdd = !(_mainViewModel._isPalletDummyOdd); // for use both alternately
                         Settings.Default.IsPalletSupOdd = _mainViewModel._isPalletDummyOdd;
                         Settings.Default.Save();
+                        break;
+
+                    case SubOperationType.ClearLotInformation:
+                        _mainViewModel.LotInfoViewModel.Message = ""; // clear message
                         break;
 
                     case SubOperationType.None:
@@ -1365,13 +1549,14 @@ namespace WPF_WMS01.Services
                     else if (processInfo.ProcessType == "라이트 반출 준비" || processInfo.ProcessType == "라이트 반출 작업") // Rack -> AMR -> Rack 1-1 -> (NULL)
                     {
                         newDestinationRackType = 3;
-                        if (sourceRackVm.Title.Equals("AMR")) newSourceRackType = 2; // AMR -> OUT
+                        if (sourceRackVm.Title.Equals("AMR")) newSourceRackType = 2; // AMR -> WRAP, AMR -> RACK
+                        else if (sourceRackVm.Title.Equals("1-1")) newSourceRackType = 3; // 1-1은 항상 RackType = 3 유지
                         else newSourceRackType = 1; // Rack -> AMR, OUT -> (NULL)
 
-                        if (destinationRackVm.Title.Equals("OUT"))
+                        /*if (destinationRackVm.Title.Equals("OUT"))
                             await SetVisibleRackInProcess(destinationRackVm.Id, true);
                         if (sourceRackVm.Title.Equals("OUT"))
-                            await SetVisibleRackInProcess(sourceRackVm.Id, false);
+                            await SetVisibleRackInProcess(sourceRackVm.Id, false);*/
                     }
                     // 특별한 경우 3)
                     if (destinationRackVm.Title.Equals(_wrapRackTitle))
@@ -1522,7 +1707,7 @@ namespace WPF_WMS01.Services
                     // 1. Destination Rack에 Source Rack의 제품 정보 복사
                     string sourceLotNumber = processInfo.ReadStringValue;
                     int sourceBoxCount = processInfo.ReadIntValue.HasValue ? processInfo.ReadIntValue.Value : 0;
-                    int sourceBulletType = _mainViewModel.GetBulletTypeFromInputString(processInfo .ReadBulletTypeValue);
+                    int sourceBulletType = _mainViewModel.GetBulletTypeFromInputString(processInfo.ReadBulletTypeValue);
                     int newDestinationRackType = destinationRackVm.RackType; // 기본적으로 목적지 랙의 현재 RackType 유지
 
                     await _databaseService.UpdateRackStateAsync(
@@ -1636,6 +1821,25 @@ namespace WPF_WMS01.Services
             }
         }
 
+        private async Task PerformDbUpdateBackupForWrap(RobotMissionInfo processInfo, int? insertedInID)
+        {
+            Debug.WriteLine($"[RobotMissionService] Performing DB update for outbound step. ProcessType: {processInfo.ProcessType}, inserted lin id: {insertedInID}");
+
+            if (insertedInID.HasValue)
+            {
+                try
+                {
+                    await _databaseService.UpdateOutboundDBAsync((int)insertedInID);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[RobotMissionService] Error performing DB update for outbound step: {ex.Message}");
+                    OnShowAutoClosingMessage?.Invoke($"미션 완료 후 DB 업데이트 중 오류 발생: {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}");
+                    throw; // 예외를 다시 던져 상위 호출자가 이를 인지하게 함
+                }
+            }
+        }
+
         /// <summary>
         /// 서비스 자원을 해제합니다.
         /// </summary>
@@ -1723,7 +1927,7 @@ namespace WPF_WMS01.Services
                     {
                         newDestinationRackType = 3; // 라이트 랙 타입으로 변경 (완제품 랙에서 라이트 랙으로)
                         if (sourceRackVm.Title.Equals("WRAP")) newSourceRackType = 2;
-                        else if(sourceRackVm.Title.Equals("AMR")) newSourceRackType = 1;
+                        else if (sourceRackVm.Title.Equals("AMR")) newSourceRackType = 1;
                     }
                     else if (processInfo.ProcessType == "라이트 반출 작업")
                     {
@@ -1828,5 +2032,40 @@ namespace WPF_WMS01.Services
                 OnShowAutoClosingMessage?.Invoke($"미션 완료 후 DB 업데이트 중 오류 발생: {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}");
             }
         }
+
+        private async Task ExtractVehicle(string amrName)
+        {
+            // Extract vehicle
+            var payload = new ExtractVehicleRequest
+            {
+                Command = new ExtractVehicleCommand
+                {
+                    Name = "extract",
+                    Args = new { } // 빈 객체
+                }
+            };
+            string vehicleName = amrName; // missionInfo.IsWarehouseMission ? _warehouseAmrName : _packagingLineAmrName;
+            string requestEndpoint = $"wms/rest/v{_httpService.CurrentApiVersionMajor}.{_httpService.CurrentApiVersionMinor}/vehicles/{vehicleName}/command";
+            //string requestPayloadJson = JsonConvert.SerializeObject(payload, Formatting.Indented);
+
+            OnShowAutoClosingMessage?.Invoke($"로봇 미션 프로세스 실패! Extracting {vehicleName} ...");
+            //_httpService.PostAsync<ExtractVehicleRequest>(requestEndpoint, payload);
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await _httpService.PostAsync<ExtractVehicleRequest>(requestEndpoint, payload);
+                }
+                catch (Exception ex)
+                {
+                    // 예외 로깅 가능
+                    Debug.WriteLine(ex.Message);
+                }
+            });
+            await Application.Current.Dispatcher.Invoke(async () =>
+            {
+                MessageBox.Show(Application.Current.MainWindow, $"AMR {vehicleName}(이)가 추출(Extraction)되었습니다.\r\nAMR 운용 담당자의 후속 조치가 필요합니다.", "AMR 추출", MessageBoxButton.OK, MessageBoxImage.Warning);
+                });
+            }
     }
 }

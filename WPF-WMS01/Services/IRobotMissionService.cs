@@ -91,6 +91,13 @@ namespace WPF_WMS01.Services
         /// (동시에 하나의 미션만 실행된다는 가정 하에 유효)
         /// </summary>
         /// <returns>STARTED 상태의 창고 미션 RobotMissionInfo 객체 또는 null.</returns>
-        RobotMissionInfo GetFirstStartedWarehouseMission(); // 새로운 메서드 시그니처 추가
+        RobotMissionInfo? GetFirstStartedWarehouseMission(); // 새로운 메서드 시그니처 추가
+
+        /// <summary>
+        /// 현재 ACCEPTED 상태이면서 창고 미션인 첫 번째 미션 프로세스를 반환합니다.
+        /// (동시에 하나의 미션만 실행된다는 가정 하에 유효)
+        /// </summary>
+        /// <returns>ACCEPTED 상태의 창고 미션 RobotMissionInfo 객체 또는 null.</returns>
+        RobotMissionInfo? GetFirstWaitingWarehouseMission(); // 새로운 메서드 시그니처 추가
     }
 }

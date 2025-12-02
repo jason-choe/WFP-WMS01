@@ -14,6 +14,7 @@ using WPF_WMS01.Views.Popups; // SelectStorageRackPopupView 추가
 using WPF_WMS01.ViewModels.Popups; // SelectStorageRackPopupViewModel 추가
 using System.Configuration;
 using System.Diagnostics;
+using System.Windows.Controls;
 
 namespace WPF_WMS01.ViewModels
 {
@@ -569,7 +570,7 @@ namespace WPF_WMS01.ViewModels
 
                     await _databaseService.UpdateIsLockedAsync(outRackViewModel.Id, true);
                     Application.Current.Dispatcher.Invoke(() => outRackViewModel.IsLocked = true);
-                    lockedRackIds.Add(sourceRackViewModel.Id);
+                    lockedRackIds.Add(outRackViewModel.Id);
                 }
                 catch (Exception ex)
                 {
@@ -699,6 +700,10 @@ namespace WPF_WMS01.ViewModels
                         Application.Current.Dispatcher.Invoke(() => outRackVm.IsLocked = true);
                         lockedRackIds.Add(outRackVm.Id);
 
+                        if (selectedLine.Id == 9)
+                        {
+                            await _databaseService.UpdateIsLockedAsync(outRackVm.Id, true);
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -715,10 +720,9 @@ namespace WPF_WMS01.ViewModels
                     ShowAutoClosingMessage($"로봇 미션: 랙 {outRackVm.Title}의  라이트 팔레트를 '{selectedLine.Name}'(으)로 반출 시작. 명령 전송 중...");
 
                     var amrRackViewModel = _mainViewModel.RackList?.FirstOrDefault(r => r.Title.Equals("AMR"));
-                    //var outRackViewModel = _mainViewModel.RackList?.FirstOrDefault(r => r.Title.Equals("OUT"));
 
                     List<MissionStepDefinition> missionSteps = new List<MissionStepDefinition>();
-                    List<int> racksToLock = new List<int>(); // No racks locked for simple supply missions initially
+                    //List<int> racksToLock = new List<int>(); // No racks locked for simple supply missions initially
 
                     string workPoint;
                     string swapPoint;
@@ -793,40 +797,138 @@ namespace WPF_WMS01.ViewModels
                         lightAddress = 0x101D;
                         coilAddress = 10;
                     }
-                    else //if (selectedLine.Id == 8)
+                    else if (selectedLine.Id == 8)
                     {
                         workPoint = "Etc_1"; // or "Etc_2"
                         swapPoint = "Etc";
                         mcProtocolIpAddress = null;
                         coilAddress = 11;
                     }
+                    else if (selectedLine.Id == 9) // 라이트 팔레트를 랩핑기에 이송하는 특수 케이스, 2025/11/24 풍산 추가 요구 사항 
+                    {
+                        var wrapRackViewModel = _mainViewModel.RackList?.FirstOrDefault(r => r.Title.Equals("WRAP"));
 
+                        if (wrapRackViewModel == null)
+                        {
+                            MessageBox.Show("이동할 'WRAP' 장소을 찾을 수 없습니다.", "알림", MessageBoxButton.OK, MessageBoxImage.Information);
+                            foreach (var id in lockedRackIds)
+                            {
+                                await _databaseService.UpdateIsLockedAsync(id, false);
+                                Application.Current.Dispatcher.Invoke(() => (_mainViewModel.RackList?.FirstOrDefault(r => r.Id == id)).IsLocked = false);
+                            }
+                            return;
+                        }
+
+                        // "WRAP" 랙의 상태 확인
+                        if (wrapRackViewModel.BulletType != 0 || wrapRackViewModel.IsLocked)
+                        {
+                            MessageBox.Show("포장 장소가 이미 사용 중이거나 잠겨있어 이동할 수 없습니다.", "알림", MessageBoxButton.OK, MessageBoxImage.Information);
+                            foreach (var id in lockedRackIds)
+                            {
+                                await _databaseService.UpdateIsLockedAsync(id, false);
+                                Application.Current.Dispatcher.Invoke(() => (_mainViewModel.RackList?.FirstOrDefault(r => r.Id == id)).IsLocked = false);
+                            }
+                            return;
+                        }
+
+                        try
+                        {
+                            await _databaseService.UpdateIsLockedAsync(wrapRackViewModel.Id, true);
+                            Application.Current.Dispatcher.Invoke(() => wrapRackViewModel.IsLocked = true);
+                            lockedRackIds.Add(wrapRackViewModel.Id);
+                        }
+                        catch (Exception ex)
+                        {
+                            MessageBox.Show($"랙 잠금 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                            // 오류 발생 시 작업 취소 및 잠금 해제 시도
+                            foreach (var id in lockedRackIds)
+                            {
+                                await _databaseService.UpdateIsLockedAsync(id, false);
+                                Application.Current.Dispatcher.Invoke(() => (_mainViewModel.RackList?.FirstOrDefault(r => r.Id == id)).IsLocked = false);
+                            }
+                            return; // 더 이상 진행하지 않음
+                        }
+
+                        missionSteps.Add(new MissionStepDefinition
+                        {
+                            ProcessStepDescription = $"랙 1-1로 이동하여, 라이트 팔레트 픽업",
+                            MissionType = "8",
+                            ToNode = $"Rack_01_1_PickUP",
+                            Payload = _mainViewModel.WarehousePayload,
+                            IsLinkable = true,
+                            LinkWaitTimeout = 3600,
+                            PostMissionOperations = new List<MissionSubOperation> {
+                                new MissionSubOperation { Type = SubOperationType.DbUpdateRackState, Description = "랙 상태 업데이트", SourceRackIdForDbUpdate = outRackVm.Id, DestRackIdForDbUpdate = amrRackViewModel.Id }
+                            }
+                        });
+                        missionSteps.Add(new MissionStepDefinition
+                        {
+                            ProcessStepDescription = "래핑기로 이동하여, 라이트 팔레트 드롭",
+                            MissionType = "8",
+                            ToNode = "Wrapping_Drop",
+                            Payload = _mainViewModel.WarehousePayload,
+                            IsLinkable = true,
+                            LinkWaitTimeout = 3600,
+                            PostMissionOperations = new List<MissionSubOperation> {
+                                new MissionSubOperation { Type = SubOperationType.DbUpdateRackState, Description = "랙 상태 업데이트", SourceRackIdForDbUpdate = amrRackViewModel.Id, DestRackIdForDbUpdate =wrapRackViewModel.Id }
+                            }
+                        });
+                        missionSteps.Add(new MissionStepDefinition
+                        {
+                            ProcessStepDescription = $"대기 장소로 이동",
+                            MissionType = "8",
+                            ToNode = "AMR1_WAIT",  //"Wrapping_Turn1",
+                            Payload = _mainViewModel.WarehousePayload,
+                            IsLinkable = false,
+                            LinkWaitTimeout = 3600
+                        });
+
+                        try
+                        {
+                            // 로봇 미션 프로세스 시작
+                            string processId = await _mainViewModel.InitiateRobotMissionProcess(
+                                "라이트 반출 작업", // 미션 프로세스 유형
+                                missionSteps,
+                                lockedRackIds, // 잠긴 랙 ID 목록 전달
+                                null, // racksToProcess
+                                null, // initiatingCoilAddress
+                                true // isWarehouseMission = true로 전달
+                            );
+                            ShowAutoClosingMessage($"로봇 미션 프로세스 시작됨: {processId}");
+                        }
+                        catch (Exception ex)
+                        {
+                            MessageBox.Show($"반제품 반출 로봇 미션 시작 중 오류 발생: {ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                            foreach (var id in lockedRackIds)
+                            {
+                                await _databaseService.UpdateIsLockedAsync(id, false);
+                                Application.Current.Dispatcher.Invoke(() => (_mainViewModel.RackList?.FirstOrDefault(r => r.Id == id)).IsLocked = false);
+                            }
+                            return; // 더 이상 진행하지 않음
+                        }
+                        return;
+                    }
+                    else
+                    {
+                        return;
+                    }
+   
                     var inRackVm = await _mainViewModel.GetRackViewModelForInboundTemporary();    // 라인 입고 팔레트를 적치할 Rack
+                    if (inRackVm == null)
+                    {
+                        MessageBox.Show("적치 가능한 랙이 없습니다.", "경고", MessageBoxButton.OK, MessageBoxImage.Warning, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
+                        return;
+                    }
                     await _databaseService.UpdateIsLockedAsync(inRackVm.Id, true);
                     Application.Current.Dispatcher.Invoke(() => (_mainViewModel.RackList?.FirstOrDefault(r => r.Id == inRackVm.Id)).IsLocked = true);
-                    racksToLock.Add(inRackVm.Id);
+                    lockedRackIds.Add(inRackVm.Id);
 
                     await _databaseService.UpdateIsLockedAsync(outRackVm.Id, true);
                     Application.Current.Dispatcher.Invoke(() => (_mainViewModel.RackList?.FirstOrDefault(r => r.Id == outRackVm.Id)).IsLocked = true);
-                    racksToLock.Add(outRackVm.Id);
+                    lockedRackIds.Add(outRackVm.Id);
 
                     var inShelf = $"{int.Parse(inRackVm.Title.Split('-')[0]):D2}_{inRackVm.Title.Split('-')[1]}";
                     var outShelf = $"{int.Parse(outRackVm.Title.Split('-')[0]):D2}_{outRackVm.Title.Split('-')[1]}";
-
-
-                    missionSteps = new List<MissionStepDefinition>
-                    {
-                        // 1. Move from Charger, Turn
-                        new MissionStepDefinition {
-                            ProcessStepDescription = "충전소에서 대기 장소로 이동",
-                            MissionType = "8",
-                            ToNode = "Pallet_BWD_Pos",
-                            Payload = _mainViewModel.ProductionLinePayload,
-                            IsLinkable = true,
-                            LinkedMission = null,
-                            LinkWaitTimeout = 3600,
-                         }
-                    };
 
                     switch (selectedLine.Id)
                     {
@@ -908,8 +1010,9 @@ namespace WPF_WMS01.ViewModels
                                 IsLinkable = true,
                                 LinkWaitTimeout = 3600,
                                 PostMissionOperations = new List<MissionSubOperation> {
-                                    new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "팔레트 랙에 안착 여부 확인", McDiscreteInputAddress = _mainViewModel._checkModbusDescreteInputAddr },
-                                    new MissionSubOperation { Type = SubOperationType.DbWriteRackData, Description = "입고 팔레트 정보 업데이트", DestRackIdForDbUpdate = inRackVm.Id }
+                                    //new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "팔레트 랙에 안착 여부 확인", McDiscreteInputAddress = _mainViewModel._checkModbusDescreteInputAddr },
+                                    new MissionSubOperation { Type = SubOperationType.DbWriteRackData, Description = "입고 팔레트 정보 업데이트", DestRackIdForDbUpdate = inRackVm.Id },
+                                    new MissionSubOperation { Type = SubOperationType.ClearLotInformation, Description = "Lot 정보 표시 지우기" }
                                 }
                             });
 
@@ -1039,8 +1142,9 @@ namespace WPF_WMS01.ViewModels
                                 IsLinkable = true,
                                 LinkWaitTimeout = 3600,
                                 PostMissionOperations = new List<MissionSubOperation> {
-                                    new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "팔레트 랙에 안착 여부 확인", McDiscreteInputAddress = _mainViewModel._checkModbusDescreteInputAddr },
-                                    new MissionSubOperation { Type = SubOperationType.DbWriteRackData, Description = "입고 팔레트 정보 업데이트", DestRackIdForDbUpdate = inRackVm.Id }
+                                    //new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "팔레트 랙에 안착 여부 확인", McDiscreteInputAddress = _mainViewModel._checkModbusDescreteInputAddr },
+                                    new MissionSubOperation { Type = SubOperationType.DbWriteRackData, Description = "입고 팔레트 정보 업데이트", DestRackIdForDbUpdate = inRackVm.Id },
+                                    new MissionSubOperation { Type = SubOperationType.ClearLotInformation, Description = "Lot 정보 표시 지우기" }
                                 }
                             });
 
@@ -1056,7 +1160,6 @@ namespace WPF_WMS01.ViewModels
                                 PostMissionOperations = new List<MissionSubOperation> {
                                     new MissionSubOperation { Type = SubOperationType.DbReadRackData, Description = "랙 데이터 읽어 오기", TargetRackId = outRackVm.Id },
                                     new MissionSubOperation { Type = SubOperationType.DbUpdateRackState, Description = "랙 상태 업데이트", SourceRackIdForDbUpdate = outRackVm.Id, DestRackIdForDbUpdate = null },
-                                    //new MissionSubOperation { Type = SubOperationType.SetPlcStatusIsPaused, Description = "콜버튼 액션 허용", PauseButtonCallPlcStatus = false }
                                 }
                             });
 
@@ -1177,8 +1280,9 @@ namespace WPF_WMS01.ViewModels
                                 IsLinkable = true,
                                 LinkWaitTimeout = 3600,
                                 PostMissionOperations = new List<MissionSubOperation> {
-                                    new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "팔레트 랙에 안착 여부 확인", McDiscreteInputAddress = _mainViewModel._checkModbusDescreteInputAddr },
-                                    new MissionSubOperation { Type = SubOperationType.DbWriteRackData, Description = "입고 팔레트 정보 업데이트", DestRackIdForDbUpdate = inRackVm.Id }
+                                    //new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "팔레트 랙에 안착 여부 확인", McDiscreteInputAddress = _mainViewModel._checkModbusDescreteInputAddr },
+                                    new MissionSubOperation { Type = SubOperationType.DbWriteRackData, Description = "입고 팔레트 정보 업데이트", DestRackIdForDbUpdate = inRackVm.Id },
+                                    new MissionSubOperation { Type = SubOperationType.ClearLotInformation, Description = "Lot 정보 표시 지우기" }
                                 }
                             });
                             missionSteps.Add(new MissionStepDefinition
@@ -1192,7 +1296,6 @@ namespace WPF_WMS01.ViewModels
                                 PostMissionOperations = new List<MissionSubOperation> {
                                     new MissionSubOperation { Type = SubOperationType.DbReadRackData, Description = "랙 데이터 읽어 오기", TargetRackId = outRackVm.Id },
                                     new MissionSubOperation { Type = SubOperationType.DbUpdateRackState, Description = "랙 상태 업데이트", SourceRackIdForDbUpdate = outRackVm.Id, DestRackIdForDbUpdate = null },
-                                    //new MissionSubOperation { Type = SubOperationType.SetPlcStatusIsPaused, Description = "콜버튼 액션 허용", PauseButtonCallPlcStatus = false }
                                 }
                             });
                             missionSteps.Add(new MissionStepDefinition
@@ -1295,7 +1398,7 @@ namespace WPF_WMS01.ViewModels
                                 IsLinkable = true,
                                 LinkWaitTimeout = 3600,
                                 PostMissionOperations = new List<MissionSubOperation> {
-                                    new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "팔레트 랙에 안착 여부 확인", McDiscreteInputAddress = _mainViewModel._checkModbusDescreteInputAddr },
+                                    //new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "팔레트 랙에 안착 여부 확인", McDiscreteInputAddress = _mainViewModel._checkModbusDescreteInputAddr },
                                     new MissionSubOperation { Type = SubOperationType.DbWriteRackData, Description = "입고 팔레트 정보 업데이트", DestRackIdForDbUpdate = inRackVm.Id }
                                 }
                             });
@@ -1507,7 +1610,7 @@ namespace WPF_WMS01.ViewModels
                     IsLinkable = true,
                     LinkWaitTimeout = 3600,
                     PostMissionOperations = new List<MissionSubOperation> {
-                        new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "팔레트 랙에 안착 여부 확인", McDiscreteInputAddress = _mainViewModel._checkModbusDescreteInputAddr },
+                        //new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "팔레트 랙에 안착 여부 확인", McDiscreteInputAddress = _mainViewModel._checkModbusDescreteInputAddr },
                         new MissionSubOperation { Type = SubOperationType.DbUpdateRackState, Description = "랙 상태 업데이트", SourceRackIdForDbUpdate = amrRackViewModel.Id, DestRackIdForDbUpdate = destinationRack.Id },
                         new MissionSubOperation { Type = SubOperationType.DbInsertInboundData, Description = "입고 장부 기입", DestRackIdForDbUpdate = destinationRack.Id }
                     }

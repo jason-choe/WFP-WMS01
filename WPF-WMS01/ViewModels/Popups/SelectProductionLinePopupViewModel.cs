@@ -64,6 +64,7 @@ namespace WPF_WMS01.ViewModels.Popups
                 new ProductionLineLocation { Id = 6, Name = "카타르 A" },
                 new ProductionLineLocation { Id = 7, Name = "카타르 B" },
                 new ProductionLineLocation { Id = 8, Name = "특수포장" },
+                new ProductionLineLocation { Id = 9, Name = "랩핑기" },
             };
 
             ConfirmCommand = new RelayCommand(ExecuteConfirm, CanExecuteConfirm);

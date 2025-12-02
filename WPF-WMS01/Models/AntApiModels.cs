@@ -521,7 +521,13 @@ namespace WPF_WMS01.Models
         DbUpdateOutboundData,
 
         // 공 팔레트 공급 위치 switching
-        UpdatePalletSupOdd
+        UpdatePalletSupOdd,
+
+        // Lot 정보 지우기
+        ClearLotInformation,
+
+        // 마지막 Wrap State 백업
+        DbBackupRackState
     }
 
     // 기존 McOperationType 열거형 유지 (이전 코드 호환성을 위해)

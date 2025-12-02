@@ -103,7 +103,8 @@ namespace WPF_WMS01.Services
             catch (Exception ex)
             {
                 _isConnected = false;
-                MessageBox.Show($"Connection failed: Network error or no server response: {ex.Message} ({_ipAddress}:{_port})", "PLC/MCP Connection Error");
+                //MessageBox.Show($"Connection failed: Network error or no server response: {ex.Message} ({_ipAddress}:{_port})", "PLC/MCP Connection Error",
+                //    MessageBoxButton.OK, MessageBoxImage.Error, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
                 Debug.WriteLine($"[McProtocolService] Connection failed: {ex.Message}");
                 Dispose(); // 연결 실패 시 자원 정리
                 return false;
