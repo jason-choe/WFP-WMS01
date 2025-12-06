@@ -109,6 +109,15 @@ namespace WPF_WMS01.ViewModels.Popups
             CancelCommand = new RelayCommand(ExecuteCancel); // <Window> 제거
         }
 
+        public RackTypeChangePopupViewModel(string rackName)
+        {
+            MessageTitle = "포장 제품 적재";
+            Message = $"포장된 제품을 랙 '{rackName}'에 적재하겠습니까?";
+
+            ConfirmCommand = new RelayCommand(ExecuteConfirm); // <Window> 제거
+            CancelCommand = new RelayCommand(ExecuteCancel); // <Window> 제거
+        }
+
         private void ExecuteConfirm(object parameter) // 매개변수 object로 변경
         {
                 DialogResult = true;

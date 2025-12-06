@@ -558,8 +558,9 @@
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                         <TextBlock Grid.Column="0" Margin="5,10,0,0"
+                         <TextBlock Grid.Column="0" Margin="0,10,0,0"
                                  Text="Lot 일련번호:"
                                  FontWeight="Light"
                                  FontSize="18" Foreground="Black"
@@ -570,7 +571,7 @@
                                  PreviewTextInput="ProductCodeTextBox_PreviewTextInput"
                                  GotFocus="ProductCodeTextBox_GotFocus"
                                  LostFocus="ProductCodeTextBox_LostFocus"
-                                 MaxLength="4" Width="200" Height="80" Background="LightSeaGreen"
+                                 MaxLength="4" Width="120" Height="80" Background="LightSeaGreen"
                                  VerticalAlignment="Center" HorizontalAlignment="Left"
                                  Margin="0,0,20,0"
                                  BorderThickness="3" 
@@ -578,8 +579,26 @@
                                  FontSize="28" Foreground="White"
                                  VerticalContentAlignment="Center"
                                  TextAlignment="Center" />
-
-                        <Grid Grid.Column="1">
+                        <TextBlock Grid.Column="1" Margin="0,10,0,0"
+                                 Text="랙 No:"
+                                 FontWeight="Light"
+                                 FontSize="18" Foreground="Black"
+                                 VerticalAlignment="Top"/>
+                        <TextBox Grid.Column="1" Grid.Row="0"
+                                 Name="OutRackNoTextBox"
+                                 Text="{Binding InputStringForOutRack, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 PreviewTextInput="OutRackNoTextBox_PreviewTextInput"
+                                 GotFocus="OutRackNoTextBox_GotFocus"
+                                 LostFocus="OutRackNoTextBox_LostFocus"
+                                 MaxLength="2" Width="60" Height="80" Background="LightSeaGreen"
+                                 VerticalAlignment="Center" HorizontalAlignment="Left"
+                                 Margin="0,0,20,0"
+                                 BorderThickness="3" 
+                                 BorderBrush="Black"
+                                 FontSize="28" Foreground="White"
+                                 VerticalContentAlignment="Center"
+                                 TextAlignment="Center" />
+                        <Grid Grid.Column="2">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="AUTO"/>
                                 <RowDefinition Height="AUTO"/>
@@ -595,7 +614,7 @@
                                     VerticalAlignment="Center" HorizontalAlignment="Right"
                                     Margin="0,0,20,0" Style="{StaticResource ModernButtonStyle}"/>
                         </Grid>
-                        <Grid Grid.Column="2">
+                        <Grid Grid.Column="3">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="AUTO"/>
                                 <RowDefinition Height="AUTO"/>
@@ -611,7 +630,7 @@
                                     VerticalAlignment="Center" HorizontalAlignment="Right"
                                     Margin="0,0,20,0" Style="{StaticResource ModernButtonStyle}"/>
                         </Grid>
-                        <Grid Grid.Column="3">
+                        <Grid Grid.Column="4">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="AUTO"/>
                                 <RowDefinition Height="AUTO"/>
@@ -627,7 +646,7 @@
                                     VerticalAlignment="Center" HorizontalAlignment="Right"
                                     Margin="0,0,20,0" Style="{StaticResource ModernButtonStyle}"/>
                         </Grid>
-                        <Grid Grid.Column="4">
+                        <Grid Grid.Column="5">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="AUTO"/>
                                 <RowDefinition Height="AUTO"/>
@@ -643,7 +662,7 @@
                                     VerticalAlignment="Center" HorizontalAlignment="Right"
                                     Margin="0,0,20,0" Style="{StaticResource ModernButtonStyle}"/>
                         </Grid>
-                        <Grid Grid.Column="5">
+                        <Grid Grid.Column="6">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="AUTO"/>
                                 <RowDefinition Height="AUTO"/>
@@ -659,7 +678,7 @@
                                     VerticalAlignment="Center" HorizontalAlignment="Right"
                                     Margin="0,0,20,0" Style="{StaticResource ModernButtonStyle}"/>
                         </Grid>
-                        <Grid Grid.Column="6">
+                        <Grid Grid.Column="7">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="AUTO"/>
                                 <RowDefinition Height="AUTO"/>

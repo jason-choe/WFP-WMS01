@@ -358,6 +358,7 @@ namespace WPF_WMS01.Services
                                             }
                                             /*else if (processInfo.ProcessType.Equals("단일 출고 작업") || processInfo.ProcessType.Equals("다중 출고 작업"))
                                             {
+                                                var insertedInID = processInfo.MissionSteps[processInfo.CurrentStepIndex].PostMissionOperations[1].SourceRackIdForDbUpdate;
                                                 processInfo.MissionSteps.Insert(index, new MissionStepDefinition
                                                 {
                                                     ProcessStepDescription = $"{destinationRackVm.Title}(으)로 이동 & 팔레트 드롭",
@@ -370,7 +371,7 @@ namespace WPF_WMS01.Services
                                                     PostMissionOperations = new List<MissionSubOperation> {
                                                         //new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "팔레트 랙에 안착 여부 확인", McDiscreteInputAddress = _mainViewModel._checkModbusDescreteInputAddr },
                                                         new MissionSubOperation { Type = SubOperationType.DbUpdateRackState, Description = "랙 상태 업데이트", SourceRackIdForDbUpdate = amrRackViewModel.Id, DestRackIdForDbUpdate =destinationRackVm.Id },
-                                                        new MissionSubOperation { Type = SubOperationType.DbInsertInboundData, Description = "출고 에러 장부 기입", DestRackIdForDbUpdate = destinationRackVm.Id }
+                                                        new MissionSubOperation { Type = SubOperationType.DbUpdateOutboundErrData, Description = "출고 에러 장부 기입", SourceRackIdForDbUpdate = insertedInID}
                                                     }
                                                 });
                                             }*/
@@ -688,7 +689,7 @@ namespace WPF_WMS01.Services
                     }
                 }
             };
-
+            var retryCount = 3;
             while(true)
             {
                 try
@@ -714,7 +715,7 @@ namespace WPF_WMS01.Services
                             processInfo.LastRackDropMissionId = processInfo.LastSentMissionId;
                             processInfo.LastRackDropPayload = currentStep.Payload;
                         }
-                        else if (currentStep.ToNode.Contains("test_drop_Rack"))
+                        else if (currentStep.ToNode.Contains("WaitProduct_drop_Rack"))
                         {
                             processInfo.LastRackDropMissionId = processInfo.LastSentMissionId;
                             processInfo.LastRackDropPayload = currentStep.Payload;
@@ -762,18 +763,27 @@ namespace WPF_WMS01.Services
                 }
                 catch (HttpRequestException httpEx)
                 {
-                    var result = MessageBox.Show($"로봇 미션 단계 전송 HTTP 오류: {httpEx.Message.Substring(0, Math.Min(100, httpEx.Message.Length))}\n계속 시도하시겠습니까?",
-                        "미션생성 오류", MessageBoxButton.YesNo, MessageBoxImage.Error, MessageBoxResult.Yes, MessageBoxOptions.DefaultDesktopOnly);
-                    if (result == MessageBoxResult.No)
+                    if(retryCount > 0)
                     {
-                        processInfo.HmiStatus.Status = MissionStatusEnum.FAILED.ToString();
-                        processInfo.CurrentStatus = MissionStatusEnum.FAILED; // RobotMissionInfo 내부 상태 업데이트
-                        OnShowAutoClosingMessage?.Invoke($"로봇 미션 단계 전송 HTTP 오류: {httpEx.Message.Substring(0, Math.Min(100, httpEx.Message.Length))}");
-                        Debug.WriteLine($"[RobotMissionService] Process {processInfo.ProcessId}: HTTP Request Error sending mission step {currentStep.ProcessStepDescription}: {httpEx.Message}");
-                        processInfo.IsFailed = true; // 프로세스 실패로 간주
-                        await HandleRobotMissionCompletion(processInfo); // 실패 처리
-                        break;
+                        retryCount--;
                     }
+                    else
+                    {
+                        var result = MessageBox.Show($"로봇 미션 단계 전송 HTTP 오류: {httpEx.Message.Substring(0, Math.Min(100, httpEx.Message.Length))}\n계속 시도하시겠습니까?",
+                            "미션생성 오류", MessageBoxButton.YesNo, MessageBoxImage.Error, MessageBoxResult.Yes, MessageBoxOptions.DefaultDesktopOnly);
+                        if (result == MessageBoxResult.No)
+                        {
+                            processInfo.HmiStatus.Status = MissionStatusEnum.FAILED.ToString();
+                            processInfo.CurrentStatus = MissionStatusEnum.FAILED; // RobotMissionInfo 내부 상태 업데이트
+                            OnShowAutoClosingMessage?.Invoke($"로봇 미션 단계 전송 HTTP 오류: {httpEx.Message.Substring(0, Math.Min(100, httpEx.Message.Length))}");
+                            Debug.WriteLine($"[RobotMissionService] Process {processInfo.ProcessId}: HTTP Request Error sending mission step {currentStep.ProcessStepDescription}: {httpEx.Message}");
+                            processInfo.IsFailed = true; // 프로세스 실패로 간주
+                            await HandleRobotMissionCompletion(processInfo); // 실패 처리
+                            break;
+                        }
+                        retryCount = 3;
+                    }
+
                 }
                 catch (Exception ex)
                 {
