@@ -322,6 +322,7 @@ namespace WPF_WMS01.ViewModels
         public ICommand Amr1MoveToWait { get; private set; }
         public ICommand Amr2MoveToCharger { get; private set; }
         public ICommand Amr2MoveToWait { get; private set; }
+        public ICommand RefreshWrapState { get; private set; }
         public ICommand ManageCallButton { get; private set; }
         public ICommand OpenInOutLedgerCommand { get; }
 
@@ -405,6 +406,8 @@ namespace WPF_WMS01.ViewModels
             Amr1MoveToWait = new RelayCommand(async p => await ExecuteAmrMoveTo(true, false));
             Amr2MoveToCharger = new RelayCommand(async p => await ExecuteAmrMoveTo(false, true));
             Amr2MoveToWait = new RelayCommand(async p => await ExecuteAmrMoveTo(false, false));
+            // Refresh Wrap unload state
+            RefreshWrapState = new RelayCommand(async p => await ExecuteRefreshWrapState());
             // 콜버튼 취소
             ManageCallButton = new RelayCommand(async p => await ExecuteManageCallButton());
             // 입출고 장부 팝업
@@ -1815,10 +1818,20 @@ namespace WPF_WMS01.ViewModels
                                 IsLinkable = true,
                                 LinkWaitTimeout = 3600
                             });
+                            missionSteps.Add(new MissionStepDefinition
+                            {
+                                ProcessStepDescription = "공팔레트 픽업을 위한 이동, 회전 1",
+                                MissionType = "7",
+                                FromNode = "Work_Etc_Turn1",
+                                ToNode = "Work_Etc_Turn",
+                                Payload = ProductionLinePayload,
+                                IsLinkable = true,
+                                LinkWaitTimeout = 3600,
+                            });
                             // Step 6 : Move
                             missionSteps.Add(new MissionStepDefinition
                             {
-                                ProcessStepDescription = "공팔레트 픽업을 위한 이동, 회전",
+                                ProcessStepDescription = "공팔레트 픽업을 위한 이동, 회전 2",
                                 MissionType = "8",
                                 ToNode = "Pallet_BWD_Pos",
                                 Payload = ProductionLinePayload,
@@ -2453,13 +2466,23 @@ namespace WPF_WMS01.ViewModels
                             IsLinkable = true,
                             LinkWaitTimeout = 3600,
                         });
+                        missionSteps.Add(new MissionStepDefinition
+                        {
+                            ProcessStepDescription = "팔레트 적재를 위한 이동 및 회전 1",
+                            MissionType = "7",
+                            FromNode = "Work_Etc_Turn1",
+                            ToNode = "Work_Etc_Turn",
+                            Payload = ProductionLinePayload,
+                            IsLinkable = true,
+                            LinkWaitTimeout = 3600,
+                        });
                         //Move, Drop, Check
                         // Rack에 적치하기 위한 이동 및 적치
                         if (destinationRackVm.LocationArea == 4 || destinationRackVm.LocationArea == 2) // 랙 2 ~ 8 번 1단 드롭 만 적용
                         {
                             missionSteps.Add(new MissionStepDefinition
                             {
-                                ProcessStepDescription = "팔레트 적재를 위한 이동 및 회전",
+                                ProcessStepDescription = "팔레트 적재를 위한 이동 및 회전 2",
                                 MissionType = "7",
                                 FromNode = $"RACK_{shelf}_STEP1",
                                 ToNode = $"RACK_{shelf}_STEP2",
@@ -2907,6 +2930,17 @@ namespace WPF_WMS01.ViewModels
                 ShowAutoClosingMessage("AMR 이동이 취소되었습니다.");
             }
 
+        }
+
+        private async Task ExecuteRefreshWrapState()
+        {
+            Debug.WriteLine("[MainViewModel] ExecuteRefreshWrapState command executed..");
+            IsMenuOpen = false; // 메뉴 닫기
+
+            var savedRackViewModel = RackList?.FirstOrDefault(r => r.Id == 1);
+            InputStringForBullet = GetBulletTypeNameFromNumber(savedRackViewModel.BulletType);
+            InputStringForButton = savedRackViewModel.LotNumber;
+            InputStringForBoxes = savedRackViewModel.BoxCount.ToString();
         }
 
         private async Task ExecuteManageCallButton()
@@ -3641,7 +3675,7 @@ namespace WPF_WMS01.ViewModels
                             LinkWaitTimeout = 3600,
                             PostMissionOperations = new List<MissionSubOperation> {
                                 new MissionSubOperation { Type = SubOperationType.DbUpdateRackState, Description = "랙 상태 업데이트", SourceRackIdForDbUpdate = amrRackVm.Id, DestRackIdForDbUpdate = null },
-                                new MissionSubOperation { Type = SubOperationType.DbUpdateOutboundData, Description = "출고 장부 기입", SourceRackIdForDbUpdate = insertedInID} // SourceRackIdForDbUpdate를 int 전달을 위해 차용
+                                new MissionSubOperation { Type = SubOperationType.DbUpdateOutboundData, Description = "출고 장부 기입", InOutLedgerId = insertedInID}
                             }
                         });
 
@@ -3770,8 +3804,8 @@ namespace WPF_WMS01.ViewModels
                 destinationRackVm = RackList?.Where(r => r.IsVisible == true && r.RackType == 1 && r.BulletType == 0 && r.IsLocked == false)
                     .OrderBy(rack =>
                     {
-                                    // 첫 번째 숫자 부분 추출
-                                    string[] parts = rack.Title.Split('-');
+                        // 첫 번째 숫자 부분 추출
+                        string[] parts = rack.Title.Split('-');
                         if (parts.Length > 0 && int.TryParse(parts[0], out int num))
                         {
                             return num;
@@ -3780,8 +3814,8 @@ namespace WPF_WMS01.ViewModels
                                 })
                     .ThenBy(rack =>
                     {
-                                    // 두 번째 숫자 부분 추출 (있을 경우)
-                                    string[] parts = rack.Title.Split('-');
+                        // 두 번째 숫자 부분 추출 (있을 경우)
+                        string[] parts = rack.Title.Split('-');
                         if (parts.Length > 1 && int.TryParse(parts[1], out int num))
                         {
                             return num;

@@ -52,6 +52,13 @@ namespace WPF_WMS01.Models
             set => SetProperty(ref _lastRackDropPayload, value);
         }
 
+        private int? _lastRackDropInsertedId;
+        public int? LastRackDropInsertedId
+        {
+            get => _lastRackDropInsertedId;
+            set => SetProperty(ref _lastRackDropInsertedId, value);
+        }
+
         private int? _lastCompletedMissionId; // 가장 최근에 완료된 미션의 ID
         public int? LastCompletedMissionId
         {

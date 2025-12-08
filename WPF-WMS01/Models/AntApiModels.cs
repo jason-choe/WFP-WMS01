@@ -440,6 +440,7 @@ namespace WPF_WMS01.Models
         public int? TargetRackId { get; set; } // DB에서 읽거나 업데이트할 단일 랙 ID
         public int? SourceRackIdForDbUpdate { get; set; } // DbUpdateRackState 용 Source Rack ID
         public int? DestRackIdForDbUpdate { get; set; } // DbUpdateRackState 용 Destination Rack ID
+        public int? InOutLedgerId { get; set; }
 
         // 생성자
         public MissionSubOperation(
@@ -520,14 +521,15 @@ namespace WPF_WMS01.Models
         // update 출고 to DB
         DbUpdateOutboundData,
 
+        // insert 입고 to DB
+        DbUpdateOutboundErrData,
+
         // 공 팔레트 공급 위치 switching
         UpdatePalletSupOdd,
 
         // Lot 정보 지우기
         ClearLotInformation,
 
-        // 마지막 Wrap State 백업
-        DbBackupRackState
     }
 
     // 기존 McOperationType 열거형 유지 (이전 코드 호환성을 위해)

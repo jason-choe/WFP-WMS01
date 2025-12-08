@@ -356,9 +356,8 @@ namespace WPF_WMS01.Services
                                                     }
                                                 });
                                             }
-                                            /*else if (processInfo.ProcessType.Equals("단일 출고 작업") || processInfo.ProcessType.Equals("다중 출고 작업"))
+                                            else if (processInfo.ProcessType.Equals("단일 출고 작업") || processInfo.ProcessType.Equals("다중 출고 작업"))
                                             {
-                                                var insertedInID = processInfo.MissionSteps[processInfo.CurrentStepIndex].PostMissionOperations[1].SourceRackIdForDbUpdate;
                                                 processInfo.MissionSteps.Insert(index, new MissionStepDefinition
                                                 {
                                                     ProcessStepDescription = $"{destinationRackVm.Title}(으)로 이동 & 팔레트 드롭",
@@ -370,11 +369,11 @@ namespace WPF_WMS01.Services
                                                     LinkWaitTimeout = 3600,
                                                     PostMissionOperations = new List<MissionSubOperation> {
                                                         //new MissionSubOperation { Type = SubOperationType.CheckModbusDiscreteInput, Description = "팔레트 랙에 안착 여부 확인", McDiscreteInputAddress = _mainViewModel._checkModbusDescreteInputAddr },
-                                                        new MissionSubOperation { Type = SubOperationType.DbUpdateRackState, Description = "랙 상태 업데이트", SourceRackIdForDbUpdate = amrRackViewModel.Id, DestRackIdForDbUpdate =destinationRackVm.Id },
-                                                        new MissionSubOperation { Type = SubOperationType.DbUpdateOutboundErrData, Description = "출고 에러 장부 기입", SourceRackIdForDbUpdate = insertedInID}
+                                                        new MissionSubOperation { Type = SubOperationType.DbUpdateRackState, Description = "랙 상태 업데이트", SourceRackIdForDbUpdate = amrRackViewModel.Id, DestRackIdForDbUpdate = destinationRackVm.Id },
+                                                        new MissionSubOperation { Type = SubOperationType.DbUpdateOutboundErrData, Description = "출고 에러 장부 기입", InOutLedgerId = processInfo.LastRackDropInsertedId, DestRackIdForDbUpdate = destinationRackVm.Id}
                                                     }
                                                 });
-                                            }*/
+                                            }
                                             else
                                             {
                                                 processInfo.MissionSteps.Insert(index, new MissionStepDefinition
@@ -689,7 +688,7 @@ namespace WPF_WMS01.Services
                     }
                 }
             };
-            var retryCount = 3;
+            //var retryCount = 3;
             while(true)
             {
                 try
@@ -719,6 +718,7 @@ namespace WPF_WMS01.Services
                         {
                             processInfo.LastRackDropMissionId = processInfo.LastSentMissionId;
                             processInfo.LastRackDropPayload = currentStep.Payload;
+                            processInfo.LastRackDropInsertedId = currentStep.PostMissionOperations[1].InOutLedgerId;
                         }
                         else
                         {
@@ -763,12 +763,14 @@ namespace WPF_WMS01.Services
                 }
                 catch (HttpRequestException httpEx)
                 {
-                    if(retryCount > 0)
+                    /*if(retryCount > 0)
                     {
                         retryCount--;
                     }
                     else
-                    {
+                    {*/
+                        Debug.WriteLine($"[RobotMissionService] Process {processInfo.ProcessId}: HTTP Request Error sending mission step {currentStep.ProcessStepDescription}: {httpEx.Message}");
+                        Debug.WriteLine($"[RobotMissionService] Process {processInfo.ProcessId}: {httpEx.InnerException?.Message}");
                         var result = MessageBox.Show($"로봇 미션 단계 전송 HTTP 오류: {httpEx.Message.Substring(0, Math.Min(100, httpEx.Message.Length))}\n계속 시도하시겠습니까?",
                             "미션생성 오류", MessageBoxButton.YesNo, MessageBoxImage.Error, MessageBoxResult.Yes, MessageBoxOptions.DefaultDesktopOnly);
                         if (result == MessageBoxResult.No)
@@ -781,8 +783,8 @@ namespace WPF_WMS01.Services
                             await HandleRobotMissionCompletion(processInfo); // 실패 처리
                             break;
                         }
-                        retryCount = 3;
-                    }
+/*                        retryCount = 3;
+                    }*/
 
                 }
                 catch (Exception ex)
@@ -1278,10 +1280,6 @@ namespace WPF_WMS01.Services
                         processInfo.HmiStatus.SubOpDescription = "";
                         break;
 
-                    case SubOperationType.DbBackupRackState:
-                        await PerformDbUpdateForCompletedStepLogic(processInfo, subOp.SourceRackIdForDbUpdate, subOp.DestRackIdForDbUpdate).ConfigureAwait(false);
-                        break;
-
                     case SubOperationType.UiDisplayLotNoBoxCount:
                         if (string.IsNullOrEmpty(processInfo.ReadStringValue) || !processInfo.ReadIntValue.HasValue)
                         {
@@ -1324,11 +1322,19 @@ namespace WPF_WMS01.Services
                         break;
 
                     case SubOperationType.DbUpdateOutboundData:
-                        if (!subOp.SourceRackIdForDbUpdate.HasValue && !subOp.DestRackIdForDbUpdate.HasValue)
+                        if (!subOp.InOutLedgerId.HasValue)
                         {
-                            throw new ArgumentException("DbUpdateRackState: SourceRackIdForDbUpdate (= inserted line id) 가 지정되지 않았습니다.");
+                            throw new ArgumentException("DbUpdateRackState: InOutLedgerId (= inserted line id) 가 지정되지 않았습니다.");
                         }
-                        await PerformDbUpdateForOutbound(processInfo, subOp.SourceRackIdForDbUpdate).ConfigureAwait(false);
+                        await PerformDbUpdateForOutbound(processInfo, subOp.InOutLedgerId).ConfigureAwait(false);
+                        break;
+
+                    case SubOperationType.DbUpdateOutboundErrData:
+                        if (!subOp.InOutLedgerId.HasValue || !subOp.DestRackIdForDbUpdate.HasValue)
+                        {
+                            throw new ArgumentException("DbUpdateRackState: SourceRackIdForDbUpdate (= inserted line id), DestRackIdForDbUpdate가 지정되지 않았습니다.");
+                        }
+                        await PerformDbUpdateForOutbound(processInfo, (int)subOp.InOutLedgerId, (int)subOp.DestRackIdForDbUpdate).ConfigureAwait(false);
                         break;
 
                     case SubOperationType.UpdatePalletSupOdd:
@@ -1595,6 +1601,16 @@ namespace WPF_WMS01.Services
                         _setInputStringForButtonFunc(sourceLotNumber);
                         _setInputStringForBoxesFunc(sourceBoxCount.ToString());
                         //OnShowAutoClosingMessage?.Invoke($"UI 표시: LotNo: {processInfo.ReadStringValue}, BoxCount: {processInfo.ReadIntValue.Value}");
+                        await _databaseService.UpdateRackStateAsync(
+                            1,
+                            newDestinationRackType,
+                            sourceBulletType
+                        );
+                        await _databaseService.UpdateLotNumberAsync(
+                            1,
+                            sourceLotNumber,
+                            sourceBoxCount
+                        );
                     }
                     else
                     {
@@ -1814,8 +1830,8 @@ namespace WPF_WMS01.Services
                 int boxCount = destinationRackVm.BoxCount;
                 DateTime? inboundAt = destinationRackVm.RackedAt;
 
-                var innsertedIn = await _databaseService.InsertInbountDBAsync(rackName, bulletType, lotNumber, boxCount, inboundAt);
-                await _databaseService.UpdateIsInsertedInAsync((int)destinationRackId, innsertedIn);
+                var insertedIn = await _databaseService.InsertInbountDBAsync(rackName, bulletType, lotNumber, boxCount, inboundAt);
+                await _databaseService.UpdateIsInsertedInAsync((int)destinationRackId, insertedIn);
             }
             catch (Exception ex)
             {
@@ -1833,7 +1849,7 @@ namespace WPF_WMS01.Services
         /// <param name="destinationRackId">목적지 랙 ID.</param>
         private async Task PerformDbUpdateForOutbound(RobotMissionInfo processInfo, int? insertedInID)
         {
-            Debug.WriteLine($"[RobotMissionService] Performing DB update for outbound step. ProcessType: {processInfo.ProcessType}, inserted lin id: {insertedInID}");
+            Debug.WriteLine($"[RobotMissionService] Performing DB update for outbound step. ProcessType: {processInfo.ProcessType}, inserted line id: {insertedInID}");
 
             if (insertedInID.HasValue)
             {
@@ -1850,22 +1866,20 @@ namespace WPF_WMS01.Services
             }
         }
 
-        private async Task PerformDbUpdateBackupForWrap(RobotMissionInfo processInfo, int? insertedInID)
+        private async Task PerformDbUpdateForOutbound(RobotMissionInfo processInfo, int insertedInID, int destinationRackId)
         {
-            Debug.WriteLine($"[RobotMissionService] Performing DB update for outbound step. ProcessType: {processInfo.ProcessType}, inserted lin id: {insertedInID}");
+            Debug.WriteLine($"[RobotMissionService] Performing DB update for outbound error step. ProcessType: {processInfo.ProcessType}, inserted line id: {insertedInID}");
+            var destinationRackVm = _getRackViewModelByIdFunc(destinationRackId);
 
-            if (insertedInID.HasValue)
+            try
             {
-                try
-                {
-                    await _databaseService.UpdateOutboundDBAsync((int)insertedInID);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[RobotMissionService] Error performing DB update for outbound step: {ex.Message}");
-                    OnShowAutoClosingMessage?.Invoke($"미션 완료 후 DB 업데이트 중 오류 발생: {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}");
-                    throw; // 예외를 다시 던져 상위 호출자가 이를 인지하게 함
-                }
+                await _databaseService.UpdateOutboundDBAsync(insertedInID, destinationRackVm.Title, destinationRackId);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[RobotMissionService] Error performing DB update for outbound step: {ex.Message}");
+                OnShowAutoClosingMessage?.Invoke($"미션 완료 후 DB 업데이트 중 오류 발생: {ex.Message.Substring(0, Math.Min(100, ex.Message.Length))}");
+                throw; // 예외를 다시 던져 상위 호출자가 이를 인지하게 함
             }
         }
 

@@ -341,7 +341,7 @@ namespace WPF_WMS01.Services
         }
 
         // 출고 데이터 update
-        public async Task UpdateOutboundDBAsync(int insertedId)
+        public async Task UpdateOutboundDBAsync(int insertedId) // 출고 작업 중 drop success 시 call 됨
         {
             using (var connection = new SqlConnection(_connectionString))
             {
@@ -351,6 +351,29 @@ namespace WPF_WMS01.Services
                     connection
                 );
                 command.Parameters.AddWithValue("@insertedId", insertedId);
+                await command.ExecuteNonQueryAsync();
+            }
+        }
+
+        public async Task UpdateOutboundDBAsync(int insertedId, string rackName, int rackId) // 출고 작업 중 drop fail 처리 시 call 됨
+        {
+            using (var connection = new SqlConnection(_connectionString))
+            {
+                await connection.OpenAsync();
+                var command = new SqlCommand(
+                    "UPDATE InOutLedger SET rack_name = @rack_name WHERE id = @insertedId",
+                    connection
+                );
+                command.Parameters.AddWithValue("@insertedId", insertedId);
+                command.Parameters.AddWithValue("@rack_name", rackName);
+                await command.ExecuteNonQueryAsync();
+
+                command = new SqlCommand(
+                    "UPDATE RackState SET inserted_in = @insertedId WHERE id = @rackId",
+                    connection
+                );
+                command.Parameters.AddWithValue("@insertedId", insertedId);
+                command.Parameters.AddWithValue("@rackId", rackId);
                 await command.ExecuteNonQueryAsync();
             }
         }

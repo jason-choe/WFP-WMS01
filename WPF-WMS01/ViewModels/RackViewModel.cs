@@ -1905,7 +1905,7 @@ namespace WPF_WMS01.ViewModels
                     LinkWaitTimeout = 3600,
                     PostMissionOperations = new List<MissionSubOperation> {
                         new MissionSubOperation { Type = SubOperationType.DbUpdateRackState, Description = "랙 상태 업데이트", SourceRackIdForDbUpdate = amrRackViewModel.Id, DestRackIdForDbUpdate = null },
-                        new MissionSubOperation { Type = SubOperationType.DbUpdateOutboundData, Description = "출고 장부 기입", SourceRackIdForDbUpdate = insertedInID} // SourceRackIdForDbUpdate를 int 전달을 위해 차용
+                        new MissionSubOperation { Type = SubOperationType.DbUpdateOutboundData, Description = "출고 장부 기입", InOutLedgerId = insertedInID}
                     }
                 });
 
