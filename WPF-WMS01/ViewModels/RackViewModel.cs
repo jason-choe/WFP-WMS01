@@ -1522,6 +1522,7 @@ namespace WPF_WMS01.ViewModels
                                                    || _mainViewModel.InputStringForButton.Contains("308SP")
                                                     || _mainViewModel.InputStringForButton.Contains("308XM")
                                                      || _mainViewModel.InputStringForButton.Contains("7.62X")
+                                                      || _mainViewModel.InputStringForButton.Contains("M855")
                                              );
             if(!inputContainsValidLotNumber)
             {
@@ -1702,6 +1703,7 @@ namespace WPF_WMS01.ViewModels
                                                    || _mainViewModel.InputStringForButton.Contains("308SP")
                                                     || _mainViewModel.InputStringForButton.Contains("308XM")
                                                      || _mainViewModel.InputStringForButton.Contains("7.62X")
+                                                      || _mainViewModel.InputStringForButton.Contains("M855")
                                              );
             if (!inputContainsValidLotNumber)
             {

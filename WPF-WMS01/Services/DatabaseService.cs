@@ -322,7 +322,7 @@ namespace WPF_WMS01.Services
                 await connection.OpenAsync();
                 var command = new SqlCommand(
                     "INSERT INTO InOutLedger (rack_name, bullet_type, lot_number, box_count, inbound_at) " +
-                    "VALUES (@rackName, @bulletType, @lotNumber, @boxCount, @inboundAt);" +
+                    "VALUES (@rackName, @bulletType, @lotNumber, @boxCount, GetDate());" +      // inboundAt 가 ""인경우가 있어 @inboundAt를 GetDate()로 수정
                     " SELECT CAST(scope_identity() AS int);",
                     connection
                 );

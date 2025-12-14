@@ -290,6 +290,7 @@ namespace WPF_WMS01.Services
                                 {
                                     processInfo.LastRackDropMissionId = null;
                                     processInfo.MissionSteps[processInfo.CurrentStepIndex].PostMissionOperations.Clear();
+                                    processInfo.MissionSteps[processInfo.CurrentStepIndex].ProcessStepDescription += " [적치 실패]";
 
                                     RackViewModel? destinationRackVm;
                                     List<int> racksToLock = new List<int>(); // No racks locked for simple supply missions initially
@@ -701,6 +702,7 @@ namespace WPF_WMS01.Services
                     Debug.WriteLine($"  Payload: {requestPayloadJson}");
 
                     // AntApiModels.MissionRequest, AntApiModels.MissionResponse 사용
+                    processInfo.LastSentMissionId = -1;
                     var missionResponse = await _httpService.PostAsync<MissionRequest, MissionResponse>(requestEndpoint, missionRequest, processInfo.CancellationTokenSource.Token).ConfigureAwait(false);
 
                     if (missionResponse?.ReturnCode == 0 && missionResponse.Payload?.AcceptedMissions != null && missionResponse.Payload.AcceptedMissions.Any())
@@ -771,8 +773,19 @@ namespace WPF_WMS01.Services
                     {*/
                         Debug.WriteLine($"[RobotMissionService] Process {processInfo.ProcessId}: HTTP Request Error sending mission step {currentStep.ProcessStepDescription}: {httpEx.Message}");
                         Debug.WriteLine($"[RobotMissionService] Process {processInfo.ProcessId}: {httpEx.InnerException?.Message}");
-                        var result = MessageBox.Show($"로봇 미션 단계 전송 HTTP 오류: {httpEx.Message.Substring(0, Math.Min(100, httpEx.Message.Length))}\n계속 시도하시겠습니까?",
+                        MessageBoxResult result = MessageBoxResult.Yes;
+
+                        // inner exceptions : "The response ended prematurely.", "Unable to read data from the transport connection"
+                        if (httpEx.InnerException.Message.Contains("ended prematurely.") || httpEx.InnerException.Message.Contains("Unable to read"))
+                        {
+                            result = MessageBoxResult.Yes;
+                            await Task.Delay(200);
+                        }
+                        else
+                        {
+                            result = MessageBox.Show($"로봇 미션 단계 전송 HTTP 오류: {httpEx.Message.Substring(0, Math.Min(100, httpEx.Message.Length))}\n계속 시도하시겠습니까?",
                             "미션생성 오류", MessageBoxButton.YesNo, MessageBoxImage.Error, MessageBoxResult.Yes, MessageBoxOptions.DefaultDesktopOnly);
+                        }
                         if (result == MessageBoxResult.No)
                         {
                             processInfo.HmiStatus.Status = MissionStatusEnum.FAILED.ToString();
@@ -875,6 +888,19 @@ namespace WPF_WMS01.Services
             );
         }
 
+        public async Task<bool> IsRackVacancy(string rackTitle)
+        {
+            int address = 0x150F + ((int.Parse(rackTitle.Split("-")[0]) - 1) * 2 + int.Parse(rackTitle.Split("-")[1])) * 16;
+            ushort? readWord = await _mcProtocolService.ReadWordAsync("192.168.200.112", "W", address).ConfigureAwait(false);
+            return (readWord.HasValue && readWord == 0);
+        }
+
+        public async Task<bool> IsRackOccupied(string rackTitle)
+        {
+            var address = 0x150F + ((int.Parse(rackTitle.Split("-")[0]) - 1) * 2 + int.Parse(rackTitle.Split("-")[1])) * 16;
+            ushort? readWord = await _mcProtocolService.ReadWordAsync("192.168.200.112", "W", address).ConfigureAwait(false);
+            return (readWord.HasValue && readWord == 1);
+        }
         /// <summary>
         /// 주어진 랙 ID 목록에 대해 잠금을 해제합니다.
         /// </summary>

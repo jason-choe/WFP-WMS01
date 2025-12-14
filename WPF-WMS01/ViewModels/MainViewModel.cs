@@ -1012,8 +1012,8 @@ namespace WPF_WMS01.ViewModels
                             string state = item.State.VehicleState[0] ?? "__";
 
                             float f2 = 0.0000f;
-                            if (state.Equals("charging") && float.TryParse(batteryVoltage, out f2) && f2 < 50.0f)
-                                state = "Charging Station";
+                            if (state.Equals("charging") && float.TryParse(batteryVoltage, out f2) && f2 < 50.5f)
+                                state = "At charging station";
 
                             if (vehicleName.Equals("Poongsan_1"))
                                 message[0] = $"{vehicleName} :  {baterryPercentage}%  {batteryVoltage.Substring(0, 4)}V\t{ConvertCamelCaseWithSpaces(state)}";
