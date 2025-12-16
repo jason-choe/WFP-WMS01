@@ -300,7 +300,12 @@ namespace WPF_WMS01.Services
                                     }
                                     else
                                     {
-                                        destinationRackVm = await _mainViewModel.GetRackViewModelForInboundTemporary();    // 라인 입고 팔레트를 적치할 Rack
+                                        if (processInfo.InitiatingCoilAddress == 11) // 특수포장 팔레트 입고의 경우
+                                            destinationRackVm = await _mainViewModel.GetRackViewModelForInboundForSpecial();    // 특수포장 팔레트를 적치할 Rack (2단 only)
+                                        else if (processInfo.InitiatingCoilAddress == 6) // 308 라인 팔레트 입고의 경우
+                                            destinationRackVm = await _mainViewModel.GetRackViewModelForInboundFor308();    // 특수포장 팔레트를 적치할 Rack (1단 only)
+                                        else
+                                            destinationRackVm = await _mainViewModel.GetRackViewModelForInboundTemporary();    // 라인 입고 팔레트를 적치할 Rack
                                     }
 
                                     if (destinationRackVm == null)

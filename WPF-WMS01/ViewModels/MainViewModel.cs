@@ -1317,7 +1317,7 @@ namespace WPF_WMS01.ViewModels
                         await _mcProtocolService.WriteWordAsync("192.168.200.120", "W", 0x1008, 2);//.ConfigureAwait(false);
                         await _mcProtocolService.WriteWordAsync("192.168.200.120", "W", 0x102D, 2);//.ConfigureAwait(false);
                         break;
-                    case 10: // 카타르 ㅠ
+                    case 10: // 카타르 B
                         await _mcProtocolService.WriteWordAsync("192.168.200.120", "W", 0x1008, 2);//.ConfigureAwait(false);
                         await _mcProtocolService.WriteWordAsync("192.168.200.120", "W", 0x101D, 2);//.ConfigureAwait(false);
                         break;
@@ -2432,7 +2432,7 @@ namespace WPF_WMS01.ViewModels
                         workPoint = "Etc_1"; // or "Etc_2"
                         swapPoint = "Etc";
 
-                        destinationRackVm = await GetRackViewModelForInboundTemporary();    // 라인 입고 팔레트를 적치할 Rack
+                        destinationRackVm = await GetRackViewModelForInboundForSpecial();    // 라인 입고 팔레트를 적치할 Rack
                         if (destinationRackVm == null)
                         {
                             MessageBox.Show("적치 가능한 랙이 없습니다.", "경고", MessageBoxButton.OK, MessageBoxImage.Warning, MessageBoxResult.OK, MessageBoxOptions.DefaultDesktopOnly);
@@ -3138,7 +3138,7 @@ namespace WPF_WMS01.ViewModels
 
                     case 9: // 카타르 A
                         mcProtocolIpAddress = "192.168.200.120";
-                        mcLightAddress = 0x101D;
+                        mcLightAddress = 0x102D;
                         mcLightTuenOff = 2; // 1=ON, 2=OFF
                         // 작업 완료, 안전 센서 Quit (1=OFF, 0=ON, 2=Quit)
                         if (_mcProtocolInterface)
@@ -3147,7 +3147,7 @@ namespace WPF_WMS01.ViewModels
 
                     case 10: // 카타르 B
                         mcProtocolIpAddress = "192.168.200.120";
-                        mcLightAddress = 0x102D;
+                        mcLightAddress = 0x101D;
                         mcLightTuenOff = 2; // 1=ON, 2=OFF
                         if (_mcProtocolInterface)
                             await _mcProtocolService.WriteWordAsync(mcProtocolIpAddress, "W", (int)0x1008, 2);
@@ -3842,6 +3842,46 @@ namespace WPF_WMS01.ViewModels
             if (destinationRackVm == null)
             {
                 destinationRackVm = RackList?.Where(r => r.IsVisible == true && r.RackType == 1 && r.BulletType == 0 && r.IsLocked == false && r.Title.Contains("-1"))
+                    .OrderBy(rack =>
+                    {
+                        // 첫 번째 숫자 부분 추출
+                        string[] parts = rack.Title.Split('-');
+                        if (parts.Length > 0 && int.TryParse(parts[0], out int num))
+                        {
+                            return num;
+                        }
+                        return int.MaxValue; // 파싱 실패 시 가장 뒤로 보내기
+                    })
+                    .ThenBy(rack =>
+                    {
+                        // 두 번째 숫자 부분 추출 (있을 경우)
+                        string[] parts = rack.Title.Split('-');
+                        if (parts.Length > 1 && int.TryParse(parts[1], out int num))
+                        {
+                            return num;
+                        }
+                        return int.MaxValue; // 파싱 실패 시 가장 뒤로 보내기
+                    }).FirstOrDefault();
+
+                if (destinationRackVm == null)
+                    return null;
+
+                await _databaseService.UpdateRackTypeAsync(destinationRackVm.Id, 0);
+                Application.Current.Dispatcher.Invoke(() => (RackList?.FirstOrDefault(r => r.Id == destinationRackVm.Id)).RackType = 0);
+                Debug.WriteLine($"Selected Rack = {destinationRackVm.Title}'s rack type to 0");
+            }
+            return destinationRackVm;
+        }
+
+        public async Task<RackViewModel?> GetRackViewModelForInboundForSpecial()
+        {
+            var destinationRackVm = RackList?.Where(r => r.IsVisible == true && r.RackType == 0 && r.BulletType == 0 && r.IsLocked == false && r.Title.Contains("-2")) // 조건 필터
+                                    .OrderBy(r => r.RackedAt) // racked_at 오름차순 정렬 (가장 빠른 것이 첫 번째)
+                                    .FirstOrDefault();
+
+            if (destinationRackVm == null)
+            {
+                destinationRackVm = RackList?.Where(r => r.IsVisible == true && r.RackType == 1 && r.BulletType == 0 && r.IsLocked == false && r.Title.Contains("-2"))
                     .OrderBy(rack =>
                     {
                         // 첫 번째 숫자 부분 추출
