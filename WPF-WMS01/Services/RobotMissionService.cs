@@ -310,12 +310,12 @@ namespace WPF_WMS01.Services
 
                                     if (destinationRackVm == null)
                                     {
-                                        _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] 창고 랙에 적치 중 에러 발생, 빈 랙이 없어서 로봇 추출함");
+                                        _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] {processInfo.LastRackDropTitle}에 적치 중 에러 발생, 빈 랙이 없어서 로봇 추출함");
                                         await ExtractVehicle(processInfo.IsWarehouseMission ? _warehouseAmrName : _packagingLineAmrName);
                                     }
                                     else
                                     {
-                                        _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] 창고 랙에 적치 중 에러 발생, {destinationRackVm.Title}(으)로 이동 적치");
+                                        _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] {processInfo.LastRackDropTitle}에 적치 중 에러 발생, 창고 랙 {destinationRackVm.Title}(으)로 이동 적치");
                                         int index = processInfo.CurrentStepIndex + 1;
                                         processInfo.MissionSteps[processInfo.CurrentStepIndex].IsLinkable = false;
 
@@ -602,7 +602,7 @@ namespace WPF_WMS01.Services
             // 첫 번째 미션 단계를 전송하고 추적을 시작합니다.
             await SendAndTrackMissionStepsForProcess(newMissionProcess);
             if (initiatingCoilAddress.HasValue)
-                _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] 포장실 미션 started by call button {initiatingCoilAddress + 1}.");
+                _mainViewModel.WriteLog("[" + DateTimeOffset.Now.ToString() + $"] 포장실 미션 started by call button {initiatingCoilAddress + 1}.");
 
             return processId;
         }
@@ -720,12 +720,14 @@ namespace WPF_WMS01.Services
                         {
                             processInfo.LastRackDropMissionId = processInfo.LastSentMissionId;
                             processInfo.LastRackDropPayload = currentStep.Payload;
+                            processInfo.LastRackDropTitle = currentStep.ToNode.Replace("Rack_", "창고 랙 ").Replace("_Drop", "").Replace("_", "-");
                         }
-                        else if (currentStep.ToNode.Contains("WaitProduct_drop_Rack"))
+                        else if (currentStep.ToNode.Contains("WaitProduct_drop_Rack_"))
                         {
                             processInfo.LastRackDropMissionId = processInfo.LastSentMissionId;
                             processInfo.LastRackDropPayload = currentStep.Payload;
                             processInfo.LastRackDropInsertedId = currentStep.PostMissionOperations[1].InOutLedgerId;
+                            processInfo.LastRackDropTitle = currentStep.ToNode.Replace("_drop_Rack", "").Replace("WaitProduct_", "출고 랙 ").Replace("_", "-");
                         }
                         else
                         {
@@ -1194,8 +1196,8 @@ namespace WPF_WMS01.Services
                         }
                         if (!subOp.WaitTimeoutSeconds.HasValue || subOp.WaitTimeoutSeconds.Value <= 0)
                         {
-                            subOp.WaitTimeoutSeconds = 60; // 기본 타임아웃 30초
-                            Debug.WriteLine($"[RobotMissionService] McWaitSensor: WaitTimeoutSeconds가 지정되지 않아 기본값 30초 사용.");
+                            subOp.WaitTimeoutSeconds = 120; // 기본 타임아웃 120초
+                            Debug.WriteLine($"[RobotMissionService] McWaitSensor: WaitTimeoutSeconds가 지정되지 않아 기본값 120초 사용.");
                         }
 
                         // 센서 명령 (켜거나 끄기)
@@ -1233,14 +1235,17 @@ namespace WPF_WMS01.Services
                             }
                             if (DateTime.Now - startTime > TimeSpan.FromSeconds(subOp.WaitTimeoutSeconds.Value))
                             {
+                                _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] IP: {subOp.McProtocolIpAddress}, Addr: {subOp.McWordAddress.Value} 진입요청에서 timeout 발생");
                                 var result = MessageBox.Show($"패킹로봇 정지 요청에서 timeout이 발생했습니다.\n해당 PLC의 확인이 필요합니다.\n(IP: {subOp.McProtocolIpAddress}, Addr: {subOp.McWordAddress.Value})\n계속 시도하시겠습니까?",
                                     "패킹로봇 정지 요청", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.Yes, MessageBoxOptions.DefaultDesktopOnly);
                                 if (result == MessageBoxResult.Yes)
                                 {
+                                    _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] IP: {subOp.McProtocolIpAddress}, Addr: {subOp.McWordAddress.Value} 진입요청 확인 재시도");
                                     startTime_A = DateTime.Now;
                                 }
                                 else if (result == MessageBoxResult.No)
                                 {
+                                    _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] IP: {subOp.McProtocolIpAddress}, Addr: {subOp.McWordAddress.Value} 진입요청 포기");
                                     // 이 시점에서 미션 프로세스를 실패 상태로 마크하고 완료 처리
                                     processInfo.CurrentStatus = MissionStatusEnum.FAILED;
                                     processInfo.HmiStatus.Status = "FAILED";

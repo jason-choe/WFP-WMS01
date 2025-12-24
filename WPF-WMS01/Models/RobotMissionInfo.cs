@@ -38,11 +38,18 @@ namespace WPF_WMS01.Models
             set => SetProperty(ref _lastSentMissionId, value);
         }
 
-        private int? _lastRackDropMissionId; // 가장 최근에 ANT 서버에 전송된 미션의 ID
+        private int? _lastRackDropMissionId; // 가장 최근에 ANT 서버에 전송된 랙 드롭 미션의 ID
         public int? LastRackDropMissionId
         {
             get => _lastRackDropMissionId;
             set => SetProperty(ref _lastRackDropMissionId, value);
+        }
+
+        private string? _lastRackDropTitle;
+        public string LastRackDropTitle
+        {
+            get => _lastRackDropTitle;
+            set => SetProperty(ref _lastRackDropTitle, value);
         }
 
         private string _lastRackDropPayload = "";

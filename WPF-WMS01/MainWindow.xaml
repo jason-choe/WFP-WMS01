@@ -355,7 +355,7 @@
                             <Button Content="5. Poongsan 2 충전소로" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding Amr2MoveToCharger}"/>
                             <Button Content="6. Poongsan 2 대기장소로" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding Amr2MoveToWait}"/>
                             <Button Content="7. 래핑기 상태 리프레시" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding RefreshWrapState}"/>
-                            <!--Button Content="7. 콜버튼 신호 정리하기" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding ManageCallButton}"/-->
+                            <Button Content="8. 콜버튼 신호 정리하기" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding ManageCallButton}"/>
                             <!-- Button Content="입출고 장부 열기" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding OpenInOutLedgerCommand}"/-->
                             <!-- 팝업이 닫힐 때 IsMenuOpen을 False로 설정하는 버튼 추가 -->
                             <Button Content="메뉴 닫기" Style="{StaticResource MenuItemButtonStyle}" Command="{Binding CloseMenuCommand}" Margin="0,10,0,0"/>

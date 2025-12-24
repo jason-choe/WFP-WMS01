@@ -1343,7 +1343,10 @@ namespace WPF_WMS01.ViewModels
 
                 }
 
-                HandleTurnOffAlarmLightRequest(buttonVm.CoilOutputAddress);
+                await _modbusService.WriteSingleCoilAsync(buttonVm.CoilOutputAddress, true); // Coil Output ON
+                await Task.Delay(1000).ConfigureAwait(false); // 1초 지연
+
+                HandleTurnOffAlarmLightRequest(buttonVm.CoilOutputAddress); // Coil Output OFF
                 return;
             }
 
@@ -1539,6 +1542,7 @@ namespace WPF_WMS01.ViewModels
                                 new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "경광등 끄기", WordDeviceCode = "W", McWordAddress = 0x102D, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"}
                             }
                         });
+                        WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] [AMR_2] 공 팔레트 팩 공급 작업 : 공 팔레트 팩 공급장소 " + (_isPalletDummyOdd ? "1":"2") + "에서 매거진으로 공 팔레트 팩 이동");
                         break;
 
                     case "단프라 공급":
@@ -1573,66 +1577,25 @@ namespace WPF_WMS01.ViewModels
                                 new MissionSubOperation {Type = SubOperationType.McWaitAvailable, Description = "패드 트레이 배출 준비 완료 체크", WordDeviceCode = "W", McWordAddress = 0x153C, McWateValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
                             }
                         });
-                        // 3. Move, Drop
+                        // 5. Move, Drop
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = "임시 장소 1로 이동하여, 소진 패드 트레이 드롭",
+                            ProcessStepDescription = "임시 장소 2로 이동하여, 소진 패드 트레이  드롭",
                             MissionType = "8",
-                            ToNode = "Empty_DanPra_Sheet_Drop",
+                            ToNode = "Full_DanPra_Sheet_Drop",
                             Payload = ProductionLinePayload,
                             IsLinkable = true,
                             LinkWaitTimeout = 3600,
                             PreMissionOperations = new List<MissionSubOperation> // 패드 드레이 배출 완료
                             {
-                                new MissionSubOperation {Type = SubOperationType.McWriteSingleWord, Description = "패드 트레이 배출 완료 신호", WordDeviceCode = "W", McWordAddress = 0x103C, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"},
+                                new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "패드 트레이 배출 완료 신호", WordDeviceCode = "W", McWordAddress = 0x103C, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111" },
                             }
                         });
-                        // 4. Move, Pickup
                         missionSteps.Add(new MissionStepDefinition
                         {
                             ProcessStepDescription = "패드 트레이 준비 장소로 이동하여, 충전 패드 트레이 픽업",
                             MissionType = "8",
                             ToNode = "DanPra_Sheet_PickUP",
-                            Payload = ProductionLinePayload,
-                            IsLinkable = true,
-                            LinkWaitTimeout = 3600
-                        });
-                        // 5. Move, Drop
-                        missionSteps.Add(new MissionStepDefinition
-                        {
-                            ProcessStepDescription = "임시 장소 2로 이동하여, 충전 패드 트레이  드롭",
-                            MissionType = "8",
-                            ToNode = "Full_DanPra_Sheet_Drop",
-                            Payload = ProductionLinePayload,
-                            IsLinkable = true,
-                            LinkWaitTimeout = 3600
-                        });
-                        // 6. Move, Pickup
-                        missionSteps.Add(new MissionStepDefinition
-                        {
-                            ProcessStepDescription = "임시 장소 1로 이동하여, 소진 패드 트레이 픽업",
-                            MissionType = "8",
-                            ToNode = "Empty_DanPra_Sheet_PickUP",
-                            Payload = ProductionLinePayload,
-                            IsLinkable = true,
-                            LinkWaitTimeout = 3600
-                        });
-                        // 7. Move, Drop
-                        missionSteps.Add(new MissionStepDefinition
-                        {
-                            ProcessStepDescription = "패드 트레이 준비 장소로 이동하여, 소진 패드 트레이  드롭",
-                            MissionType = "8",
-                            ToNode = "DanPra_Sheet_Drop",
-                            Payload = ProductionLinePayload,
-                            IsLinkable = true,
-                            LinkWaitTimeout = 3600
-                        });
-                        // 8. Move, Pickup
-                        missionSteps.Add(new MissionStepDefinition
-                        {
-                            ProcessStepDescription = "임시 장소 2로 이동하여, 충전 패드 트레이 픽업",
-                            MissionType = "8",
-                            ToNode = "Full_DanPra_Sheet_PickUP",
                             Payload = ProductionLinePayload,
                             IsLinkable = true,
                             LinkWaitTimeout = 3600
@@ -1662,6 +1625,28 @@ namespace WPF_WMS01.ViewModels
                                 new MissionSubOperation { Type = SubOperationType.McWaitAvailable, Description = "패드 트레이 투입 준비 완료 체크", WordDeviceCode = "W", McWordAddress = 0x153F, McWateValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
                             }
                         });
+                        missionSteps.Add(new MissionStepDefinition
+                        {
+                            ProcessStepDescription = "임시 장소 2로 이동하여, 소진 패드 트레이 픽업",
+                            MissionType = "8",
+                            ToNode = "Full_DanPra_Sheet_PickUP",
+                            Payload = ProductionLinePayload,
+                            IsLinkable = true,
+                            LinkWaitTimeout = 3600,
+                            PreMissionOperations = new List<MissionSubOperation> // 패드 드레이 공급 완료, 경광등 끄기
+                            {
+                                new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "패드 트레이 투입 완료 신호", WordDeviceCode = "W", McWordAddress = 0x103F, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"},
+                            }
+                        });
+                        missionSteps.Add(new MissionStepDefinition
+                        {
+                            ProcessStepDescription = "패드 트레이 준비 장소로 이동하여, 소진 패드 트레이  드롭",
+                            MissionType = "8",
+                            ToNode = "DanPra_Sheet_Drop",
+                            Payload = ProductionLinePayload,
+                            IsLinkable = true,
+                            LinkWaitTimeout = 3600
+                        });
                         // 11. Move & Quit
                         missionSteps.Add(new MissionStepDefinition
                         {
@@ -1673,10 +1658,10 @@ namespace WPF_WMS01.ViewModels
                             LinkWaitTimeout = 3600,
                             PreMissionOperations = new List<MissionSubOperation> // 패드 드레이 공급 완료, 경광등 끄기
                             {
-                                new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "패드 트레이 투입 완료 신호", WordDeviceCode = "W", McWordAddress = 0x103F, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"},
                                 new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "경광등 끄기", WordDeviceCode = "W", McWordAddress = 0x103D, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"}
                             }
                         });
+                        WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] [AMR_2] 단프라 패드 공급 작업 : 단프라 공급장소에서 매거잔으로 단프라 패드 트레이 이동");
                         break;
 
                     case "223A 1": // Title = 223#1 B
@@ -1957,6 +1942,10 @@ namespace WPF_WMS01.ViewModels
                                 new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "경광등 끄기", WordDeviceCode = "W", McWordAddress = (ushort)(mcWordAddress -0x500 + 13), McWriteValueInt = 0, McProtocolIpAddress = mcProtocolIpAddress }
                             }
                         });
+                        if (isSpecialCarton == 1)
+                            WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] [AMR_2] 라인 입고 작업 : {buttonVm.Title} 에서 특수포장 라인으로 제품 팔레트 이동");
+                        else
+                            WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] [AMR_2] 라인 입고 작업 : {buttonVm.Title} 에서 창고 랙 {destinationRackVm.Title}(으)로 제품 팔레트 이동");
                         break;
 
                     case "7.62mm":
@@ -2136,6 +2125,7 @@ namespace WPF_WMS01.ViewModels
                                 new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "경광등 끄기", WordDeviceCode = "W", McWordAddress = (ushort)(mcWordAddress -0x500 + 13), McWriteValueInt = 0, McProtocolIpAddress = mcProtocolIpAddress }
                             }
                         });
+                        WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] [AMR_2] 라인 입고 작업 : {buttonVm.Title} 에서 창고 랙 {destinationRackVm.Title}(으)로 제품 팔레트 이동");
                         break;
 
                     case "223A Bypass":
@@ -2220,8 +2210,9 @@ namespace WPF_WMS01.ViewModels
                             IsLinkable = false,
                             LinkWaitTimeout = 3600
                         });
-
+                        WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] [AMR_2] 라인 입고 작업 : {buttonVm.Title} 에서 특수포장 라인으로 제품 팔레트 이동");
                         break;
+
                     case "카타르 1":
                     case "카타르 2":
                         if (buttonVm.Content.Equals("카타르 1"))
@@ -2423,6 +2414,7 @@ namespace WPF_WMS01.ViewModels
                                 new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "경광등 끄기", WordDeviceCode = "W", McWordAddress = (ushort)(mcWordAddress -0x500 + 13), McProtocolIpAddress = mcProtocolIpAddress, McWriteValueInt = 2 }
                             }
                         });
+                        WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] [AMR_2] 라인 입고 작업 : {buttonVm.Title} 에서 창고 랙 {destinationRackVm.Title}(으)로 제품 팔레트 이동");
                         break;
 
                     // For other product-specific call buttons, let's define a simple "robot moves to station" mission.
@@ -2514,6 +2506,9 @@ namespace WPF_WMS01.ViewModels
                             IsLinkable = false, // This is the final step of this specific mission
                             LinkWaitTimeout = 3600
                         });
+                        WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] [AMR_2] 라인 입고 작업 : {buttonVm.Title} 에서 창고 랙 {destinationRackVm.Title}(으)로 제품 팔레트 이동");
+
+
                         break;
 
                     default:
@@ -2951,7 +2946,11 @@ namespace WPF_WMS01.ViewModels
             ClearingCallButtonStage = !ClearingCallButtonStage;
 
             if (ClearingCallButtonStage)
-                MessageBox.Show("이번 포장실 상황 버튼 클릭에서 해당 콜버튼을 지울 수 있습니다.", "알림", MessageBoxButton.OK, MessageBoxImage.Information);
+            {
+                MessageBox.Show("이번 포장실 상황 버튼 클릭에서 해당 콜버튼 지우기를 시도합니다.", "경고", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("해당 콜버튼의 미션이 실행 중이면 우선 ANT 모니터에서 해당 미션을 취소해야 합니다.", "경고", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("이 설정을 취소하려면 메뉴에서 \"콜버튼 신호 정리하기\"를 눌러 주세요.", "알림", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
             else
                 MessageBox.Show("포장실 상황 버튼이 정상 모드로 동작합니다.", "알림", MessageBoxButton.OK, MessageBoxImage.Information);
         }
@@ -3474,6 +3473,7 @@ namespace WPF_WMS01.ViewModels
                             true // isWarehouseMission = true로 전달
                         );
                         ShowAutoClosingMessage($"로봇 미션 프로세스 시작됨: {processId}");
+                        WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] [AMR_1] 라이트 팔레트 입고 작업 : Wrapping M/C 에서 {targetRackVm.Title}(으)로 라이트 팔레트 이동");
                     }
                     catch (Exception ex)
                     {
@@ -3641,12 +3641,14 @@ namespace WPF_WMS01.ViewModels
                         throw new InvalidOperationException("AMR 랙을 찾을 수 없습니다.");
                     }
 
+                    string rackListToCheckout = "";
                     foreach (var rackModelToCheckout in selectedRacksForCheckout)
                     {
                         var targetRackVm = RackList?.FirstOrDefault(r => r.Id == rackModelToCheckout.Id);
                         int? insertedInID = targetRackVm.InsertedIn;
                         if (targetRackVm == null) continue;
 
+                        rackListToCheckout += targetRackVm.Title + ", ";
                         string shelf = $"{int.Parse(targetRackVm.Title.Split('-')[0]):D2}_{targetRackVm.Title.Split('-')[1]}";
                         // 1. Move, Pickup, Update DB
                         missionSteps.Add(new MissionStepDefinition
@@ -3710,6 +3712,7 @@ namespace WPF_WMS01.ViewModels
                         // 미션 완료 시점에 이루어지도록 위임합니다.
 
                         InputStringForOutRack = $"{outletPosition + 1}";
+                        WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] [AMR_1] 다중 출고 작업 : 창고 랙 {rackListToCheckout} 에서 제품 팔레트를 출고 랙 {startRack} 부터 순차 출고");
                     }
                     catch (Exception ex) // 외부 try-catch 추가
                     {
@@ -3862,6 +3865,9 @@ namespace WPF_WMS01.ViewModels
                         }
                         return int.MaxValue; // 파싱 실패 시 가장 뒤로 보내기
                     }).FirstOrDefault();
+
+                if (destinationRackVm == null)
+                    destinationRackVm = await GetRackViewModelForInboundTemporary();
 
                 if (destinationRackVm == null)
                     return null;
