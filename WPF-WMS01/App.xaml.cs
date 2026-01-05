@@ -39,7 +39,8 @@ namespace WPF_WMS01
 
             string wpfAppFolder = AppDomain.CurrentDomain.BaseDirectory;
             string consoleAppPath = System.IO.Path.Combine(wpfAppFolder, "SubApps", "PoongsansPLCMon.exe");
-            consoleProcess = Process.Start(consoleAppPath);
+            string args = ConfigurationManager.AppSettings["PackagingLineAMRPlcIp"] ?? "192.168.200.222"; // 공백 포함 인수는 따옴표로
+            consoleProcess = Process.Start(consoleAppPath, args);
             // WPF 앱 종료시 콘솔 프로세스 종료 등록
             this.Exit += App_Exit;
 

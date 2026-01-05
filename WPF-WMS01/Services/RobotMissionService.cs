@@ -58,8 +58,8 @@ namespace WPF_WMS01.Services
         private bool _isPollingInProgress = false; // 폴링 타이머 재진입 방지 플래그
         private readonly bool _mcProtocolInterface = ConfigurationManager.AppSettings["McProtocolInterface"].Equals("true") ? true : false;
 
-        private readonly string _warehouseAmrName = ConfigurationManager.AppSettings["WarehouseAMRName"] ?? "";
-        private readonly string _packagingLineAmrName = ConfigurationManager.AppSettings["PackagingLineAMRName"] ?? "";
+        private readonly string _warehouseAmrName = ConfigurationManager.AppSettings["WarehouseAMRName"] ?? "Poongsan_1";
+        private readonly string _packagingLineAmrName = ConfigurationManager.AppSettings["PackagingLineAMRName"] ?? "Poongsan_2";
 
         /// <summary>
         /// MainViewModel로 상태를 다시 보고하기 위한 이벤트
@@ -1164,14 +1164,17 @@ namespace WPF_WMS01.Services
                             }
                             if (DateTime.Now - startTime_A > TimeSpan.FromSeconds(subOp.WaitTimeoutSeconds.Value))
                             {
+                                _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] IP: {subOp.McProtocolIpAddress}, Addr: {subOp.McWordAddress.Value} AMR 진입 요청에서 timeout 발생");
                                 var result = MessageBox.Show($"AMR 진입 요청에서 timeout이 발생했습니다.\n해당 PLC의 확인이 필요합니다.\n(IP: {subOp.McProtocolIpAddress}, Addr: {subOp.McWordAddress.Value})\n계속 시도하시겠습니까?",
                                     "AMR 진입 요청", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.Yes, MessageBoxOptions.DefaultDesktopOnly);
                                 if (result == MessageBoxResult.Yes)
                                 {
+                                    _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] IP: {subOp.McProtocolIpAddress}, Addr: {subOp.McWordAddress.Value} AMR 진입 허가 확인 재시도");
                                     startTime_A = DateTime.Now;
                                 }
                                 else if (result == MessageBoxResult.No)
                                 {
+                                    _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] IP: {subOp.McProtocolIpAddress}, Addr: {subOp.McWordAddress.Value} AMR 진입 요청 포기");
                                     // 이 시점에서 미션 프로세스를 실패 상태로 마크하고 완료 처리
                                     processInfo.CurrentStatus = MissionStatusEnum.FAILED;
                                     processInfo.HmiStatus.Status = "FAILED";
@@ -1235,17 +1238,17 @@ namespace WPF_WMS01.Services
                             }
                             if (DateTime.Now - startTime > TimeSpan.FromSeconds(subOp.WaitTimeoutSeconds.Value))
                             {
-                                _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] IP: {subOp.McProtocolIpAddress}, Addr: {subOp.McWordAddress.Value} 진입요청에서 timeout 발생");
+                                _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] IP: {subOp.McProtocolIpAddress}, Addr: {subOp.McWordAddress.Value} 패킹로봇 정지 요청에서 timeout 발생");
                                 var result = MessageBox.Show($"패킹로봇 정지 요청에서 timeout이 발생했습니다.\n해당 PLC의 확인이 필요합니다.\n(IP: {subOp.McProtocolIpAddress}, Addr: {subOp.McWordAddress.Value})\n계속 시도하시겠습니까?",
                                     "패킹로봇 정지 요청", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.Yes, MessageBoxOptions.DefaultDesktopOnly);
                                 if (result == MessageBoxResult.Yes)
                                 {
-                                    _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] IP: {subOp.McProtocolIpAddress}, Addr: {subOp.McWordAddress.Value} 진입요청 확인 재시도");
+                                    _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] IP: {subOp.McProtocolIpAddress}, Addr: {subOp.McWordAddress.Value} 패킹로봇 정지 확인 재시도");
                                     startTime_A = DateTime.Now;
                                 }
                                 else if (result == MessageBoxResult.No)
                                 {
-                                    _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] IP: {subOp.McProtocolIpAddress}, Addr: {subOp.McWordAddress.Value} 진입요청 포기");
+                                    _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] IP: {subOp.McProtocolIpAddress}, Addr: {subOp.McWordAddress.Value} 패킹로봇 정지 요청 포기");
                                     // 이 시점에서 미션 프로세스를 실패 상태로 마크하고 완료 처리
                                     processInfo.CurrentStatus = MissionStatusEnum.FAILED;
                                     processInfo.HmiStatus.Status = "FAILED";
