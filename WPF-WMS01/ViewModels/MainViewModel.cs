@@ -324,6 +324,7 @@ namespace WPF_WMS01.ViewModels
         public ICommand Amr2MoveToWait { get; private set; }
         public ICommand RefreshWrapState { get; private set; }
         public ICommand ManageCallButton { get; private set; }
+        public ICommand AmrReassignmentAndRestart { get; private set; }
         public ICommand OpenInOutLedgerCommand { get; }
 
         private string _popupDebugMessage;
@@ -338,7 +339,7 @@ namespace WPF_WMS01.ViewModels
                              string warehousePayload, string productionLinePayload , IMcProtocolService mcProtocolService)
         {
             Debug.WriteLine("[MainViewModel] Constructor called.");
-            WriteLog("\n[" + DateTimeOffset.Now.ToString() + "] ====== Logging Start ======");
+            WriteLog("====== Logging Start ======");
             _databaseService = databaseService;
             _wrapRackTitle = ConfigurationManager.AppSettings["WrapRackTitle"] ?? "WRAP";
             _amrRackTitle = ConfigurationManager.AppSettings["AMRRackTitle"] ?? "AMR";
@@ -410,6 +411,8 @@ namespace WPF_WMS01.ViewModels
             RefreshWrapState = new RelayCommand(async p => await ExecuteRefreshWrapState());
             // 콜버튼 취소
             ManageCallButton = new RelayCommand(async p => await ExecuteManageCallButton());
+            // AMR 장비 재할당 및 재시작
+            AmrReassignmentAndRestart = new RelayCommand(async p => await ExecuteAmrReassignmentAndRestart());
             // 입출고 장부 팝업
             OpenInOutLedgerCommand = new AsyncRelayCommand(ExecuteOpenInOutLedger);
 
@@ -1542,7 +1545,7 @@ namespace WPF_WMS01.ViewModels
                                 new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "경광등 끄기", WordDeviceCode = "W", McWordAddress = 0x102D, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"}
                             }
                         });
-                        WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] [AMR_2] 공 팔레트 팩 공급 작업 : 공 팔레트 팩 공급장소 " + (_isPalletDummyOdd ? "1":"2") + "에서 매거진으로 공 팔레트 팩 이동");
+                        WriteLog("[AMR_2] 공 팔레트 팩 공급 작업 : 공 팔레트 팩 공급장소 " + (_isPalletDummyOdd ? "1":"2") + "에서 매거진으로 공 팔레트 팩 이동");
                         break;
 
                     case "단프라 공급":
@@ -1661,7 +1664,7 @@ namespace WPF_WMS01.ViewModels
                                 new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "경광등 끄기", WordDeviceCode = "W", McWordAddress = 0x103D, McWriteValueInt = 0, McProtocolIpAddress = "192.168.200.111"}
                             }
                         });
-                        WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] [AMR_2] 단프라 패드 공급 작업 : 단프라 공급장소에서 매거잔으로 단프라 패드 트레이 이동");
+                        WriteLog("[AMR_2] 단프라 패드 공급 작업 : 단프라 공급장소에서 매거잔으로 단프라 패드 트레이 이동");
                         break;
 
                     case "223A 1": // Title = 223#1 B
@@ -1801,7 +1804,11 @@ namespace WPF_WMS01.ViewModels
                                 ToNode = "Work_Etc_2_Drop",
                                 Payload = ProductionLinePayload,
                                 IsLinkable = true,
-                                LinkWaitTimeout = 3600
+                                LinkWaitTimeout = 3600,
+                                PostMissionOperations = new List<MissionSubOperation>
+                                {
+                                    new MissionSubOperation { Type = SubOperationType.ClearLotInformation, Description = "Lot 정보 표시 지우기" }
+                                }
                             });
                             missionSteps.Add(new MissionStepDefinition
                             {
@@ -1830,6 +1837,15 @@ namespace WPF_WMS01.ViewModels
                         }
                         else // 일반포장 제품 입고
                         {
+                            missionSteps.Add(new MissionStepDefinition
+                            {
+                                ProcessStepDescription = "팔레트 적재를 위한 이동",
+                                MissionType = "8",
+                                ToNode = $"Wait_Zone",
+                                Payload = ProductionLinePayload,
+                                IsLinkable = true,
+                                LinkWaitTimeout = 3600
+                            });
                             // Step 5 : Move, Unload
                             if (destinationRackVm.LocationArea == 2 || destinationRackVm.LocationArea == 4) // 랙 2 ~ 8 번 1단 드롭 만 적용
                             {
@@ -1943,9 +1959,9 @@ namespace WPF_WMS01.ViewModels
                             }
                         });
                         if (isSpecialCarton == 1)
-                            WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] [AMR_2] 라인 입고 작업 : {buttonVm.Title} 에서 특수포장 라인으로 제품 팔레트 이동");
+                            WriteLog($"[AMR_2] 라인 입고 작업 : {buttonVm.Title} 에서 특수포장 라인으로 제품 팔레트 이동");
                         else
-                            WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] [AMR_2] 라인 입고 작업 : {buttonVm.Title} 에서 창고 랙 {destinationRackVm.Title}(으)로 제품 팔레트 이동");
+                            WriteLog($"[AMR_2] 라인 입고 작업 : {buttonVm.Title} 에서 창고 랙 {destinationRackVm.Title}(으)로 제품 팔레트 이동");
                         break;
 
                     case "7.62mm":
@@ -2016,6 +2032,15 @@ namespace WPF_WMS01.ViewModels
                             }
                         });
                         // Step 4 : Move, Turn, Drop
+                        missionSteps.Add(new MissionStepDefinition
+                        {
+                            ProcessStepDescription = "팔레트 적재를 위한 이동",
+                            MissionType = "8",
+                            ToNode = $"Wait_Zone",
+                            Payload = ProductionLinePayload,
+                            IsLinkable = true,
+                            LinkWaitTimeout = 3600
+                        });
                         if (destinationRackVm.LocationArea == 2 || destinationRackVm.LocationArea == 4) // 랙 2 ~ 8 번 1단 드롭 만 적용
                         {
                             missionSteps.Add(new MissionStepDefinition
@@ -2125,7 +2150,7 @@ namespace WPF_WMS01.ViewModels
                                 new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "경광등 끄기", WordDeviceCode = "W", McWordAddress = (ushort)(mcWordAddress -0x500 + 13), McWriteValueInt = 0, McProtocolIpAddress = mcProtocolIpAddress }
                             }
                         });
-                        WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] [AMR_2] 라인 입고 작업 : {buttonVm.Title} 에서 창고 랙 {destinationRackVm.Title}(으)로 제품 팔레트 이동");
+                        WriteLog($"[AMR_2] 라인 입고 작업 : {buttonVm.Title} 에서 창고 랙 {destinationRackVm.Title}(으)로 제품 팔레트 이동");
                         break;
 
                     case "223A Bypass":
@@ -2210,7 +2235,7 @@ namespace WPF_WMS01.ViewModels
                             IsLinkable = false,
                             LinkWaitTimeout = 3600
                         });
-                        WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] [AMR_2] 라인 입고 작업 : {buttonVm.Title} 에서 특수포장 라인으로 제품 팔레트 이동");
+                        WriteLog($"[AMR_2] 라인 입고 작업 : {buttonVm.Title} 에서 특수포장 라인으로 제품 팔레트 이동");
                         break;
 
                     case "카타르 1":
@@ -2301,7 +2326,15 @@ namespace WPF_WMS01.ViewModels
                                 new MissionSubOperation { Type = SubOperationType.McWaitSensorOn, Description = "안전 센서 켜기", WordDeviceCode = "W", McWordAddress = 0x1008, McWriteValueInt = 0, McProtocolIpAddress = mcProtocolIpAddress }
                             }
                         });
-
+                        missionSteps.Add(new MissionStepDefinition
+                        {
+                            ProcessStepDescription = "팔레트 적재를 위한 이동",
+                            MissionType = "8",
+                            ToNode = $"Wait_Zone",
+                            Payload = ProductionLinePayload,
+                            IsLinkable = true,
+                            LinkWaitTimeout = 3600
+                        });
                         // Rack에 적치하기 위한 이동 및 적치
                         if (destinationRackVm.LocationArea == 2 || destinationRackVm.LocationArea == 4) // 랙 2 ~ 8 번 1단 드롭 만 적용
                         {
@@ -2414,7 +2447,7 @@ namespace WPF_WMS01.ViewModels
                                 new MissionSubOperation { Type = SubOperationType.McWriteSingleWord, Description = "경광등 끄기", WordDeviceCode = "W", McWordAddress = (ushort)(mcWordAddress -0x500 + 13), McProtocolIpAddress = mcProtocolIpAddress, McWriteValueInt = 2 }
                             }
                         });
-                        WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] [AMR_2] 라인 입고 작업 : {buttonVm.Title} 에서 창고 랙 {destinationRackVm.Title}(으)로 제품 팔레트 이동");
+                        WriteLog($"[AMR_2] 라인 입고 작업 : {buttonVm.Title} 에서 창고 랙 {destinationRackVm.Title}(으)로 제품 팔레트 이동");
                         break;
 
                     // For other product-specific call buttons, let's define a simple "robot moves to station" mission.
@@ -2460,13 +2493,22 @@ namespace WPF_WMS01.ViewModels
                         });
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = "팔레트 적재를 위한 이동 및 회전 1",
+                            ProcessStepDescription = "팔레트 적재를 위한 이동 및 회전",
                             MissionType = "7",
                             FromNode = "Work_Etc_Turn1",
                             ToNode = "Work_Etc_Turn",
                             Payload = ProductionLinePayload,
                             IsLinkable = true,
                             LinkWaitTimeout = 3600,
+                        });
+                        missionSteps.Add(new MissionStepDefinition
+                        {
+                            ProcessStepDescription = "팔레트 적재를 위한 이동",
+                            MissionType = "8",
+                            ToNode = $"Wait_Zone",
+                            Payload = ProductionLinePayload,
+                            IsLinkable = true,
+                            LinkWaitTimeout = 3600
                         });
                         //Move, Drop, Check
                         // Rack에 적치하기 위한 이동 및 적치
@@ -2506,7 +2548,7 @@ namespace WPF_WMS01.ViewModels
                             IsLinkable = false, // This is the final step of this specific mission
                             LinkWaitTimeout = 3600
                         });
-                        WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] [AMR_2] 라인 입고 작업 : {buttonVm.Title} 에서 창고 랙 {destinationRackVm.Title}(으)로 제품 팔레트 이동");
+                        WriteLog($"[AMR_2] 라인 입고 작업 : {buttonVm.Title} 에서 창고 랙 {destinationRackVm.Title}(으)로 제품 팔레트 이동");
 
 
                         break;
@@ -2953,6 +2995,22 @@ namespace WPF_WMS01.ViewModels
             }
             else
                 MessageBox.Show("포장실 상황 버튼이 정상 모드로 동작합니다.", "알림", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        private async Task ExecuteAmrReassignmentAndRestart()
+        {
+            Debug.WriteLine("[MainViewModel] ExecuteAmrReassignmentAndRestart command executed..");
+            IsMenuOpen = false; // 메뉴 닫기
+
+            // 1. 설정 창 인스턴스 생성
+            ConfigWindow configWin = new ConfigWindow();
+
+            // 2. 부모 창 설정 (선택 사항: 메인 창 중앙에 배치하기 위함)
+            //configWin.Owner = this;
+
+            // 3. 모달(Modal) 방식으로 창 열기
+            // ShowDialog를 사용하면 설정 창이 닫힐 때까지 메인 창을 조작할 수 없어 안전합니다.
+            configWin.ShowDialog();
         }
 
         /// <summary>
@@ -3473,7 +3531,7 @@ namespace WPF_WMS01.ViewModels
                             true // isWarehouseMission = true로 전달
                         );
                         ShowAutoClosingMessage($"로봇 미션 프로세스 시작됨: {processId}");
-                        WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] [AMR_1] 라이트 팔레트 입고 작업 : Wrapping M/C 에서 {targetRackVm.Title}(으)로 라이트 팔레트 이동");
+                        WriteLog($"[AMR_1] 라이트 팔레트 입고 작업 : Wrapping M/C 에서 {targetRackVm.Title}(으)로 라이트 팔레트 이동");
                     }
                     catch (Exception ex)
                     {
@@ -3712,7 +3770,7 @@ namespace WPF_WMS01.ViewModels
                         // 미션 완료 시점에 이루어지도록 위임합니다.
 
                         InputStringForOutRack = $"{outletPosition + 1}";
-                        WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] [AMR_1] 다중 출고 작업 : 창고 랙 {rackListToCheckout} 에서 제품 팔레트를 출고 랙 {startRack} 부터 순차 출고");
+                        WriteLog($"[AMR_1] 다중 출고 작업 : 창고 랙 {rackListToCheckout} 에서 제품 팔레트를 출고 랙 {startRack} 부터 순차 출고");
                     }
                     catch (Exception ex) // 외부 try-catch 추가
                     {
@@ -3961,28 +4019,33 @@ namespace WPF_WMS01.ViewModels
 
         public void WriteLog(string strLog)
         {
-            StreamWriter log;
-            FileStream fileStream = null;
-            DirectoryInfo logDirInfo = null;
-            FileInfo logFileInfo;
+            try
+            {
+                DateTime now = DateTime.Now;
+                // 경로 구성: .\Logs\2023\10\
+                string logDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs", now.ToString("yyyy"), now.ToString("MM"));
 
-            string logFilePath = ".\\Logs\\";
-            logFilePath = logFilePath + "Log-" + System.DateTime.Today.ToString("yyyy-MM-dd") + "." + "txt";
-            logFileInfo = new FileInfo(logFilePath);
-            logDirInfo = new DirectoryInfo(logFileInfo.DirectoryName);
-            if (!logDirInfo.Exists) logDirInfo.Create();
-            if (!logFileInfo.Exists)
-            {
-                fileStream = logFileInfo.Create();
+                // 폴더가 없으면 연도/월 계층까지 한꺼번에 생성
+                if (!Directory.Exists(logDirectory))
+                {
+                    Directory.CreateDirectory(logDirectory);
+                }
+
+                // 파일명 구성: Log-2023-10-27.txt
+                string logFileName = "Log-" + now.ToString("yyyy-MM-dd") + ".txt";
+                string logFilePath = Path.Combine(logDirectory, logFileName);
+
+                // Append 모드로 스트림 작성 (using 사용으로 자동 Close/Dispose 처리)
+                using (StreamWriter sw = new StreamWriter(logFilePath, true))
+                {
+                    sw.WriteLine($"[{now:yyyy-MM-dd HH:mm:ss}] {strLog}");
+                }
             }
-            else
+            catch (Exception ex)
             {
-                fileStream = new FileStream(logFilePath, FileMode.Append);
+                // 로그 기록 자체 실패 시 콘솔이나 디버그 창에 출력
+                Debug.WriteLine("Log Write Failed: " + ex.Message);
             }
-            log = new StreamWriter(fileStream);
-            log.WriteLine(strLog);
-            log.Close();
         }
-
     }
 }

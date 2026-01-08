@@ -1,0 +1,13 @@
+﻿<Window x:Class="WPF_WMS01.ConfigWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="System Configuration" Height="700" Width="600"
+        WindowStartupLocation="CenterScreen">
+
+    <Grid>
+        <!-- WebView2 컨트롤 배치 -->
+        <!-- Name="myWebView"를 통해 C# 코드에서 접근합니다. -->
+        <wv2:WebView2 Name="myWebView" />
+    </Grid>
+</Window>

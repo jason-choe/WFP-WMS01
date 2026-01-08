@@ -1,0 +1,103 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>시스템 설정 관리자</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .config-card {
+            @apply bg-white p-8 rounded-xl shadow-lg mb-8 border-t-4;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 p-6">
+    <div class="max-w-xl mx-auto">
+        <header class="mb-8 text-center">
+            <h1 class="text-2xl font-bold text-slate-800">AMR 장비 할당 설정</h1>
+        </header>
+
+        <form id="configForm">
+            <!-- 창고 설정 섹션 -->
+            <div class="config-card border-blue-600">
+                <h2 class="text-lg font-bold mb-6 text-blue-800">📍 창고 (Warehouse)</h2>
+                <select id="WarehouseAMRName" name="WarehouseAMRName" onchange="syncHiddenFields('Warehouse')" class="w-full rounded-lg border-slate-300 p-3">
+                    <option value="Poongsan_1">Poongsan_1</option>
+                    <option value="Poongsan_2">Poongsan_2</option>
+                </select>
+                <input type="hidden" id="WarehouseAMR" name="WarehouseAMR">
+                <input type="hidden" id="WarehouseAMRPlcIp" name="WarehouseAMRPlcIp">
+            </div>
+
+            <!-- 포장 라인 설정 섹션 -->
+            <div class="config-card border-emerald-600">
+                <h2 class="text-lg font-bold mb-6 text-emerald-800">📦 포장 라인 (Packaging Line)</h2>
+                <select id="PackagingLineAMRName" name="PackagingLineAMRName" onchange="syncHiddenFields('Packaging')" class="w-full rounded-lg border-slate-300 p-3">
+                    <option value="Poongsan_1">Poongsan_1</option>
+                    <option value="Poongsan_2">Poongsan_2</option>
+                </select>
+                <input type="hidden" id="PackagingLineAMR" name="PackagingLineAMR">
+                <input type="hidden" id="PackagingLineAMRPlcIp" name="PackagingLineAMRPlcIp">
+            </div>
+            <br /><br /><br />
+            <button type="submit" class="w-full bg-slate-800 text-white font-bold py-4 rounded-xl shadow-lg">
+                설정 저장 및 시스템 재시작
+            </button>
+        </form>
+    </div>
+
+    <script>
+        const robotMapping = {
+            "Poongsan_1": { id: "AMR_1", ip: "192.168.200.202" },
+            "Poongsan_2": { id: "AMR_2", ip: "192.168.200.222" }
+        };
+
+        function syncHiddenFields(type) {
+            const prefix = type === 'Warehouse' ? 'Warehouse' : 'PackagingLine';
+            const nameElement = document.getElementById(prefix + 'AMRName');
+            const mapping = robotMapping[nameElement.value];
+            if (mapping) {
+                document.getElementById(prefix + 'AMR').value = mapping.id;
+                document.getElementById(prefix + 'AMRPlcIp').value = mapping.ip;
+            }
+        }
+
+        // C#으로부터 메시지를 수신하여 화면 초기화
+        if (window.chrome && window.chrome.webview) {
+            window.chrome.webview.addEventListener('message', event => {
+                const config = event.data;
+
+                // Warehouse 설정 초기화
+                if (config.WarehouseAMRName) {
+                    document.getElementById('WarehouseAMRName').value = config.WarehouseAMRName;
+                }
+
+                // Packaging Line 설정 초기화
+                if (config.PackagingLineAMRName) {
+                    document.getElementById('PackagingLineAMRName').value = config.PackagingLineAMRName;
+                }
+
+                // UI 로드 후 hidden 필드 강제 동기화
+                syncHiddenFields('Warehouse');
+                syncHiddenFields('Packaging');
+            });
+        }
+
+        // 페이지 로드 완료 시 C#에 초기 데이터 요청
+        window.onload = () => {
+            if (window.chrome && window.chrome.webview) {
+                window.chrome.webview.postMessage({ type: "GET_INITIAL_CONFIG" });
+            }
+        };
+
+        document.getElementById('configForm').onsubmit = (e) => {
+            e.preventDefault();
+            syncHiddenFields('Warehouse');
+            syncHiddenFields('Packaging');
+            const data = Object.fromEntries(new FormData(e.target).entries());
+            if (confirm("설정을 변경하고 앱을 재시작하시겠습니까?")) {
+                window.chrome.webview.postMessage({ type: "SAVE_AND_RESTART", data: data });
+            }
+        };
+    </script>
+</body>
+</html>

@@ -525,7 +525,7 @@ namespace WPF_WMS01.ViewModels
                     );
                     Debug.WriteLine($"[RackViewModel] Robot mission process '{processId}' initiated for transfer from {sourceRackViewModel.Title} to WRAP.");
                     ShowAutoClosingMessage($"로봇 미션 프로세스 시작됨: {processId}");
-                    _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] [AMR_1] 포장 준비 작업 : {sourceRackViewModel.Title}에서 Wrapping M/C으로 미포장 팔레트 이동");
+                    _mainViewModel.WriteLog($"[AMR_1] 포장 준비 작업 : {sourceRackViewModel.Title}에서 Wrapping M/C으로 미포장 팔레트 이동");
                     // **중요**: 로봇 미션이 시작되었으므로, 이 시점에서는 랙의 잠금 상태만 유지하고,
                     // 실제 DB 업데이트 (비우기, 채우기)는 RobotMissionService의 폴링 로직에서
                     // 미션 완료 시점(`HandleRobotMissionCompletion`)에 이루어지도록 위임합니다.
@@ -678,7 +678,7 @@ namespace WPF_WMS01.ViewModels
                         true // isWarehouseMission = true로 전달
                     );
                     ShowAutoClosingMessage($"로봇 미션 프로세스 시작됨: {processId}");
-                    _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] [AMR_1] 라이트 반출 준비 : {sourceRackViewModel.Title}에서 {outRackViewModel.Title}로 라이트 팔레트 이동");
+                    _mainViewModel.WriteLog($"[AMR_1] 라이트 반출 준비 : {sourceRackViewModel.Title}에서 {outRackViewModel.Title}로 라이트 팔레트 이동");
                 }
                 catch (Exception ex)
                 {
@@ -915,7 +915,7 @@ namespace WPF_WMS01.ViewModels
                                 true // isWarehouseMission = true로 전달
                             );
                             ShowAutoClosingMessage($"로봇 미션 프로세스 시작됨: {processId}");
-                            _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] [AMR_1] 라이트 반출 작업 : {outRackVm.Title}에서 Wrapping M/C으로 라이트 팔레트 이동");
+                            _mainViewModel.WriteLog($"[AMR_1] 라이트 반출 작업 : {outRackVm.Title}에서 Wrapping M/C으로 라이트 팔레트 이동");
                         }
                         catch (Exception ex)
                         {
@@ -1016,6 +1016,15 @@ namespace WPF_WMS01.ViewModels
                                 {
                                     new MissionSubOperation { Type = SubOperationType.McWaitSensorOn, Description = "안전 센서 켜기", WordDeviceCode = "W", McWordAddress = 0x1008, McWriteValueInt = 0, McProtocolIpAddress = mcProtocolIpAddress }
                                 }
+                            });
+                            missionSteps.Add(new MissionStepDefinition
+                            {
+                                ProcessStepDescription = "팔레트 적재를 위한 이동",
+                                MissionType = "8",
+                                ToNode = $"Wait_Zone",
+                                Payload = _mainViewModel.ProductionLinePayload,
+                                IsLinkable = true,
+                                LinkWaitTimeout = 3600
                             });
                             // 제품 팔레트 임시 입고 랙에 적치
                             if (inRackVm.LocationArea == 2 || inRackVm.LocationArea == 4) // 랙 2 - 8, 1단 드롭 만 적용
@@ -1148,6 +1157,15 @@ namespace WPF_WMS01.ViewModels
                                 {
                                     new MissionSubOperation { Type = SubOperationType.McReadLotNoBoxCount, Description = "LotNo., BoxCount 읽기", WordDeviceCode = "W", McWordAddress = lotInfoReadAddress, McStringLengthWords = 8, McProtocolIpAddress = mcProtocolIpAddress }
                                 }
+                            });
+                            missionSteps.Add(new MissionStepDefinition
+                            {
+                                ProcessStepDescription = "팔레트 적재를 위한 이동",
+                                MissionType = "8",
+                                ToNode = $"Wait_Zone",
+                                Payload = _mainViewModel.ProductionLinePayload,
+                                IsLinkable = true,
+                                LinkWaitTimeout = 3600
                             });
                             // Rack에 적치하기 위한 이동 및 적치
                             if (inRackVm.LocationArea == 2 || inRackVm.LocationArea == 4) // 랙 2 ~ 8 번 1단 드롭 만 적용
@@ -1286,6 +1304,15 @@ namespace WPF_WMS01.ViewModels
                                 {
                                     new MissionSubOperation { Type = SubOperationType.McWaitSensorOn, Description = "안전 센서 켜기", WordDeviceCode = "W", McWordAddress = 0x1008, McWriteValueInt = 0, McProtocolIpAddress = mcProtocolIpAddress },
                                 }
+                            });
+                            missionSteps.Add(new MissionStepDefinition
+                            {
+                                ProcessStepDescription = "팔레트 적재를 위한 이동",
+                                MissionType = "8",
+                                ToNode = $"Wait_Zone",
+                                Payload = _mainViewModel.ProductionLinePayload,
+                                IsLinkable = true,
+                                LinkWaitTimeout = 3600
                             });
                             // Rack에 적치하기 위한 이동 및 적치
                             if (inRackVm.LocationArea == 2 || inRackVm.LocationArea == 4) // 랙 2 ~ 8 번 1단 드롭 만 적용
@@ -1496,7 +1523,7 @@ namespace WPF_WMS01.ViewModels
                             false // isWarehouseMission = true로 전달
                         );
                         ShowAutoClosingMessage($"로봇 미션 프로세스 시작됨: {processId}");
-                        _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] [AMR_2] 라이트 반출 작업 : 라인 {selectedLine.Id}에서 {inRackVm.Title}(으)로. {outRackVm.Title}에서 라인 {selectedLine.Id}(으)로 팔레트 이동");
+                        _mainViewModel.WriteLog($"[AMR_2] 라이트 반출 작업 : 라인 {selectedLine.Id}에서 {inRackVm.Title}(으)로. {outRackVm.Title}에서 라인 {selectedLine.Id}(으)로 팔레트 이동");
 
                         var modbuttonVm = _mainViewModel.ModbusButtons.FirstOrDefault(b => b.CoilOutputAddress == coilAddress);
                         modbuttonVm.IsProcessing = true;
@@ -1682,7 +1709,7 @@ namespace WPF_WMS01.ViewModels
                     );
                     Debug.WriteLine($"[RackViewModel] Robot mission process '{processId}' initiated for transfer from WRAP to {destinationRack.Title}.");
                     ShowAutoClosingMessage($"로봇 미션 프로세스 시작됨: {processId}");
-                    _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] [AMR_1] 완제품 입고 작업 : Wrapping M/C 에서 {destinationRack.Title}(으)로 완제품 팔레트 이동");
+                    _mainViewModel.WriteLog($"[AMR_1] 완제품 입고 작업 : Wrapping M/C 에서 {destinationRack.Title}(으)로 완제품 팔레트 이동");
 
                     // **중요**: 로봇 미션이 시작되었으므로, 이 시점에서는 랙의 잠금 상태만 유지하고,
                     // 실제 DB 업데이트 (비우기, 채우기)는 MainViewModel의 폴링 로직 (RobotMissionPollingTimer_Tick)에서
@@ -1834,7 +1861,7 @@ namespace WPF_WMS01.ViewModels
                 );
                 Debug.WriteLine($"[RackViewModel] Robot mission process '{processId}' initiated for transfer from WRAP to {destinationRackViewModel.Title}.");
                 ShowAutoClosingMessage($"로봇 미션 프로세스 시작됨: {processId}");
-                _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] [AMR_1] 완제품 입고 작업 : Wrapping M/C 에서 {destinationRackViewModel.Title}(으)로 완제품 팔레트 이동");
+                _mainViewModel.WriteLog($"[AMR_1] 완제품 입고 작업 : Wrapping M/C 에서 {destinationRackViewModel.Title}(으)로 완제품 팔레트 이동");
                 // **중요**: 로봇 미션이 시작되었으므로, 이 시점에서는 랙의 잠금 상태만 유지하고,
                 // 실제 DB 업데이트 (비우기, 채우기)는 MainViewModel의 폴링 로직 (RobotMissionPollingTimer_Tick)에서
                 // 미션 완료 시점(`HandleRobotMissionCompletion`)에 이루어지도록 위임합니다.
@@ -1958,7 +1985,7 @@ namespace WPF_WMS01.ViewModels
                     );
                     Debug.WriteLine($"[RackViewModel] Robot mission process '{processId}' initiated for transfer from {targetRackViewModel.Title} to OutletP.");
                     ShowAutoClosingMessage($"로봇 미션 프로세스 시작됨: {processId}");
-                    _mainViewModel.WriteLog("\n[" + DateTimeOffset.Now.ToString() + $"] [AMR_1] 단일 출고 작업 : 창고 랙 {targetRackViewModel.Title}에서 출고 랙 {outRackTitle}(으)로 제품 팔레트 이동");
+                    _mainViewModel.WriteLog($"[AMR_1] 단일 출고 작업 : 창고 랙 {targetRackViewModel.Title}에서 출고 랙 {outRackTitle}(으)로 제품 팔레트 이동");
 
                     // **중요**: 로봇 미션이 시작되었으므로, 이 시점에서는 랙의 잠금 상태만 유지하고,
                     // 실제 DB 업데이트 (비우기, 채우기)는 RobotMissionService의 폴링 로직에서
