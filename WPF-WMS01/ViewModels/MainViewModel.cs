@@ -340,6 +340,7 @@ namespace WPF_WMS01.ViewModels
         {
             Debug.WriteLine("[MainViewModel] Constructor called.");
             WriteLog("====== Logging Start ======");
+            WriteLog($"Warehouse : {ConfigurationManager.AppSettings["WarehouseAMRName"]}, Packaging : {ConfigurationManager.AppSettings["PackagingLineAMRName"]}");
             _databaseService = databaseService;
             _wrapRackTitle = ConfigurationManager.AppSettings["WrapRackTitle"] ?? "WRAP";
             _amrRackTitle = ConfigurationManager.AppSettings["AMRRackTitle"] ?? "AMR";
@@ -2887,19 +2888,19 @@ namespace WPF_WMS01.ViewModels
 
                 if (isVehicleAMR1 && isChargePoint)
                 {
-                    amrId = "AMR_1"; targetId = "Charge1"; amrName = "Poongsan_1";
+                    amrId = "AMR_1"; targetId = "Charge1"; amrName = "Poongsan_1"; // Charger2
                 }
                 else if (isVehicleAMR1 && !isChargePoint)
                 {
-                    amrId = "AMR_1"; targetId = "AMR1_WAIT"; amrName = "Poongsan_1";
+                    amrId = "AMR_1"; targetId = "AMR1_WAIT"; amrName = "Poongsan_1"; // Pallet_BWD_Pos
                 }
                 else if (!isVehicleAMR1 && isChargePoint)
                 {
-                    amrId = "AMR_2"; targetId = "Charge2"; amrName = "Poongsan_2";
+                    amrId = "AMR_2"; targetId = "Charge2"; amrName = "Poongsan_2"; // Charger1
                 }
                 else //if (!isVehicleAMR1 && !isChargePoint)
                 {
-                    amrId = "AMR_2"; targetId = "Pallet_BWD_Pos"; amrName = "Poongsan_2";
+                    amrId = "AMR_2"; targetId = "Pallet_BWD_Pos"; amrName = "Poongsan_2"; // AMR1_WAIT
                 }
 
                 List<MissionStepDefinition> missionSteps = new List<MissionStepDefinition>();

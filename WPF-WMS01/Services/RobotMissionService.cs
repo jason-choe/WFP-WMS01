@@ -1244,7 +1244,7 @@ namespace WPF_WMS01.Services
                                 if (result == MessageBoxResult.Yes)
                                 {
                                     _mainViewModel.WriteLog($"IP: {subOp.McProtocolIpAddress}, Addr: {subOp.McWordAddress.Value} 패킹로봇 정지 확인 재시도");
-                                    startTime_A = DateTime.Now;
+                                    startTime = DateTime.Now;
                                 }
                                 else if (result == MessageBoxResult.No)
                                 {
