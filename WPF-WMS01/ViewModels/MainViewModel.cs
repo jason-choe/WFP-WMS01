@@ -160,6 +160,7 @@ namespace WPF_WMS01.ViewModels
         public bool _isPalletDummyOdd = Settings.Default.IsPalletSupOdd; // RackViewModel에서 접근 가능
         public int outletPosition = 0;
         public readonly int MAXOUTLETS = int.Parse(ConfigurationManager.AppSettings["MaxOutletPoints"] ?? "10"); // 출고 장소 갯수
+        public bool _isLoggingVehicleState = ConfigurationManager.AppSettings["LoggingVehiceState"].Equals("true") ? true : false;
 
         private ObservableCollection<RackViewModel> _rackList;
         private DispatcherTimer _refreshTimer;
@@ -997,6 +998,7 @@ namespace WPF_WMS01.ViewModels
             return result.ToString();
         }
 
+        private string[] preMessage = new string[2];
         private async void VehicleStateReadTimer_Tick(object sender, EventArgs e)
         {
             if (IsLoggedIn)
@@ -1025,6 +1027,13 @@ namespace WPF_WMS01.ViewModels
                                 message[1] = $"{vehicleName} :  {baterryPercentage}%  {batteryVoltage.Substring(0, 4)}V\t{ConvertCamelCaseWithSpaces(state)}";
                         }
                         VehicleInfoViewModel.Message = $"{message[0]}\n{message[1]}";
+                        if(_isLoggingVehicleState && (!message[0].Equals(preMessage[0]) || !message[1].Equals(preMessage[1])))
+                        {
+                            preMessage[0] = message[0];
+                            preMessage[1] = message[1];
+                            await _databaseService.InsertBatteryStateDBAsync(message[0], message[1]);
+                        }
+
                     }
                 }
                 catch (HttpRequestException ex)

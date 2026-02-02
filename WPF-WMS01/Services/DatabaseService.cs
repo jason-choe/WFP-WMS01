@@ -340,6 +340,28 @@ namespace WPF_WMS01.Services
             }
         }
 
+        public async Task<int> InsertBatteryStateDBAsync(string message1, string message2)
+        {
+            using (var connection = new SqlConnection(_connectionString))
+            {
+                await connection.OpenAsync();
+                var command = new SqlCommand(
+                    "INSERT INTO VehicleState (inserted_at, vehicle1_state, vehicle2_state) " +
+                    "VALUES (GetDate(), @VehicleState_1, @VehicleState_2);" +
+                    " SELECT CAST(scope_identity() AS int);",
+                    connection
+                );
+                command.Parameters.AddWithValue("@VehicleState_1", message1);
+                command.Parameters.AddWithValue("@VehicleState_2", message2);
+
+                var newId = await command.ExecuteScalarAsync();
+                // The ID is returned as a decimal, so we need to convert it to an int
+                int insertedId = Convert.ToInt32(newId);
+
+                return insertedId;
+            }
+        }
+
         // 출고 데이터 update
         public async Task UpdateOutboundDBAsync(int insertedId) // 출고 작업 중 drop success 시 call 됨
         {
