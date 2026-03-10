@@ -1926,7 +1926,7 @@ namespace WPF_WMS01.ViewModels
                 // 로봇 미션 단계 정의 (사용자 요청에 따라 4단계로 복원 및 IsLinkable, LinkedMission 조정)
                 missionSteps.Add(new MissionStepDefinition
                 {
-                    ProcessStepDescription = $"랙 {targetRackViewModel.Title}로 이동(으)로 이동하여, 제품 팔레트 픽업",
+                    ProcessStepDescription = $"랙 {targetRackViewModel.Title}(으)로 이동하여, 제품 팔레트 픽업",
                     MissionType = "8",
                     ToNode = $"Rack_{shelf}_PickUP",
                     Payload = _mainViewModel.WarehousePayload,

@@ -1529,7 +1529,7 @@ namespace WPF_WMS01.ViewModels
                         {
                             ProcessStepDescription = "매거진으로 이동하여, 팔레트 팩 투입",
                             MissionType = "7",
-                            FromNode = "Pallet_BWD_Pos",
+                            FromNode = "Pallet_Turn",
                             ToNode = "MZ_Empty_Pallet_Drop",
                             Payload = ProductionLinePayload,
                             IsLinkable = true,
@@ -1539,7 +1539,7 @@ namespace WPF_WMS01.ViewModels
                                 new MissionSubOperation {Type = SubOperationType.McWriteSingleWord, Description = "팔레트 팩 공급 준비 요청", WordDeviceCode = "W", McWordAddress = 0x102F, McWriteValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
                                 new MissionSubOperation {Type = SubOperationType.McWaitAvailable, Description = "팔레트 팩 공급 준비 완료 체크", WordDeviceCode = "W", McWordAddress = 0x152F, McWateValueInt = 1, McProtocolIpAddress = "192.168.200.111"},
                             }
-                        });
+                        }); ;
                         // 4. Move and Quit
                         missionSteps.Add(new MissionStepDefinition
                         {
@@ -1616,9 +1616,9 @@ namespace WPF_WMS01.ViewModels
                         // 9. Move, Turn
                         missionSteps.Add(new MissionStepDefinition
                         {
-                            ProcessStepDescription = "작업 대기 장소로 이동",
+                            ProcessStepDescription = "매거진 진입을 위한 이동",
                             MissionType = "8",
-                            ToNode = "Pallet_BWD_Pos",
+                            ToNode = "Pallet_Turn",
                             Payload = ProductionLinePayload,
                             IsLinkable = true,
                             LinkWaitTimeout = 3600,
@@ -1889,7 +1889,7 @@ namespace WPF_WMS01.ViewModels
                             {
                                 ProcessStepDescription = "공팔레트 픽업을 위한 이동, 회전",
                                 MissionType = "8",
-                                ToNode = "MZ_DanPra_Pallet_Turn", //"Pallet_BWD_Pos",
+                                ToNode = "MZ_DanPra_Pallet_Turn",
                                 Payload = ProductionLinePayload,
                                 IsLinkable = true,
                                 LinkWaitTimeout = 3600,
@@ -2083,7 +2083,7 @@ namespace WPF_WMS01.ViewModels
                         {
                             ProcessStepDescription = "공팔레트 픽업을 위한 이동, 회전",
                             MissionType = "8",
-                            ToNode = "MZ_DanPra_Pallet_Turn", //"Pallet_BWD_Pos",
+                            ToNode = "MZ_DanPra_Pallet_Turn",
                             Payload = ProductionLinePayload,
                             Priority = buttonVm.Content.Equals("7.62mm") ? 2 : 1,
                             IsLinkable = true,
@@ -2379,7 +2379,7 @@ namespace WPF_WMS01.ViewModels
                         {
                             ProcessStepDescription = "공팔레트 픽업을 위한 이동, 회전",
                             MissionType = "8",
-                            ToNode = "MZ_DanPra_Pallet_Turn", //"Pallet_BWD_Pos",
+                            ToNode = "MZ_DanPra_Pallet_Turn",
                             Payload = ProductionLinePayload,
                             IsLinkable = true,
                             LinkWaitTimeout = 3600,
