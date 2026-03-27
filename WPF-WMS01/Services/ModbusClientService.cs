@@ -364,6 +364,36 @@ namespace WPF_WMS01.Services
         }
 
         /// <summary>
+        /// Modbus Input Register 값을 비동기적으로 읽습니다.
+        /// </summary>
+        /// <param name="startAddress">읽기 시작할 Input Register 주소.</param>
+        /// <param name="numberOfRegisters">읽을 Input Register 개수.</param>
+        /// <returns>Input Register 값 배열.</returns>
+        public async Task<ushort[]> ReadInputRegistersAsync(ushort startAddress, ushort numberOfRegisters)
+        {
+            if (!_isConnected || _modbusMaster == null)
+            {
+                Debug.WriteLine($"[ModbusClientService] Not connected. Cannot read input registers. Instance ID: {_instanceId}");
+                await ConnectAsync(); // 연결이 끊겼다면 재연결 시도
+                if (!_isConnected || _modbusMaster == null)
+                {
+                    throw new InvalidOperationException("Modbus 연결이 활성화되지 않아 Input Register를 읽을 수 없습니다.");
+                }
+            }
+            try
+            {
+                // NModbus 라이브러리의 ReadInputRegistersAsync 메서드를 호출합니다.
+                return await _modbusMaster.ReadInputRegistersAsync(_slaveId, startAddress, numberOfRegisters);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[ModbusClientService] Error reading input registers from address {startAddress}: {ex.Message}. Instance ID: {_instanceId}");
+                _isConnected = false; // 통신 오류 발생 시 연결 끊김으로 간주
+                throw;
+            }
+        }
+
+        /// <summary>
         /// Modbus 마스터 및 클라이언트/시리얼 포트 자원을 해제합니다.
         /// </summary>
         public void Dispose()

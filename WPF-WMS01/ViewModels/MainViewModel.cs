@@ -23,6 +23,7 @@ using Microsoft.Extensions.DependencyInjection;
 using System.Collections.Concurrent; // ConcurrentDictionary를 위해 추가
 using System.Text.RegularExpressions;
 using System.IO;
+using System.IO.Pipes;
 
 namespace WPF_WMS01.ViewModels
 {
@@ -140,6 +141,71 @@ namespace WPF_WMS01.ViewModels
     {
         public int BulletType { get; set; }
         public string ProductName { get; set; }
+    }
+
+    // WPF 프로젝트에 추가할 클래스
+    public class PipeReceiver
+    {
+        public event Action<string, float, bool, bool> OnDataReceived;
+        // 1. 싱글톤 인스턴스 (어디서나 공유됨)
+        private static PipeReceiver _instance;
+        public static PipeReceiver Instance => _instance ?? (_instance = new PipeReceiver());
+
+        public float currentAmr1 { get; private set; }
+        public bool cellBalanceRequiredAmr1 { get; private set; }
+        public bool chargingRequiredAmr1 { get; private set; }
+
+        public float currentAmr2 { get; private set; }
+        public bool cellBalanceRequiredAmr2 { get; private set; }
+        public bool chargingRequiredAmr2 { get; private set; }
+
+        // 생성자를 private으로 막아 외부에서 new를 못하게 함
+        private PipeReceiver() { }
+
+        public void Start()
+        {
+            Task.Run(async () =>
+            {
+                while (true)
+                {
+                    using (var server = new NamedPipeServerStream("AmrDataPipe", PipeDirection.In))
+                    {
+                        try
+                        {
+                            await server.WaitForConnectionAsync();
+                            using (var reader = new StreamReader(server))
+                            {
+                                var line = await reader.ReadLineAsync();
+                                if (!string.IsNullOrEmpty(line))
+                                {
+                                    var parts = line.Split('|');
+                                    string name = parts[0];
+                                    float val = float.Parse(parts[1]);
+                                    bool b0 = bool.Parse(parts[2]);
+                                    bool b1 = bool.Parse(parts[3]);
+
+                                    // UI 스레드로 이벤트 전달
+                                    if(name.Equals("Poongsan_1"))
+                                    {
+                                        currentAmr1 = val;
+                                        cellBalanceRequiredAmr1 = b0;
+                                        chargingRequiredAmr1 = b1;
+                                    }
+                                    else
+                                    {
+                                        currentAmr2 = val;
+                                        cellBalanceRequiredAmr2 = b0;
+                                        chargingRequiredAmr2 = b1;
+                                    }
+                                    OnDataReceived?.Invoke(name, val, b0, b1);
+                                }
+                            }
+                        }
+                        catch { /* 에러 처리 */ }
+                    }
+                }
+            });
+        }
     }
 
     public class MainViewModel : ViewModelBase
@@ -285,12 +351,49 @@ namespace WPF_WMS01.ViewModels
             set => SetProperty(ref _vehicleInfoViewModel, value);
         }
 
+        // Battery 상태 경고를 위한 속성 추가
+
+        private VehicleInformationPopupViewModel _cellBalanceAlarmInfoViewModel;
+        public VehicleInformationPopupViewModel CellBalanceAlarmInfoViewModel
+        {
+            get => _cellBalanceAlarmInfoViewModel;
+            set => SetProperty(ref _cellBalanceAlarmInfoViewModel, value);
+        }
+
+        private bool _isCellBalanceAlarmPopupVisible;
+        public bool IsCellBalanceAlarmPopupVisible
+        {
+            get => _isCellBalanceAlarmPopupVisible;
+            set => SetProperty(ref _isCellBalanceAlarmPopupVisible, value);
+        }
+
+        private VehicleInformationPopupViewModel _batteryAlarmInfoViewModel;
+        public VehicleInformationPopupViewModel BatteryAlarmInfoViewModel
+        {
+            get => _batteryAlarmInfoViewModel;
+            set => SetProperty(ref _batteryAlarmInfoViewModel, value);
+        }
+
+        private bool _isBatteryAlarmPopupVisible;
+        public bool IsBatteryAlarmPopupVisible
+        {
+            get => _isBatteryAlarmPopupVisible;
+            set => SetProperty(ref _isBatteryAlarmPopupVisible, value);
+        }
+
         // Lot 정보 표시를 위한 속성 추가
         private VehicleInformationPopupViewModel _lotInfoViewModel;
         public VehicleInformationPopupViewModel LotInfoViewModel
         {
             get => _lotInfoViewModel;
             set => SetProperty(ref _lotInfoViewModel, value);
+        }
+
+        private bool _isLotInfoPopupVisible;
+        public bool IsLotInfoPopupVisible
+        {
+            get => _isLotInfoPopupVisible;
+            set => SetProperty(ref _isLotInfoPopupVisible, value);
         }
 
         private bool _isMessagePopupVisible;
@@ -431,6 +534,8 @@ namespace WPF_WMS01.ViewModels
             // CurrentMessagePopupViewModel을 생성자에서 초기화하도록 보장
             CurrentMessagePopupViewModel = new AutoClosingMessagePopupViewModel(string.Empty);
             VehicleInfoViewModel = new VehicleInformationPopupViewModel(string.Empty);
+            CellBalanceAlarmInfoViewModel = new VehicleInformationPopupViewModel(string.Empty);
+            BatteryAlarmInfoViewModel = new VehicleInformationPopupViewModel(string.Empty);
             LotInfoViewModel = new VehicleInformationPopupViewModel(string.Empty);
             IsMessagePopupVisible = false;
             SetupMessagePopupTimer(); // 메시지 팝업 타이머 설정
@@ -1027,11 +1132,34 @@ namespace WPF_WMS01.ViewModels
                                 message[1] = $"{vehicleName} :  {baterryPercentage}%  {batteryVoltage.Substring(0, 4)}V\t{ConvertCamelCaseWithSpaces(state)}";
                         }
                         VehicleInfoViewModel.Message = $"{message[0]}\n{message[1]}";
-                        if(_isLoggingVehicleState && (!message[0].Equals(preMessage[0]) || !message[1].Equals(preMessage[1])))
+
+                        if(PipeReceiver.Instance.cellBalanceRequiredAmr1 || PipeReceiver.Instance.cellBalanceRequiredAmr2)
+                        {
+                            CellBalanceAlarmInfoViewModel.Message = (PipeReceiver.Instance.cellBalanceRequiredAmr1 ? "Poongsan_1  ":"") + (PipeReceiver.Instance.cellBalanceRequiredAmr2 ? "Poongsan_2  ":"") + "수동 충전 해주세요.";
+                            IsCellBalanceAlarmPopupVisible = true;
+                        }
+                        else
+                        {
+                            CellBalanceAlarmInfoViewModel.Message = "";
+                            IsCellBalanceAlarmPopupVisible = false;
+                        }
+
+                        if (PipeReceiver.Instance.chargingRequiredAmr1 || PipeReceiver.Instance.chargingRequiredAmr2)
+                        {
+                            BatteryAlarmInfoViewModel.Message = (PipeReceiver.Instance.chargingRequiredAmr1 ? "Poongsan_1  " : "") + (PipeReceiver.Instance.chargingRequiredAmr2 ? "Poongsan_2  " : "") + "충전 해주세요.";
+                            IsBatteryAlarmPopupVisible = true;
+                        }
+                        else
+                        {
+                            BatteryAlarmInfoViewModel.Message = "";
+                            IsBatteryAlarmPopupVisible = false;
+                        }
+
+                        if (_isLoggingVehicleState && (!message[0].Equals(preMessage[0]) || !message[1].Equals(preMessage[1])))
                         {
                             preMessage[0] = message[0];
                             preMessage[1] = message[1];
-                            await _databaseService.InsertBatteryStateDBAsync(message[0], message[1]);
+                            await _databaseService.InsertBatteryStateDBAsync(message[0], message[1], PipeReceiver.Instance.currentAmr1, PipeReceiver.Instance.currentAmr2);
                         }
 
                     }

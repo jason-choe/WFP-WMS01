@@ -1082,6 +1082,7 @@ namespace WPF_WMS01.Services
                         Debug.WriteLine($"[RobotMissionService] McReadLotNoBoxCount: Addr {subOp.McWordAddress.Value}, BulletType '{bulletType}', LotNo '{processInfo.ReadStringValue}', BoxCount {processInfo.ReadIntValue}");
                         _mainViewModel.WriteLog($"BulletType = '{bulletType}', Lot No. = '{processInfo.ReadStringValue}', Box Count = {boxCount}");
                         _mainViewModel.LotInfoViewModel.Message = $"Lot Info. : '{bulletType}' / '{processInfo.ReadStringValue}' / {boxCount}";
+                        _mainViewModel.IsLotInfoPopupVisible = true;
                         processInfo.HmiStatus.SubOpDescription = "";
                         break;
 
@@ -1384,6 +1385,7 @@ namespace WPF_WMS01.Services
 
                     case SubOperationType.ClearLotInformation:
                         _mainViewModel.LotInfoViewModel.Message = ""; // clear message
+                        _mainViewModel.IsLotInfoPopupVisible = false;
                         break;
 
                     case SubOperationType.None:

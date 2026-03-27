@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using WPF_WMS01.Views.Popups; // NumericKeypadPopup 네임스페이스 추가
 using System;
 using System.ComponentModel;  // For CancelEventArgs
+using WPF_WMS01.ViewModels;
 
 namespace WPF_WMS01
 {
@@ -17,6 +18,9 @@ namespace WPF_WMS01
         {
             InitializeComponent();
             //this.DataContext = new ViewModels.MainViewModel();
+
+            // 수신 대기 시작 (명시적 호출)
+            PipeReceiver.Instance.Start();
         }
 
         private void ProductCodeTextBox_PreviewTextInput(object sender, TextCompositionEventArgs e)

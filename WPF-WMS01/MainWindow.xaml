@@ -745,7 +745,60 @@
         <Border Grid.Row="2" Margin="35,35,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Panel.ZIndex="999">
             <popups:VehicleInformationPopupView DataContext="{Binding VehicleInfoViewModel}"/>
         </Border>
-        <Border Grid.Row="2" Margin="35,375,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Panel.ZIndex="999">
+        <Border Grid.Row="2" Margin="50,270,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Panel.ZIndex="999"
+                Visibility="{Binding IsCellBalanceAlarmPopupVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <TextBlock Text="{Binding CellBalanceAlarmInfoViewModel.Message}" 
+               Foreground="Yellow"
+               FontSize="20" FontWeight="Bold"
+               VerticalAlignment="Center" HorizontalAlignment="Center">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Style.Triggers>
+                            <EventTrigger RoutedEvent="Loaded">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation
+                                    Storyboard.TargetProperty="Opacity"
+                                    From="1.0" To="0.6"
+                                    Duration="0:0:0.7"
+                                    AutoReverse="True"
+                                    RepeatBehavior="Forever" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+        </Border>
+        <Border Grid.Row="2" Margin="50,310,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Panel.ZIndex="999"
+                Visibility="{Binding IsBatteryAlarmPopupVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <TextBlock Text="{Binding BatteryAlarmInfoViewModel.Message}"
+               Foreground="Yellow"
+               FontSize="20" FontWeight="Bold"
+               VerticalAlignment="Center" HorizontalAlignment="Center">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Style.Triggers>
+                            <EventTrigger RoutedEvent="Loaded">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation
+                                    Storyboard.TargetProperty="Opacity"
+                                    From="1.0" To="0.6"
+                                    Duration="0:0:0.7"
+                                    AutoReverse="True"
+                                    RepeatBehavior="Forever" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+        </Border>
+        <Border Grid.Row="2" Margin="35,375,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Panel.ZIndex="999"
+                Visibility="{Binding IsLotInfoPopupVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
             <popups:VehicleInformationPopupView DataContext="{Binding LotInfoViewModel}"/>
         </Border>
 
